@@ -285,7 +285,7 @@ function addBlankScene() {
 function createSceneFromFile(file) {
   const id = `img_${safeSlug(file.name.replace(/\.[^.]+$/, '')) || Date.now()}`;
   const uniqueId = scenes.value.some((scene) => scene.id === id) ? uid(id) : id;
-  const previewUrl = URL.taoObjectURL(file);
+  const previewUrl = URL.createObjectURL(file);
   return normalizeScene(
     {
       id: uniqueId,
@@ -481,8 +481,8 @@ function updateViewState(value) {
 
 function downloadExportJson() {
   const blob = new Blob([exportText.value], { type: 'application/json' });
-  const url = URL.taoObjectURL(blob);
-  const link = document.taoElement('a');
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
   link.href = url;
   link.download = 'vr360-tour.json';
   link.click();
@@ -898,13 +898,16 @@ onBeforeUnmount(() => {
               </button>
             </div>
             <div v-if="activeScene.hotspots?.length" class="hotspot-list">
-              <button
+              <div
                 v-for="(hotspot, index) in activeScene.hotspots"
                 :key="hotspot.id"
                 class="hotspot-list-item"
                 :class="{ active: hotspot.id === selectedHotspotId }"
-                type="button"
+                role="button"
+                tabindex="0"
                 @click="selectHotspot(hotspot)"
+                @keydown.enter.prevent="selectHotspot(hotspot)"
+                @keydown.space.prevent="selectHotspot(hotspot)"
               >
                 <span class="hotspot-number">{{ index + 1 }}</span>
                 <span>
@@ -916,7 +919,7 @@ onBeforeUnmount(() => {
                   </small>
                 </span>
                 <button class="hotspot-remove" type="button" @click.stop="selectedHotspotId = hotspot.id; removeHotspot()">×</button>
-              </button>
+              </div>
             </div>
             <p v-if="!selectedHotspot" class="builder-muted">
               Click "+ Add hotspot", then click image to pin hotspot in the 360 position.
