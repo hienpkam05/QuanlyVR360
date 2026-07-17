@@ -420,6 +420,9 @@ onBeforeUnmount(() => {
       :hotspots="displayHotspots"
       :initial-view="activeInitialView"
       :point-hotspot-logo="pointHotspotLogoUrl"
+      auto-rotate
+      :auto-rotate-delay="3000"
+      :auto-rotate-speed="3"
       hotspot-display-mode="viewer"
       @hotspot-click="onHotspotClick"
       @view-change="updateViewState"

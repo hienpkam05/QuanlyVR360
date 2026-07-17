@@ -27,6 +27,18 @@ const props = defineProps({
     type: String,
     default: '',
   },
+  autoRotate: {
+    type: Boolean,
+    default: false,
+  },
+  autoRotateDelay: {
+    type: Number,
+    default: 2500,
+  },
+  autoRotateSpeed: {
+    type: Number,
+    default: 2.5,
+  },
 });
 
 const emit = defineEmits(['panorama-click', 'hotspot-click', 'view-change']);
@@ -50,6 +62,8 @@ let raycaster;
 let pointer;
 let isDragging = false;
 let pointerDown = null;
+let lastInteractionAt = 0;
+let lastFrameAt = 0;
 let lon = 0;
 let lat = 0;
 let fov = 75;
@@ -64,6 +78,10 @@ function emitViewChange() {
     lat: Math.round(lat * 10) / 10,
     fov: Math.round(fov),
   });
+}
+
+function markInteraction() {
+  lastInteractionAt = performance.now();
 }
 
 function lonLatToVector(hotspotLon, hotspotLat, radius = 500) {
@@ -137,6 +155,18 @@ function updateCamera() {
 }
 
 function renderLoop() {
+  const now = performance.now();
+  const deltaSeconds = lastFrameAt ? (now - lastFrameAt) / 1000 : 0;
+  lastFrameAt = now;
+  if (
+    props.autoRotate &&
+    hasImage.value &&
+    !isDragging &&
+    now - lastInteractionAt >= props.autoRotateDelay
+  ) {
+    lon += props.autoRotateSpeed * deltaSeconds;
+    emitViewChange();
+  }
   updateCamera();
   updateProjectedHotspots();
   updateTransitionFade();
@@ -253,11 +283,13 @@ function initThree() {
   container.value.appendChild(renderer.domElement);
   resize();
   loadTexture();
+  markInteraction();
   renderLoop();
 }
 
 function onPointerDown(event) {
   if (!hasImage.value) return;
+  markInteraction();
   isDragging = true;
   pointerDown = {
     x: event.clientX,
@@ -269,6 +301,7 @@ function onPointerDown(event) {
 
 function onPointerMove(event) {
   if (!isDragging || !pointerDown) return;
+  markInteraction();
   lon = pointerDown.lon - (event.clientX - pointerDown.x) * 0.12;
   lat = pointerDown.lat + (event.clientY - pointerDown.y) * 0.12;
   emitViewChange();
@@ -276,6 +309,7 @@ function onPointerMove(event) {
 
 function onPointerUp(event) {
   if (!isDragging || !pointerDown) return;
+  markInteraction();
   const moved = Math.hypot(event.clientX - pointerDown.x, event.clientY - pointerDown.y);
   isDragging = false;
   pointerDown = null;
@@ -299,6 +333,7 @@ function onPointerUp(event) {
 
 function onWheel(event) {
   if (!hasImage.value) return;
+  markInteraction();
   event.preventDefault();
   fov = clamp(fov + event.deltaY * 0.04, 35, 100);
   emitViewChange();
@@ -323,7 +358,8 @@ watch(
   (value) => {
     lon = Number(value?.lon ?? 0);
     lat = Number(value?.lat ?? 0);
-    fov = Number(value?.fov ?? 75);
+      fov = Number(value?.fov ?? 75);
+    markInteraction();
     emitViewChange();
   },
   { deep: true, immediate: true },
@@ -362,6 +398,7 @@ onBeforeUnmount(() => {
     @pointerup="onPointerUp"
     @pointerleave="onPointerUp"
     @wheel="onWheel"
+    @click="markInteraction"
   >
     <span v-if="!hasImage" class="canvas-empty-text">
       Upload panorama JPG 360 de xem preview, keo chuot de xoay ngang/doc.
@@ -376,7 +413,7 @@ onBeforeUnmount(() => {
       ]"
       :style="{ left: `${hotspot.screenX}px`, top: `${hotspot.screenY}px` }"
       type="button"
-      @click.stop="emit('hotspot-click', hotspot, $event)"
+      @click.stop="markInteraction(); emit('hotspot-click', hotspot, $event)"
     >
       <template v-if="hotspotDisplayMode === 'viewer' && hotspot.type === 'nav'">
         <span class="viewer-nav-arrow"><i class="ti-angle-double-up" aria-hidden="true"></i></span>
