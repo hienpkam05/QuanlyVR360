@@ -19,6 +19,7 @@ const loadingVersions = ref(false);
 const errorMessage = ref('');
 const successMessage = ref('');
 const editModal = ref(null);
+const versionModal = ref(false);
 let messageTimer = null;
 
 const projectForm = reactive({
@@ -33,6 +34,8 @@ const locationForm = reactive({
 
 const versionForm = reactive({
   label: '',
+  background_audio_file: null,
+  hotspot_point_logo_file: null,
 });
 
 const editForm = reactive({
@@ -52,6 +55,19 @@ function normalizeResults(data) {
   if (Array.isArray(data?.data)) return data.data;
   if (Array.isArray(data?.items)) return data.items;
   return [];
+}
+
+function extractApiError(error, fallback) {
+  const data = error.response?.data;
+  if (!data) return error.message || fallback;
+  if (typeof data === 'string') return data.slice(0, 240) || fallback;
+  if (data.detail) return data.detail;
+  if (data.non_field_errors?.length) return data.non_field_errors[0];
+  const firstKey = Object.keys(data)[0];
+  const firstValue = firstKey ? data[firstKey] : null;
+  if (Array.isArray(firstValue)) return `${firstKey}: ${firstValue[0]}`;
+  if (typeof firstValue === 'string') return `${firstKey}: ${firstValue}`;
+  return fallback;
 }
 
 function versionLabel(version) {
@@ -278,6 +294,32 @@ async function removeVersion(version) {
   }
 }
 
+function openVersionModal() {
+  if (!selectedLocationId.value) {
+    errorMessage.value = 'Select a location first.';
+    return;
+  }
+  versionForm.label = '';
+  versionForm.background_audio_file = null;
+  versionForm.hotspot_point_logo_file = null;
+  versionModal.value = true;
+}
+
+function closeVersionModal() {
+  versionModal.value = false;
+  versionForm.label = '';
+  versionForm.background_audio_file = null;
+  versionForm.hotspot_point_logo_file = null;
+}
+
+function onVersionAudioChange(event) {
+  versionForm.background_audio_file = event.target.files?.[0] || null;
+}
+
+function onVersionLogoChange(event) {
+  versionForm.hotspot_point_logo_file = event.target.files?.[0] || null;
+}
+
 async function submitVersion() {
   if (!selectedLocationId.value) {
     errorMessage.value = 'Select a location first.';
@@ -294,8 +336,10 @@ async function submitVersion() {
         title: label,
         scenes: [],
       },
+      background_audio_file: versionForm.background_audio_file,
+      hotspot_point_logo_file: versionForm.hotspot_point_logo_file,
     });
-    versionForm.label = '';
+    closeVersionModal();
     successMessage.value = 'Version created.';
     await loadVersionsForLocation();
     const created = versions.value.find((item) => item.id === response.data.id);
@@ -303,7 +347,7 @@ async function submitVersion() {
       openBuilder(created);
     }
   } catch (error) {
-    errorMessage.value = error.response?.data?.detail || 'Could not create version.';
+    errorMessage.value = extractApiError(error, 'Could not create version.');
   }
 }
 
@@ -319,6 +363,10 @@ function openViewer(version) {
 }
 
 function openBuilder(version = null) {
+  if (version?.status === 'published') {
+    errorMessage.value = 'Published versions cannot be edited. Open an archived or draft version.';
+    return;
+  }
   router.push({
     path: '/builder',
     query: {
@@ -429,10 +477,9 @@ onBeforeUnmount(() => {
           <h2>3. Versions</h2>
           <span class="muted">{{ versions.length }}</span>
         </div>
-        <form v-if="selectedLocation" class="mini-create-form" @submit.prevent="submitVersion">
-          <input v-model="versionForm.label" placeholder="New version label" />
-          <button class="secondary-button" type="submit">Create</button>
-        </form>
+        <button v-if="selectedLocation" class="secondary-button" type="button" @click="openVersionModal">
+          + Create version
+        </button>
         <p v-if="!selectedLocation" class="muted">Select a location to see versions.</p>
         <p v-else-if="loadingVersions" class="muted">Loading versions...</p>
         <article
@@ -445,7 +492,14 @@ onBeforeUnmount(() => {
           <small>{{ version.status }} · {{ version.scene_assets_count || 0 }} assets</small>
           <div class="actions-row">
             <button class="primary-button" type="button" @click="openViewer(version)">View</button>
-            <button class="secondary-button" type="button" @click="openBuilder(version)">Edit</button>
+            <button
+              class="secondary-button"
+              type="button"
+              :disabled="version.status === 'published'"
+              @click="openBuilder(version)"
+            >
+              Edit
+            </button>
             <button class="danger-button" type="button" @click="removeVersion(version)">Delete</button>
           </div>
         </article>
@@ -455,6 +509,34 @@ onBeforeUnmount(() => {
         </div>
       </div>
     </section>
+
+    <div v-if="versionModal" class="builder-modal-backdrop" @click.self="closeVersionModal">
+      <div class="builder-modal builder-modal-small">
+        <div class="builder-modal-header">
+          <h2>Create version</h2>
+          <button type="button" @click="closeVersionModal">×</button>
+        </div>
+        <form class="form" @submit.prevent="submitVersion">
+          <label>
+            Version label
+            <input v-model="versionForm.label" placeholder="Leave empty to auto-name" />
+          </label>
+          <label>
+            Background audio
+            <input type="file" accept="audio/*" @change="onVersionAudioChange" />
+          </label>
+          <label>
+            Point hotspot logo
+            <input type="file" accept="image/*" @change="onVersionLogoChange" />
+          </label>
+          <p class="muted">Logo nay se dung cho hotspot loai point trong viewer.</p>
+          <div class="actions-row">
+            <button class="primary-button" type="submit">Create version</button>
+            <button class="secondary-button" type="button" @click="closeVersionModal">Cancel</button>
+          </div>
+        </form>
+      </div>
+    </div>
 
     <div v-if="editModal" class="builder-modal-backdrop">
       <div class="builder-modal builder-modal-small">

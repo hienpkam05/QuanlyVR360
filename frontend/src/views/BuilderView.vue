@@ -7,7 +7,7 @@ import { apiBaseURL } from '../api/http';
 import { createLocation, listProjectLocations } from '../api/locationsApi';
 import { deleteSceneAsset, uploadSceneAsset } from '../api/mediaApi';
 import { createProject, listProjects } from '../api/projectsApi';
-import { createVersion, getVersion, listVersions, updateVersion } from '../api/toursApi';
+import { createVersion, getVersion, listVersions, updateVersion, uploadHotspotAudio } from '../api/toursApi';
 
 const router = useRouter();
 const route = useRoute();
@@ -50,6 +50,7 @@ const hotspotForm = reactive({
   y: 50,
   lon: 0,
   lat: 0,
+  audio_url: '',
 });
 const viewState = reactive({ lon: 0, lat: 0, fov: 75 });
 const importText = ref('');
@@ -67,6 +68,8 @@ const quickCreateForm = reactive({
   latitude: '',
   longitude: '',
   version_label: '',
+  background_audio_file: null,
+  hotspot_point_logo_file: null,
 });
 
 const activeScene = computed(() => scenes.value.find((scene) => scene.id === activeSceneId.value) || null);
@@ -86,7 +89,13 @@ const tourData = computed(() => ({
   title: version.value?.label || version.value?.data?.title || 'VR360 Tour',
   scenes: scenes.value.map((scene) => {
     const { preview_url, preview_object_url, local_file, ...payload } = scene;
-    return payload;
+    return {
+      ...payload,
+      hotspots: (payload.hotspots || []).map((hotspot) => {
+        const { local_audio_file, ...hotspotPayload } = hotspot;
+        return hotspotPayload;
+      }),
+    };
   }),
 }));
 const exportText = computed(() => JSON.stringify(tourData.value, null, 2));
@@ -98,6 +107,19 @@ function normalizeResults(data) {
   if (Array.isArray(data?.data)) return data.data;
   if (Array.isArray(data?.items)) return data.items;
   return [];
+}
+
+function extractApiError(error, fallback) {
+  const data = error.response?.data;
+  if (!data) return error.message || fallback;
+  if (typeof data === 'string') return data.slice(0, 240) || fallback;
+  if (data.detail) return data.detail;
+  if (data.non_field_errors?.length) return data.non_field_errors[0];
+  const firstKey = Object.keys(data)[0];
+  const firstValue = firstKey ? data[firstKey] : null;
+  if (Array.isArray(firstValue)) return `${firstKey}: ${firstValue[0]}`;
+  if (typeof firstValue === 'string') return `${firstKey}: ${firstValue}`;
+  return fallback;
 }
 
 function scheduleMessageAutoDismiss() {
@@ -172,6 +194,8 @@ function normalizeScene(scene, index = 0) {
       y: Math.round(Number(hotspot.y ?? 50)),
       lon: Number(hotspot.lon ?? 0),
       lat: Number(hotspot.lat ?? 0),
+      audio_url: hotspot.audio_url || hotspot.audio || '',
+      local_audio_file: hotspot.local_audio_file || null,
     })),
   };
 }
@@ -285,6 +309,7 @@ function hydrateHotspotForm(hotspot) {
   hotspotForm.y = Math.round(Number(hotspot?.y ?? 50));
   hotspotForm.lon = Math.round(Number(hotspot?.lon ?? 0) * 10) / 10;
   hotspotForm.lat = Math.round(Number(hotspot?.lat ?? 0) * 10) / 10;
+  hotspotForm.audio_url = hotspot?.audio_url || '';
 }
 
 function selectScene(sceneId) {
@@ -376,6 +401,31 @@ async function uploadPendingSceneFiles() {
   return uploadedCount;
 }
 
+async function uploadHotspotAudioToBackend(hotspot) {
+  if (!selectedLocationId.value || !selectedVersionId.value || !hotspot.local_audio_file) return false;
+  const response = await uploadHotspotAudio(selectedLocationId.value, selectedVersionId.value, {
+    hotspotId: hotspot.id,
+    audioFile: hotspot.local_audio_file,
+  });
+  hotspot.audio_url = response.data.audio_url || response.data.audio_path || '';
+  hotspot.local_audio_file = null;
+  return true;
+}
+
+async function uploadPendingHotspotAudioFiles() {
+  if (!selectedVersionId.value) return 0;
+  let uploadedCount = 0;
+  for (const scene of scenes.value) {
+    for (const hotspot of scene.hotspots || []) {
+      if (hotspot.local_audio_file) {
+        const uploaded = await uploadHotspotAudioToBackend(hotspot);
+        if (uploaded) uploadedCount += 1;
+      }
+    }
+  }
+  return uploadedCount;
+}
+
 async function handleFiles(fileList) {
   const files = Array.from(fileList || []).filter((file) => file.type.startsWith('image/'));
   if (!files.length) return;
@@ -453,6 +503,8 @@ function addHotspotFromCanvas(point) {
     y: Math.round(point.y),
     lon: Math.round(Number(point.lon ?? viewState.lon) * 10) / 10,
     lat: Math.round(Number(point.lat ?? viewState.lat) * 10) / 10,
+    audio_url: '',
+    local_audio_file: null,
   };
   activeScene.value.hotspots = [...(activeScene.value.hotspots || []), hotspot];
   selectedHotspotId.value = hotspot.id;
@@ -482,8 +534,19 @@ function saveHotspot() {
   hotspot.y = Number(hotspotForm.y);
   hotspot.lon = Number(hotspotForm.lon);
   hotspot.lat = Number(hotspotForm.lat);
+  hotspot.audio_url = hotspotForm.audio_url.trim();
   hotspotForm.target_scene_id = hotspot.target_scene_id;
   successMessage.value = 'Da luu hotspot.';
+}
+
+function onHotspotAudioChange(event) {
+  const file = event.target.files?.[0] || null;
+  const hotspot = selectedHotspot.value;
+  if (!hotspot || !file) return;
+  hotspot.local_audio_file = file;
+  hotspot.audio_url = '';
+  hotspotForm.audio_url = '';
+  successMessage.value = 'Da chon audio cho hotspot. Bam Save Tour de upload.';
 }
 
 function removeHotspot() {
@@ -540,6 +603,8 @@ async function openQuickCreateModal() {
   quickCreateForm.latitude = '';
   quickCreateForm.longitude = '';
   quickCreateForm.version_label = '';
+  quickCreateForm.background_audio_file = null;
+  quickCreateForm.hotspot_point_logo_file = null;
   quickLocation.value = [];
   quickVersions.value = [];
   if (quickCreateForm.project_id) await loadQuickLocation();
@@ -600,6 +665,14 @@ function useExistingLocation() {
   loadQuickVersions();
 }
 
+function onQuickVersionAudioChange(event) {
+  quickCreateForm.background_audio_file = event.target.files?.[0] || null;
+}
+
+function onQuickVersionLogoChange(event) {
+  quickCreateForm.hotspot_point_logo_file = event.target.files?.[0] || null;
+}
+
 async function quickCreateTour() {
   if (quickCreateForm.create_project && !quickCreateForm.project_name.trim()) {
     errorMessage.value = 'Ban can import name project moi.';
@@ -658,6 +731,8 @@ async function quickCreateTour() {
         label: quickCreateForm.version_label.trim() || `${location.name} draft`,
         changelog: 'Created from VR360 Builder.',
         data: emptyData,
+        background_audio_file: quickCreateForm.background_audio_file,
+        hotspot_point_logo_file: quickCreateForm.hotspot_point_logo_file,
       });
       nextVersion = versionResponse.data;
     } else {
@@ -686,11 +761,7 @@ async function quickCreateTour() {
       ? 'Da tao/chon tour va tao version draft moi.'
       : 'Da mo version co san de chinh sua.';
   } catch (error) {
-    errorMessage.value =
-      error.response?.data?.detail ||
-      error.response?.data?.name?.[0] ||
-      error.response?.data?.non_field_errors?.[0] ||
-      'Could not create/select tour.';
+    errorMessage.value = extractApiError(error, 'Could not create/select tour.');
   }
 }
 
@@ -734,8 +805,12 @@ async function saveBuilder() {
     }
 
     const hasPendingUploads = scenes.value.some((scene) => scene.local_file);
+    const hasPendingHotspotAudio = scenes.value.some((scene) => (
+      (scene.hotspots || []).some((hotspot) => hotspot.local_audio_file)
+    ));
     let uploadedCount = 0;
-    if (hasPendingUploads) {
+    let uploadedHotspotAudioCount = 0;
+    if (hasPendingUploads || hasPendingHotspotAudio) {
       version.value = (
         await updateVersion(selectedLocationId.value, selectedVersionId.value, {
           label: version.value.label,
@@ -744,6 +819,7 @@ async function saveBuilder() {
         })
       ).data;
       uploadedCount = await uploadPendingSceneFiles();
+      uploadedHotspotAudioCount = await uploadPendingHotspotAudioFiles();
     }
 
     const response = await updateVersion(selectedLocationId.value, selectedVersionId.value, {
@@ -752,11 +828,11 @@ async function saveBuilder() {
       data: tourData.value,
     });
     version.value = response.data;
-    successMessage.value = hasPendingUploads
-      ? `Saved tour and uploaded ${uploadedCount} image(s).`
+    successMessage.value = hasPendingUploads || hasPendingHotspotAudio
+      ? `Saved tour and uploaded ${uploadedCount} image(s), ${uploadedHotspotAudioCount} hotspot audio file(s).`
       : 'Saved draft tour version successfully.';
   } catch (error) {
-    errorMessage.value = error.response?.data?.detail || 'Could not save builder. Published versions cannot be edited.';
+    errorMessage.value = extractApiError(error, 'Could not save builder. Published versions cannot be edited.');
   }
 }
 
@@ -980,6 +1056,17 @@ onBeforeUnmount(() => {
               <label>X %<input v-model="hotspotForm.x" type="number" min="0" max="100" /></label>
               <label>Y %<input v-model="hotspotForm.y" type="number" min="0" max="100" /></label>
             </div>
+            <label>
+              Hotspot audio
+              <input type="file" accept="audio/*" @change="onHotspotAudioChange" />
+            </label>
+            <label>
+              Audio URL
+              <input v-model="hotspotForm.audio_url" placeholder="/media/... or https://..." />
+            </label>
+            <p class="builder-muted">
+              {{ selectedHotspot.local_audio_file ? `Selected: ${selectedHotspot.local_audio_file.name}` : (hotspotForm.audio_url ? 'Hotspot has audio.' : 'No audio for this hotspot.') }}
+            </p>
             <div class="actions-row">
               <button class="primary-button" type="button" @click="saveHotspot">Save hotspot</button>
               <button class="danger-button" type="button" @click="removeHotspot">Delete</button>
@@ -1110,6 +1197,17 @@ onBeforeUnmount(() => {
               New draft version label
               <input v-model="quickCreateForm.version_label" placeholder="Leave empty to auto-name" />
             </label>
+            <template v-if="quickCreateForm.create_version || quickCreateForm.create_location">
+              <label>
+                Background audio
+                <input type="file" accept="audio/*" @change="onQuickVersionAudioChange" />
+              </label>
+              <label>
+                Point hotspot logo
+                <input type="file" accept="image/*" @change="onQuickVersionLogoChange" />
+              </label>
+              <p class="builder-muted">Logo nay se dung cho hotspot loai point trong viewer.</p>
+            </template>
             <p v-if="quickCreateForm.create_location" class="builder-muted">
               New location has no version, so Builder will create a new draft version.
             </p>

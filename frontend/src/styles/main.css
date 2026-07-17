@@ -2080,6 +2080,42 @@ th {
   z-index: 16;
 }
 
+.viewer-background-audio {
+  align-items: center;
+  background: rgba(20, 20, 28, 0.9);
+  backdrop-filter: blur(24px);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 999px;
+  bottom: 154px;
+  color: #ffffff;
+  cursor: pointer;
+  display: inline-flex;
+  gap: 8px;
+  min-height: 42px;
+  padding: 8px 14px;
+  position: fixed;
+  right: 24px;
+  z-index: 18;
+}
+
+.viewer-background-audio span {
+  align-items: center;
+  background: #ffffff;
+  border-radius: 999px;
+  color: #111827;
+  display: inline-flex;
+  font-size: 13px;
+  font-weight: 900;
+  height: 26px;
+  justify-content: center;
+  width: 26px;
+}
+
+.viewer-background-audio small {
+  font-size: 12px;
+  font-weight: 800;
+}
+
 .viewer-point-card-image {
   background: #171827 center/cover;
   border-radius: 14px;
@@ -2324,6 +2360,16 @@ th {
   height: 42px;
   justify-content: center;
   width: 42px;
+}
+
+.viewer-point-logo {
+  background: rgba(255, 255, 255, 0.92) center/contain no-repeat;
+  border: 3px solid #ffd84d;
+  border-radius: 999px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  display: inline-flex;
+  height: 46px;
+  width: 46px;
 }
 
 .viewer-hotspot .hotspot-label {

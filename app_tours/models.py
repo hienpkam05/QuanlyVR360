@@ -32,6 +32,8 @@ class TourVersion(SoftDeleteModel):
     label = models.CharField(max_length=100, blank=True)
     data = models.JSONField(validators=[validate_tour_data])
     thumbnail = models.ImageField(upload_to="tours/thumbnails/", blank=True, null=True)
+    background_audio = models.FileField(upload_to="tours/audio/", blank=True, null=True)
+    hotspot_point_logo = models.ImageField(upload_to="tours/hotspot_logos/", blank=True, null=True)
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.DRAFT)
     changelog = models.TextField(blank=True)
     created_by = models.ForeignKey(

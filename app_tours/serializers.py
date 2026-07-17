@@ -1,4 +1,8 @@
+import json
+
+from django.http import QueryDict
 from rest_framework import serializers
+from rest_framework.exceptions import ValidationError
 
 from .models import TourVersion
 
@@ -10,7 +14,8 @@ class TourVersionListSerializer(serializers.ModelSerializer):
     class Meta:
         model = TourVersion
         fields = (
-            "id", "location", "version_number", "label", "thumbnail", "status", "changelog",
+            "id", "location", "version_number", "label", "thumbnail", "background_audio",
+            "hotspot_point_logo", "status", "changelog",
             "created_by", "created_by_name", "scene_assets_count", "created_at", "updated_at",
         )
         read_only_fields = fields
@@ -22,10 +27,37 @@ class TourVersionSerializer(serializers.ModelSerializer):
     class Meta:
         model = TourVersion
         fields = (
-            "id", "location", "version_number", "label", "data", "thumbnail", "status",
-            "changelog", "created_by", "created_by_name", "created_at", "updated_at",
+            "id", "location", "version_number", "label", "data", "thumbnail",
+            "background_audio", "hotspot_point_logo", "status", "changelog",
+            "created_by", "created_by_name", "created_at", "updated_at",
         )
         read_only_fields = ("location", "version_number", "status", "created_by", "created_at", "updated_at")
+
+    def to_internal_value(self, data):
+        if isinstance(data, QueryDict):
+            data = {key: data.get(key) for key in data.keys()}
+        elif hasattr(data, "copy"):
+            data = data.copy()
+
+        raw_data = data.get("data") if hasattr(data, "get") else None
+        if isinstance(raw_data, str):
+            try:
+                data["data"] = json.loads(raw_data)
+            except json.JSONDecodeError as exc:
+                raise ValidationError({"data": "Tour data must be valid JSON."}) from exc
+
+        return super().to_internal_value(data)
+
+    def validate_data(self, value):
+        if isinstance(value, str):
+            try:
+                value = json.loads(value)
+            except json.JSONDecodeError as exc:
+                raise serializers.ValidationError("Tour data must be valid JSON.") from exc
+        field = TourVersion._meta.get_field("data")
+        for validator in field.validators:
+            validator(value)
+        return value
 
     def validate(self, attrs):
         if self.instance and self.instance.status == TourVersion.Status.PUBLISHED:

@@ -1,9 +1,13 @@
 from copy import deepcopy
+from uuid import uuid4
 
+from django.core.files.storage import default_storage
 from django.shortcuts import get_object_or_404
+from django.utils.text import slugify
 from rest_framework import mixins, status
 from rest_framework.decorators import action
 from rest_framework.exceptions import ValidationError
+from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.viewsets import GenericViewSet, ModelViewSet
@@ -39,6 +43,7 @@ def log_version_activity(request, action, version, description):
 
 class LocationTourVersionViewSet(mixins.ListModelMixin, mixins.CreateModelMixin, GenericViewSet):
     serializer_class = TourVersionSerializer
+    parser_classes = (JSONParser, MultiPartParser, FormParser)
     filterset_class = TourVersionFilter
     search_fields = ("label", "changelog")
     ordering_fields = ("version_number", "created_at", "updated_at")
@@ -68,6 +73,7 @@ class LocationTourVersionViewSet(mixins.ListModelMixin, mixins.CreateModelMixin,
 
 class TourVersionViewSet(ModelViewSet):
     serializer_class = TourVersionSerializer
+    parser_classes = (JSONParser, MultiPartParser, FormParser)
     filterset_class = TourVersionFilter
     search_fields = ("label", "changelog")
     ordering_fields = ("version_number", "created_at", "updated_at")
@@ -172,6 +178,39 @@ class TourVersionImportView(APIView):
             f"Imported draft tour version v{version.version_number}.",
         )
         return Response(TourVersionSerializer(version, context={"request": request}).data, status=status.HTTP_201_CREATED)
+
+
+class HotspotAudioUploadView(APIView):
+    parser_classes = (MultiPartParser, FormParser)
+
+    def post(self, request, location_id, pk):
+        version = get_object_or_404(TourVersion.objects.select_related("location"), pk=pk, location_id=location_id)
+        if version.status == TourVersion.Status.PUBLISHED:
+            return Response(
+                {"detail": "Published tour versions cannot be edited. Archive or create a new draft first."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        audio_file = request.FILES.get("audio")
+        hotspot_id = request.data.get("hotspot_id") or "hotspot"
+        if not audio_file:
+            return Response({"audio": "Audio file is required."}, status=status.HTTP_400_BAD_REQUEST)
+
+        safe_hotspot = slugify(str(hotspot_id)) or "hotspot"
+        safe_name = slugify(str(audio_file.name).rsplit(".", 1)[0]) or "audio"
+        extension = str(audio_file.name).rsplit(".", 1)[-1].lower() if "." in str(audio_file.name) else "mp3"
+        path = default_storage.save(
+            f"tours/hotspot_audio/v{version.pk}/{safe_hotspot}/{safe_name}-{uuid4().hex[:8]}.{extension}",
+            audio_file,
+        )
+        url = default_storage.url(path)
+        return Response(
+            {
+                "audio_url": request.build_absolute_uri(url),
+                "audio_path": url,
+            },
+            status=status.HTTP_201_CREATED,
+        )
 
 
 class TourVersionCompareView(APIView):

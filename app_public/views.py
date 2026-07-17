@@ -188,6 +188,8 @@ class PublicTourView(PublicAccessMixin, APIView):
                     "id": version.id,
                     "version_number": version.version_number,
                     "label": version.label,
+                    "background_audio": request.build_absolute_uri(version.background_audio.url) if version.background_audio else "",
+                    "hotspot_point_logo": request.build_absolute_uri(version.hotspot_point_logo.url) if version.hotspot_point_logo else "",
                     "published_at": config.published_at,
                 },
                 "data": resolved_data,

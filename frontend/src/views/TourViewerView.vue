@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, reactive, ref } from 'vue';
+import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 
 import PanoramaViewer from '../components/PanoramaViewer.vue';
@@ -25,12 +25,18 @@ const sidebarOpen = ref(false);
 const thumbsOpen = ref(true);
 const errorMessage = ref('');
 const selectedPointHotspot = ref(null);
+const backgroundAudioPlaying = ref(false);
+const backgroundAudioBlocked = ref(false);
 const viewState = reactive({ lon: 0, lat: 0, fov: 75 });
+let hotspotAudioPlayer = null;
+let backgroundAudioPlayer = null;
 
 const activeScene = computed(() => scenes.value.find((scene) => scene.id === activeSceneId.value) || null);
 const activeSceneIndex = computed(() => scenes.value.findIndex((scene) => scene.id === activeSceneId.value));
 const activeInitialView = computed(() => activeScene.value?.view || activeScene.value?.initialView || { lon: 0, lat: 0, fov: 75 });
 const sceneImage = computed(() => resolveSceneImage(activeScene.value));
+const backgroundAudioUrl = computed(() => resolveUrl(version.value?.background_audio || ''));
+const pointHotspotLogoUrl = computed(() => resolveUrl(version.value?.hotspot_point_logo || ''));
 const displayHotspots = computed(() => {
   const scene = activeScene.value;
   if (!scene) return [];
@@ -39,6 +45,7 @@ const displayHotspots = computed(() => {
     return {
       ...hotspot,
       preview_image: resolveSceneImage(targetScene || scene),
+      audio_url: resolveUrl(hotspot.audio_url || hotspot.audio || ''),
     };
   });
 });
@@ -85,6 +92,7 @@ function normalizeScene(scene, index = 0) {
       lat: Number(hotspot.lat ?? 0),
       x: Number(hotspot.x ?? 50),
       y: Number(hotspot.y ?? 50),
+      audio_url: hotspot.audio_url || hotspot.audio || '',
     })),
   };
 }
@@ -99,6 +107,42 @@ function applyTourPayload(payload) {
   version.value = payload.version || payload;
   scenes.value = normalizeTourData(payload.data || payload);
   activeSceneId.value = scenes.value[0]?.id || '';
+}
+
+async function tryPlayBackgroundAudio() {
+  if (!backgroundAudioUrl.value) return;
+  if (!backgroundAudioPlayer || backgroundAudioPlayer.src !== backgroundAudioUrl.value) {
+    backgroundAudioPlayer?.pause();
+    backgroundAudioPlayer = new Audio(backgroundAudioUrl.value);
+    backgroundAudioPlayer.loop = true;
+    backgroundAudioPlayer.volume = 0.55;
+  }
+  try {
+    await backgroundAudioPlayer.play();
+    backgroundAudioPlaying.value = true;
+    backgroundAudioBlocked.value = false;
+  } catch {
+    backgroundAudioPlaying.value = false;
+    backgroundAudioBlocked.value = true;
+  }
+}
+
+function toggleBackgroundAudio() {
+  if (!backgroundAudioUrl.value) return;
+  if (backgroundAudioPlayer && !backgroundAudioPlayer.paused) {
+    backgroundAudioPlayer.pause();
+    backgroundAudioPlaying.value = false;
+    backgroundAudioBlocked.value = false;
+    return;
+  }
+  tryPlayBackgroundAudio();
+}
+
+function onViewerFirstInteraction(event) {
+  if (event?.target?.closest?.('.viewer-background-audio')) return;
+  if (backgroundAudioBlocked.value && backgroundAudioUrl.value) {
+    tryPlayBackgroundAudio();
+  }
 }
 
 function uniqueBy(items, keyGetter) {
@@ -150,6 +194,7 @@ async function loadVersionDetail() {
   try {
     const response = await getVersion(selectedLocationId.value, selectedVersionId.value);
     applyTourPayload(response.data);
+    await tryPlayBackgroundAudio();
   } catch (error) {
     errorMessage.value = error.response?.data?.detail || 'Could not load version.';
   }
@@ -159,6 +204,7 @@ async function loadPublishedTourByToken(publicToken) {
   if (!publicToken) return false;
   const response = await getPublicTour(publicToken);
   applyTourPayload(response.data);
+  await tryPlayBackgroundAudio();
   return true;
 }
 
@@ -256,8 +302,19 @@ function getNextSceneId() {
   return scenes.value[(currentIndex + 1) % scenes.value.length]?.id || '';
 }
 
+function playHotspotAudio(hotspot) {
+  const audioUrl = resolveUrl(hotspot.audio_url || hotspot.audio || '');
+  if (!audioUrl) return;
+  hotspotAudioPlayer?.pause();
+  hotspotAudioPlayer = new Audio(audioUrl);
+  hotspotAudioPlayer.play().catch(() => {
+    errorMessage.value = 'Could not play hotspot audio.';
+  });
+}
+
 function onHotspotClick(hotspot) {
   selectedPointHotspot.value = null;
+  playHotspotAudio(hotspot);
   const targetId = hotspot.target_scene_id;
   if (targetId && scenes.value.some((scene) => scene.id === targetId)) {
     goToScene(targetId);
@@ -323,10 +380,17 @@ function goBack() {
 }
 
 onMounted(boot);
+
+onBeforeUnmount(() => {
+  hotspotAudioPlayer?.pause();
+  hotspotAudioPlayer = null;
+  backgroundAudioPlayer?.pause();
+  backgroundAudioPlayer = null;
+});
 </script>
 
 <template>
-  <section class="tour-viewer-page">
+  <section class="tour-viewer-page" @pointerdown.capture="onViewerFirstInteraction">
     <div class="viewer-topbar">
       <button class="viewer-icon-button" type="button" @click="goBack">←</button>
       <button class="viewer-icon-button" type="button" @click="sidebarOpen = true">☰</button>
@@ -355,10 +419,22 @@ onMounted(boot);
       :image-url="sceneImage"
       :hotspots="displayHotspots"
       :initial-view="activeInitialView"
+      :point-hotspot-logo="pointHotspotLogoUrl"
       hotspot-display-mode="viewer"
       @hotspot-click="onHotspotClick"
       @view-change="updateViewState"
     />
+
+    <button
+      v-if="backgroundAudioUrl"
+      class="viewer-background-audio"
+      type="button"
+      :title="backgroundAudioBlocked ? 'Click to play background audio' : 'Toggle background audio'"
+      @click.stop="toggleBackgroundAudio"
+    >
+      <span>{{ backgroundAudioPlaying ? '♪' : '▶' }}</span>
+      <small>{{ backgroundAudioBlocked ? 'Click to play audio' : 'Music' }}</small>
+    </button>
 
     <div v-if="selectedPointHotspot" class="viewer-point-card">
       <button class="viewer-point-close" type="button" @click="selectedPointHotspot = null">×</button>

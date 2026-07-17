@@ -23,6 +23,10 @@ const props = defineProps({
     type: String,
     default: 'builder',
   },
+  pointHotspotLogo: {
+    type: String,
+    default: '',
+  },
 });
 
 const emit = defineEmits(['panorama-click', 'hotspot-click', 'view-change']);
@@ -379,7 +383,12 @@ onBeforeUnmount(() => {
         <span class="viewer-hotspot-preview" v-if="hotspot.preview_image" :style="{ backgroundImage: `url(${hotspot.preview_image})` }"></span>
       </template>
       <template v-else>
-        <span class="viewer-point-dot">{{ hotspot.index + 1 }}</span>
+        <span
+          v-if="hotspotDisplayMode === 'viewer' && pointHotspotLogo"
+          class="viewer-point-logo"
+          :style="{ backgroundImage: `url(${pointHotspotLogo})` }"
+        ></span>
+        <span v-else class="viewer-point-dot">{{ hotspot.index + 1 }}</span>
         <span class="hotspot-label">{{ hotspot.label || 'Hotspot' }}</span>
         <span class="viewer-hotspot-preview" v-if="hotspotDisplayMode === 'viewer' && hotspot.preview_image" :style="{ backgroundImage: `url(${hotspot.preview_image})` }"></span>
       </template>
