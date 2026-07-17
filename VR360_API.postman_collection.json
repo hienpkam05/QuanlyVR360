@@ -1,0 +1,564 @@
+{
+  "info": {
+    "_postman_id": "f99b4c2c-3b84-49f7-8f72-vr360-api",
+    "name": "VR360 Management API",
+    "description": "Postman collection for the VR360 Django backend. Run Auth > Login first, then create project, location, version and publish.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "base_url", "value": "http://127.0.0.1:8000" },
+    { "key": "username", "value": "admin" },
+    { "key": "password", "value": "123456" },
+    { "key": "access_token", "value": "" },
+    { "key": "refresh_token", "value": "" },
+    { "key": "project_id", "value": "1" },
+    { "key": "location_id", "value": "1" },
+    { "key": "version_id", "value": "1" },
+    { "key": "version_number", "value": "1" },
+    { "key": "scene_asset_id", "value": "1" },
+    { "key": "scene_key", "value": "scene-1" },
+    { "key": "domain_id", "value": "1" },
+    { "key": "public_token", "value": "" },
+    { "key": "viewer_origin", "value": "http://localhost:5173" }
+  ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      { "key": "token", "value": "{{access_token}}", "type": "string" }
+    ]
+  },
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json.access) pm.collectionVariables.set('access_token', json.access);",
+                  "if (json.refresh) pm.collectionVariables.set('refresh_token', json.refresh);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{username}}\",\n  \"password\": \"{{password}}\"\n}"
+            },
+            "url": "{{base_url}}/api/auth/login/"
+          }
+        },
+        {
+          "name": "Refresh Token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json.access) pm.collectionVariables.set('access_token', json.access);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"refresh\": \"{{refresh_token}}\"\n}" },
+            "url": "{{base_url}}/api/auth/refresh/"
+          }
+        },
+        {
+          "name": "Me",
+          "request": { "method": "GET", "url": "{{base_url}}/api/auth/me/" }
+        },
+        {
+          "name": "Change Password",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"old_password\": \"{{password}}\",\n  \"new_password\": \"new-password-123\"\n}"
+            },
+            "url": "{{base_url}}/api/auth/change-password/"
+          }
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"refresh\": \"{{refresh_token}}\"\n}" },
+            "url": "{{base_url}}/api/auth/logout/"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Projects",
+      "item": [
+        {
+          "name": "List Projects",
+          "request": { "method": "GET", "url": "{{base_url}}/api/projects/" }
+        },
+        {
+          "name": "Create Project",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json.id) pm.collectionVariables.set('project_id', json.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Demo VR360 Project\",\n  \"description\": \"Project created from Postman\",\n  \"is_active\": true\n}"
+            },
+            "url": "{{base_url}}/api/projects/"
+          }
+        },
+        {
+          "name": "Project Detail",
+          "request": { "method": "GET", "url": "{{base_url}}/api/projects/{{project_id}}/" }
+        },
+        {
+          "name": "Update Project",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"description\": \"Updated from Postman\"\n}" },
+            "url": "{{base_url}}/api/projects/{{project_id}}/"
+          }
+        },
+        {
+          "name": "Upload Project Thumbnail",
+          "request": {
+            "method": "POST",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "thumbnail", "type": "file", "src": "" }
+              ]
+            },
+            "url": "{{base_url}}/api/projects/{{project_id}}/upload-thumbnail/"
+          }
+        },
+        {
+          "name": "Project Dashboard",
+          "request": { "method": "GET", "url": "{{base_url}}/api/projects/{{project_id}}/dashboard/" }
+        },
+        {
+          "name": "Delete Project",
+          "request": { "method": "DELETE", "url": "{{base_url}}/api/projects/{{project_id}}/" }
+        }
+      ]
+    },
+    {
+      "name": "Locations",
+      "item": [
+        {
+          "name": "List Project Locations",
+          "request": { "method": "GET", "url": "{{base_url}}/api/projects/{{project_id}}/locations/" }
+        },
+        {
+          "name": "Create Location",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json.id) pm.collectionVariables.set('location_id', json.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Lobby\",\n  \"description\": \"Main lobby\",\n  \"latitude\": 21.027763,\n  \"longitude\": 105.834160,\n  \"order\": 1,\n  \"is_active\": true\n}"
+            },
+            "url": "{{base_url}}/api/projects/{{project_id}}/locations/"
+          }
+        },
+        {
+          "name": "Location Detail",
+          "request": { "method": "GET", "url": "{{base_url}}/api/locations/{{location_id}}/" }
+        },
+        {
+          "name": "Update Location",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"description\": \"Updated location\"\n}" },
+            "url": "{{base_url}}/api/locations/{{location_id}}/"
+          }
+        },
+        {
+          "name": "Reorder Locations",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"locations\": [\n    {\"id\": {{location_id}}, \"order\": 1}\n  ]\n}"
+            },
+            "url": "{{base_url}}/api/projects/{{project_id}}/locations/reorder/"
+          }
+        },
+        {
+          "name": "Upload Location Thumbnail",
+          "request": {
+            "method": "POST",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "thumbnail", "type": "file", "src": "" }
+              ]
+            },
+            "url": "{{base_url}}/api/locations/{{location_id}}/upload-thumbnail/"
+          }
+        },
+        {
+          "name": "Delete Location",
+          "request": { "method": "DELETE", "url": "{{base_url}}/api/locations/{{location_id}}/" }
+        }
+      ]
+    },
+    {
+      "name": "Tour Versions",
+      "item": [
+        {
+          "name": "List Versions",
+          "request": { "method": "GET", "url": "{{base_url}}/api/locations/{{location_id}}/versions/" }
+        },
+        {
+          "name": "Create Version",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json.id) pm.collectionVariables.set('version_id', json.id);",
+                  "if (json.version_number) pm.collectionVariables.set('version_number', json.version_number);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"label\": \"Draft v1\",\n  \"changelog\": \"Initial version\",\n  \"data\": {\n    \"scenes\": [\n      {\"id\": \"scene-1\", \"name\": \"Lobby\", \"hotspots\": []}\n    ]\n  }\n}"
+            },
+            "url": "{{base_url}}/api/locations/{{location_id}}/versions/"
+          }
+        },
+        {
+          "name": "Version Detail",
+          "request": { "method": "GET", "url": "{{base_url}}/api/locations/{{location_id}}/versions/{{version_id}}/" }
+        },
+        {
+          "name": "Update Draft Version",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"label\": \"Draft v1 updated\"\n}" },
+            "url": "{{base_url}}/api/locations/{{location_id}}/versions/{{version_id}}/"
+          }
+        },
+        {
+          "name": "Export Version JSON",
+          "request": { "method": "GET", "url": "{{base_url}}/api/locations/{{location_id}}/versions/{{version_id}}/export/" }
+        },
+        {
+          "name": "Preview Version",
+          "request": { "method": "GET", "url": "{{base_url}}/api/locations/{{location_id}}/versions/{{version_id}}/preview/" }
+        },
+        {
+          "name": "Import Version JSON",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"label\": \"Imported version\",\n  \"changelog\": \"Imported from Postman\",\n  \"data\": {\n    \"scenes\": [\n      {\"id\": \"scene-1\", \"name\": \"Imported Scene\", \"hotspots\": []}\n    ]\n  }\n}"
+            },
+            "url": "{{base_url}}/api/locations/{{location_id}}/versions/import/"
+          }
+        },
+        {
+          "name": "Compare Versions",
+          "request": { "method": "GET", "url": "{{base_url}}/api/locations/{{location_id}}/versions/compare/?from={{version_id}}&to={{version_id}}" }
+        },
+        {
+          "name": "Delete Draft Version",
+          "request": { "method": "DELETE", "url": "{{base_url}}/api/locations/{{location_id}}/versions/{{version_id}}/" }
+        }
+      ]
+    },
+    {
+      "name": "Media",
+      "item": [
+        {
+          "name": "Upload Scene Panorama",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "const asset = json.asset || json;",
+                  "if (asset.id) pm.collectionVariables.set('scene_asset_id', asset.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "tour_version", "value": "{{version_id}}", "type": "text" },
+                { "key": "scene_key", "value": "{{scene_key}}", "type": "text" },
+                { "key": "max_zoom_level", "value": "3", "type": "text" },
+                { "key": "tile_size", "value": "512", "type": "text" },
+                { "key": "original_file", "type": "file", "src": "" }
+              ]
+            },
+            "url": "{{base_url}}/api/media/scenes/upload/"
+          }
+        },
+        {
+          "name": "Scene Processing Status",
+          "request": { "method": "GET", "url": "{{base_url}}/api/media/scenes/{{scene_asset_id}}/status/" }
+        },
+        {
+          "name": "Admin Tile Serve",
+          "request": { "method": "GET", "url": "{{base_url}}/api/media/tiles/{{location_id}}/{{version_number}}/{{scene_key}}/0/0/0.jpg" }
+        },
+        {
+          "name": "Delete Scene Asset",
+          "request": { "method": "DELETE", "url": "{{base_url}}/api/media/scenes/{{scene_asset_id}}/" }
+        }
+      ]
+    },
+    {
+      "name": "Publishing",
+      "item": [
+        {
+          "name": "Get Publish Config",
+          "request": { "method": "GET", "url": "{{base_url}}/api/locations/{{location_id}}/publish/" }
+        },
+        {
+          "name": "Publish Location",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json.public_token) pm.collectionVariables.set('public_token', json.public_token);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"published_version\": {{version_id}},\n  \"is_active\": true\n}" },
+            "url": "{{base_url}}/api/locations/{{location_id}}/publish/"
+          }
+        },
+        {
+          "name": "Update Publish Config",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"is_active\": true\n}" },
+            "url": "{{base_url}}/api/locations/{{location_id}}/publish/"
+          }
+        },
+        {
+          "name": "Regenerate Public Token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json.public_token) pm.collectionVariables.set('public_token', json.public_token);"
+                ]
+              }
+            }
+          ],
+          "request": { "method": "POST", "url": "{{base_url}}/api/locations/{{location_id}}/publish/regenerate-token/" }
+        },
+        {
+          "name": "List Whitelist Domains",
+          "request": { "method": "GET", "url": "{{base_url}}/api/locations/{{location_id}}/publish/domains/" }
+        },
+        {
+          "name": "Create Whitelist Domain",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json.id) pm.collectionVariables.set('domain_id', json.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"domain\": \"localhost:5173\",\n  \"label\": \"Local frontend\",\n  \"is_active\": true\n}" },
+            "url": "{{base_url}}/api/locations/{{location_id}}/publish/domains/"
+          }
+        },
+        {
+          "name": "Update Whitelist Domain",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"is_active\": true\n}" },
+            "url": "{{base_url}}/api/locations/{{location_id}}/publish/domains/{{domain_id}}/"
+          }
+        },
+        {
+          "name": "Delete Whitelist Domain",
+          "request": { "method": "DELETE", "url": "{{base_url}}/api/locations/{{location_id}}/publish/domains/{{domain_id}}/" }
+        },
+        {
+          "name": "Unpublish Location",
+          "request": { "method": "DELETE", "url": "{{base_url}}/api/locations/{{location_id}}/publish/" }
+        }
+      ]
+    },
+    {
+      "name": "Public Viewer",
+      "auth": { "type": "noauth" },
+      "item": [
+        {
+          "name": "Get Public Tour",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [{ "key": "Origin", "value": "{{viewer_origin}}" }],
+            "url": "{{base_url}}/api/public/tour/{{public_token}}/"
+          }
+        },
+        {
+          "name": "Public Tile Serve",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [{ "key": "Origin", "value": "{{viewer_origin}}" }],
+            "url": "{{base_url}}/api/public/tour/{{public_token}}/tiles/{{scene_key}}/0/0/0.jpg"
+          }
+        },
+        {
+          "name": "Track Visit",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Origin", "value": "{{viewer_origin}}" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"city\": \"Ha Noi\",\n  \"country_code\": \"VN\"\n}" },
+            "url": "{{base_url}}/api/public/tour/{{public_token}}/track-visit/"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Analytics",
+      "item": [
+        {
+          "name": "Stats Summary",
+          "request": { "method": "GET", "url": "{{base_url}}/api/locations/{{location_id}}/stats/summary/?from=2026-01-01&to=2026-12-31" }
+        },
+        {
+          "name": "Stats Timeseries",
+          "request": { "method": "GET", "url": "{{base_url}}/api/locations/{{location_id}}/stats/timeseries/?from=2026-01-01&to=2026-12-31&granularity=day" }
+        },
+        {
+          "name": "Stats By Country",
+          "request": { "method": "GET", "url": "{{base_url}}/api/locations/{{location_id}}/stats/by-country/?from=2026-01-01&to=2026-12-31" }
+        },
+        {
+          "name": "Stats By Device",
+          "request": { "method": "GET", "url": "{{base_url}}/api/locations/{{location_id}}/stats/by-device/?from=2026-01-01&to=2026-12-31" }
+        },
+        {
+          "name": "Stats By Referrer",
+          "request": { "method": "GET", "url": "{{base_url}}/api/locations/{{location_id}}/stats/by-referrer/?from=2026-01-01&to=2026-12-31" }
+        }
+      ]
+    },
+    {
+      "name": "Dashboard",
+      "item": [
+        {
+          "name": "Overview",
+          "request": { "method": "GET", "url": "{{base_url}}/api/dashboard/overview/" }
+        },
+        {
+          "name": "Top Locations",
+          "request": { "method": "GET", "url": "{{base_url}}/api/dashboard/top-locations/?from=2026-01-01&to=2026-12-31&limit=10" }
+        },
+        {
+          "name": "Recent Activity",
+          "request": { "method": "GET", "url": "{{base_url}}/api/dashboard/recent-activity/?limit=20" }
+        }
+      ]
+    },
+    {
+      "name": "OpenAPI Docs",
+      "auth": { "type": "noauth" },
+      "item": [
+        {
+          "name": "Schema",
+          "request": { "auth": { "type": "noauth" }, "method": "GET", "url": "{{base_url}}/api/schema/" }
+        },
+        {
+          "name": "Swagger UI",
+          "request": { "auth": { "type": "noauth" }, "method": "GET", "url": "{{base_url}}/api/docs/" }
+        }
+      ]
+    }
+  ]
+}
