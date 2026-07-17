@@ -132,3 +132,21 @@ class TourVersionApiTests(APITestCase):
             f"/api/locations/{self.location.id}/versions/", {"data": {"scenes": []}}, format="json"
         )
         self.assertEqual(create_response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_archived_version_can_be_updated(self):
+        version = TourVersion.objects.create(
+            location=self.location,
+            data={"scenes": []},
+            status=TourVersion.Status.ARCHIVED,
+        )
+        self.client.force_authenticate(self.employee)
+
+        patch_response = self.client.patch(
+            f"/api/locations/{self.location.id}/versions/{version.id}/",
+            {"label": "Archived edited"},
+            format="json",
+        )
+
+        self.assertEqual(patch_response.status_code, status.HTTP_200_OK)
+        version.refresh_from_db()
+        self.assertEqual(version.label, "Archived edited")

@@ -28,8 +28,8 @@ class TourVersionSerializer(serializers.ModelSerializer):
         read_only_fields = ("location", "version_number", "status", "created_by", "created_at", "updated_at")
 
     def validate(self, attrs):
-        if self.instance and self.instance.status != TourVersion.Status.DRAFT:
-            raise serializers.ValidationError("Chỉ có thể chỉnh sửa tour version đang ở trạng thái draft.")
+        if self.instance and self.instance.status == TourVersion.Status.PUBLISHED:
+            raise serializers.ValidationError("Published tour versions cannot be edited. Archive or create a new draft first.")
         return attrs
 
 

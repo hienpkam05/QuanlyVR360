@@ -17,8 +17,6 @@ const navItems = computed(() => {
     ...publicItems.slice(0, 1),
     { to: "/dashboard", label: "Dashboard" },
     { to: "/projects", label: "Projects" },
-    { to: "/locations", label: "Locations" },
-    { to: "/versions", label: "Tour Versions" },
     { to: "/builder", label: "VR360 Builder" },
     publicItems[1],
     { to: "/publishing", label: "Publishing" },

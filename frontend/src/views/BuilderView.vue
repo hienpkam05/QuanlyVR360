@@ -1,6 +1,6 @@
 <script setup>
-import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue';
-import { useRouter } from 'vue-router';
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
 
 import PanoramaViewer from '../components/PanoramaViewer.vue';
 import { apiBaseURL } from '../api/http';
@@ -10,6 +10,7 @@ import { createProject, listProjects } from '../api/projectsApi';
 import { createVersion, getVersion, listVersions, updateVersion } from '../api/toursApi';
 
 const router = useRouter();
+const route = useRoute();
 const projects = ref([]);
 const locations = ref([]);
 const versions = ref([]);
@@ -22,6 +23,7 @@ const activeSceneId = ref('');
 const selectedHotspotId = ref('');
 const errorMessage = ref('');
 const successMessage = ref('');
+let messageTimer = null;
 const uploading = ref(false);
 const isDraggingFile = ref(false);
 const showImportModal = ref(false);
@@ -96,6 +98,17 @@ function normalizeResults(data) {
   if (Array.isArray(data?.data)) return data.data;
   if (Array.isArray(data?.items)) return data.items;
   return [];
+}
+
+function scheduleMessageAutoDismiss() {
+  clearTimeout(messageTimer);
+  if (!errorMessage.value && !successMessage.value) return;
+  const currentError = errorMessage.value;
+  const currentSuccess = successMessage.value;
+  messageTimer = setTimeout(() => {
+    if (errorMessage.value === currentError) errorMessage.value = '';
+    if (successMessage.value === currentSuccess) successMessage.value = '';
+  }, 5000);
 }
 
 function uid(prefix) {
@@ -180,6 +193,10 @@ async function loadProject() {
   try {
     const response = await listProjects();
     projects.value = normalizeResults(response.data);
+    const queryProject = Number(route.query.project || 0);
+    if (queryProject && projects.value.some((project) => project.id === queryProject)) {
+      selectedProjectId.value = queryProject;
+    }
     if (!selectedProjectId.value && projects.value.length) selectedProjectId.value = projects.value[0].id;
   } catch (error) {
     errorMessage.value = error.response?.data?.detail || 'Could not load project list.';
@@ -190,6 +207,10 @@ async function loadLocation() {
   if (!selectedProjectId.value) return;
   const response = await listProjectLocations(selectedProjectId.value);
   locations.value = normalizeResults(response.data);
+  const queryLocation = Number(route.query.location || 0);
+  if (queryLocation && locations.value.some((location) => location.id === queryLocation)) {
+    selectedLocationId.value = queryLocation;
+  }
   if (!selectedLocationId.value && locations.value.length) selectedLocationId.value = locations.value[0].id;
 }
 
@@ -197,6 +218,11 @@ async function loadVersions() {
   if (!selectedLocationId.value) return;
   const response = await listVersions(selectedLocationId.value);
   versions.value = normalizeResults(response.data);
+  const queryVersion = Number(route.query.version || 0);
+  if (queryVersion && versions.value.some((item) => item.id === queryVersion)) {
+    selectedVersionId.value = queryVersion;
+    return;
+  }
   const draft = versions.value.find((item) => item.status === 'draft');
   selectedVersionId.value = draft?.id || versions.value[0]?.id || '';
 }
@@ -730,7 +756,7 @@ async function saveBuilder() {
       ? `Saved tour and uploaded ${uploadedCount} image(s).`
       : 'Saved draft tour version successfully.';
   } catch (error) {
-    errorMessage.value = error.response?.data?.detail || 'Could not save builder. Only draft versions can be edited.';
+    errorMessage.value = error.response?.data?.detail || 'Could not save builder. Published versions cannot be edited.';
   }
 }
 
@@ -753,9 +779,12 @@ function goBack() {
   router.push('/dashboard');
 }
 
+watch([errorMessage, successMessage], scheduleMessageAutoDismiss);
+
 onMounted(boot);
 
 onBeforeUnmount(() => {
+  clearTimeout(messageTimer);
   scenes.value.forEach((scene) => {
     if (scene.preview_object_url) URL.revokeObjectURL(scene.preview_object_url);
   });
