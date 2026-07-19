@@ -27,9 +27,11 @@ const errorMessage = ref('');
 const selectedPointHotspot = ref(null);
 const backgroundAudioPlaying = ref(false);
 const backgroundAudioBlocked = ref(false);
+const sceneAudioBlocked = ref(false);
 const viewState = reactive({ lon: 0, lat: 0, fov: 75 });
 let hotspotAudioPlayer = null;
 let backgroundAudioPlayer = null;
+let sceneAudioPlayer = null;
 
 const activeScene = computed(() => scenes.value.find((scene) => scene.id === activeSceneId.value) || null);
 const activeSceneIndex = computed(() => scenes.value.findIndex((scene) => scene.id === activeSceneId.value));
@@ -75,6 +77,7 @@ function normalizeScene(scene, index = 0) {
     name: scene.name || scene.title || `Scene ${index + 1}`,
     group: scene.group || 'Default',
     description: scene.description || scene.info || '',
+    audio_url: scene.audio_url || scene.audio || scene.entry_audio_url || scene.narration_audio || '',
     image_url: scene.image_url || '',
     original_file: scene.original_file || '',
     thumbnail: scene.thumbnail || scene.thumb || scene.original_file || scene.image_url || '',
@@ -107,6 +110,14 @@ function applyTourPayload(payload) {
   version.value = payload.version || payload;
   scenes.value = normalizeTourData(payload.data || payload);
   activeSceneId.value = scenes.value[0]?.id || '';
+}
+
+function getSceneAudioUrl(scene) {
+  if (!scene) return '';
+  const sceneAudio = scene.audio_url || scene.audio || scene.entry_audio_url || scene.narration_audio || '';
+  if (sceneAudio) return resolveUrl(sceneAudio);
+  const firstHotspotAudio = (scene.hotspots || []).find((hotspot) => hotspot.audio_url || hotspot.audio);
+  return firstHotspotAudio ? resolveUrl(firstHotspotAudio.audio_url || firstHotspotAudio.audio) : '';
 }
 
 async function tryPlayBackgroundAudio() {
@@ -142,6 +153,9 @@ function onViewerFirstInteraction(event) {
   if (event?.target?.closest?.('.viewer-background-audio')) return;
   if (backgroundAudioBlocked.value && backgroundAudioUrl.value) {
     tryPlayBackgroundAudio();
+  }
+  if (sceneAudioBlocked.value) {
+    playActiveSceneAudio();
   }
 }
 
@@ -194,6 +208,7 @@ async function loadVersionDetail() {
   try {
     const response = await getVersion(selectedLocationId.value, selectedVersionId.value);
     applyTourPayload(response.data);
+    await playActiveSceneAudio();
     await tryPlayBackgroundAudio();
   } catch (error) {
     errorMessage.value = error.response?.data?.detail || 'Could not load version.';
@@ -204,6 +219,7 @@ async function loadPublishedTourByToken(publicToken) {
   if (!publicToken) return false;
   const response = await getPublicTour(publicToken);
   applyTourPayload(response.data);
+  await playActiveSceneAudio();
   await tryPlayBackgroundAudio();
   return true;
 }
@@ -278,10 +294,27 @@ async function changeLocation() {
   await loadVersionDetail();
 }
 
+async function playActiveSceneAudio() {
+  const audioUrl = getSceneAudioUrl(activeScene.value);
+  if (!audioUrl) {
+    sceneAudioBlocked.value = false;
+    return;
+  }
+  sceneAudioPlayer?.pause();
+  sceneAudioPlayer = new Audio(audioUrl);
+  try {
+    await sceneAudioPlayer.play();
+    sceneAudioBlocked.value = false;
+  } catch {
+    sceneAudioBlocked.value = true;
+  }
+}
+
 function goToScene(sceneId) {
   activeSceneId.value = sceneId;
   sidebarOpen.value = false;
   selectedPointHotspot.value = null;
+  playActiveSceneAudio();
 }
 
 function goNext() {
@@ -384,6 +417,8 @@ onMounted(boot);
 onBeforeUnmount(() => {
   hotspotAudioPlayer?.pause();
   hotspotAudioPlayer = null;
+  sceneAudioPlayer?.pause();
+  sceneAudioPlayer = null;
   backgroundAudioPlayer?.pause();
   backgroundAudioPlayer = null;
 });
