@@ -1,28 +1,41 @@
 <script setup>
-import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
-import { useRoute, useRouter } from 'vue-router';
+import {
+  computed,
+  onBeforeUnmount,
+  onMounted,
+  reactive,
+  ref,
+  watch,
+} from "vue";
+import { useRoute, useRouter } from "vue-router";
 
-import PanoramaViewer from '../components/PanoramaViewer.vue';
-import { apiBaseURL } from '../api/http';
-import { createLocation, listProjectLocations } from '../api/locationsApi';
-import { deleteSceneAsset, uploadSceneAsset } from '../api/mediaApi';
-import { createProject, listProjects } from '../api/projectsApi';
-import { createVersion, getVersion, listVersions, updateVersion, uploadHotspotAudio } from '../api/toursApi';
+import PanoramaViewer from "../components/PanoramaViewer.vue";
+import { apiBaseURL } from "../api/http";
+import { createLocation, listProjectLocations } from "../api/locationsApi";
+import { deleteSceneAsset, uploadSceneAsset } from "../api/mediaApi";
+import { createProject, listProjects } from "../api/projectsApi";
+import {
+  createVersion,
+  getVersion,
+  listVersions,
+  updateVersion,
+  uploadHotspotAudio,
+} from "../api/toursApi";
 
 const router = useRouter();
 const route = useRoute();
 const projects = ref([]);
 const locations = ref([]);
 const versions = ref([]);
-const selectedProjectId = ref('');
-const selectedLocationId = ref('');
-const selectedVersionId = ref('');
+const selectedProjectId = ref("");
+const selectedLocationId = ref("");
+const selectedVersionId = ref("");
 const version = ref(null);
 const scenes = ref([]);
-const activeSceneId = ref('');
-const selectedHotspotId = ref('');
-const errorMessage = ref('');
-const successMessage = ref('');
+const activeSceneId = ref("");
+const selectedHotspotId = ref("");
+const errorMessage = ref("");
+const successMessage = ref("");
 let messageTimer = null;
 const uploading = ref(false);
 const isDraggingFile = ref(false);
@@ -35,58 +48,72 @@ const quickLocation = ref([]);
 const quickVersions = ref([]);
 
 const sceneForm = reactive({
-  id: '',
-  name: '',
-  group: 'Default',
-  description: '',
-  image_url: '',
+  id: "",
+  name: "",
+  group: "Default",
+  description: "",
+  image_url: "",
 });
 const hotspotForm = reactive({
-  id: '',
-  label: '',
-  type: 'nav',
-  target_scene_id: '',
+  id: "",
+  label: "",
+  type: "nav",
+  target_scene_id: "",
   x: 50,
   y: 50,
   lon: 0,
   lat: 0,
-  audio_url: '',
+  audio_url: "",
 });
 const viewState = reactive({ lon: 0, lat: 0, fov: 75 });
-const importText = ref('');
+const importText = ref("");
 const quickCreateForm = reactive({
-  project_id: '',
-  location_id: '',
-  version_id: '',
+  project_id: "",
+  location_id: "",
+  version_id: "",
   create_project: false,
   create_location: false,
   create_version: true,
-  project_name: '',
-  project_description: '',
-  location_name: '',
-  location_description: '',
-  latitude: '',
-  longitude: '',
-  version_label: '',
+  project_name: "",
+  project_description: "",
+  location_name: "",
+  location_description: "",
+  latitude: "",
+  longitude: "",
+  version_label: "",
   background_audio_file: null,
   hotspot_point_logo_file: null,
 });
 
-const activeScene = computed(() => scenes.value.find((scene) => scene.id === activeSceneId.value) || null);
+const activeScene = computed(
+  () => scenes.value.find((scene) => scene.id === activeSceneId.value) || null,
+);
 const selectedHotspot = computed(() => {
   if (!activeScene.value) return null;
-  return (activeScene.value.hotspots || []).find((hotspot) => hotspot.id === selectedHotspotId.value) || null;
+  return (
+    (activeScene.value.hotspots || []).find(
+      (hotspot) => hotspot.id === selectedHotspotId.value,
+    ) || null
+  );
 });
 const selectedHotspotIndex = computed(() => {
   if (!activeScene.value || !selectedHotspotId.value) return -1;
-  return (activeScene.value.hotspots || []).findIndex((hotspot) => hotspot.id === selectedHotspotId.value);
+  return (activeScene.value.hotspots || []).findIndex(
+    (hotspot) => hotspot.id === selectedHotspotId.value,
+  );
 });
-const isConnected = computed(() => Boolean(version.value && selectedVersionId.value));
-const activeInitialView = computed(() => activeScene.value?.view || { lon: 0, lat: 0, fov: 75 });
-const targetSceneOptions = computed(() => scenes.value.filter((scene) => scene.id !== activeScene.value?.id));
+const isConnected = computed(() =>
+  Boolean(version.value && selectedVersionId.value),
+);
+const activeInitialView = computed(
+  () => activeScene.value?.view || { lon: 0, lat: 0, fov: 75 },
+);
+const targetSceneOptions = computed(() =>
+  scenes.value.filter((scene) => scene.id !== activeScene.value?.id),
+);
 const tourData = computed(() => ({
   ...(version.value?.data || {}),
-  title: version.value?.label || version.value?.data?.title || 'VR360 Tour',
+  title: version.value?.label || version.value?.data?.title || "VR360 Tour",
   scenes: scenes.value.map((scene) => {
     const { preview_url, preview_object_url, local_file, ...payload } = scene;
     return {
@@ -112,13 +139,13 @@ function normalizeResults(data) {
 function extractApiError(error, fallback) {
   const data = error.response?.data;
   if (!data) return error.message || fallback;
-  if (typeof data === 'string') return data.slice(0, 240) || fallback;
+  if (typeof data === "string") return data.slice(0, 240) || fallback;
   if (data.detail) return data.detail;
   if (data.non_field_errors?.length) return data.non_field_errors[0];
   const firstKey = Object.keys(data)[0];
   const firstValue = firstKey ? data[firstKey] : null;
   if (Array.isArray(firstValue)) return `${firstKey}: ${firstValue[0]}`;
-  if (typeof firstValue === 'string') return `${firstKey}: ${firstValue}`;
+  if (typeof firstValue === "string") return `${firstKey}: ${firstValue}`;
   return fallback;
 }
 
@@ -128,8 +155,8 @@ function scheduleMessageAutoDismiss() {
   const currentError = errorMessage.value;
   const currentSuccess = successMessage.value;
   messageTimer = setTimeout(() => {
-    if (errorMessage.value === currentError) errorMessage.value = '';
-    if (successMessage.value === currentSuccess) successMessage.value = '';
+    if (errorMessage.value === currentError) errorMessage.value = "";
+    if (successMessage.value === currentSuccess) successMessage.value = "";
   }, 5000);
 }
 
@@ -140,61 +167,75 @@ function uid(prefix) {
 function safeSlug(value) {
   return value
     .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/(^-|-$)/g, '')
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-|-$)/g, "")
     .slice(0, 48);
 }
 
 function resolveUrl(url) {
-  if (!url) return '';
-  if (url.startsWith('blob:') || url.startsWith('data:') || url.startsWith('http')) return url;
-  return `${apiBaseURL}${url.startsWith('/') ? url : `/${url}`}`;
+  if (!url) return "";
+  if (
+    url.startsWith("blob:") ||
+    url.startsWith("data:") ||
+    url.startsWith("http")
+  )
+    return url;
+  return `${apiBaseURL}${url.startsWith("/") ? url : `/${url}`}`;
 }
 
 function resolveSceneImage(scene) {
-  if (!scene) return '';
-  return resolveUrl(scene.preview_url || scene.image_url || scene.original_file || scene.thumbnail || '');
+  if (!scene) return "";
+  return resolveUrl(
+    scene.preview_url ||
+      scene.image_url ||
+      scene.original_file ||
+      scene.thumbnail ||
+      "",
+  );
 }
 
 function normalizeScene(scene, index = 0) {
-  const id = String(scene.id || scene.key || scene.scene_key || uid('scene'));
-  const imageUrl = scene.image_url || scene.url || scene.original_file || scene.panorama || '';
+  const id = String(scene.id || scene.key || scene.scene_key || uid("scene"));
+  const imageUrl =
+    scene.image_url || scene.url || scene.original_file || scene.panorama || "";
   return {
     id,
     name: scene.name || scene.title || `Scene ${index + 1}`,
-    group: scene.group || scene.category || 'Default',
-    description: scene.description || scene.desc || '',
+    group: scene.group || scene.category || "Default",
+    description: scene.description || scene.desc || "",
     image_url: imageUrl,
-    preview_url: scene.preview_url || '',
-    preview_object_url: scene.preview_object_url || '',
+    preview_url: scene.preview_url || "",
+    preview_object_url: scene.preview_object_url || "",
     local_file: scene.local_file || null,
-    image_file_name: scene.image_file_name || '',
-    original_file: scene.original_file || '',
-    thumbnail: scene.thumbnail || '',
-    scene_asset_id: scene.scene_asset_id || scene.asset_id || '',
-    tile_base_path: scene.tile_base_path || '',
-    processing_status: scene.processing_status || '',
+    image_file_name: scene.image_file_name || "",
+    original_file: scene.original_file || "",
+    thumbnail: scene.thumbnail || "",
+    scene_asset_id: scene.scene_asset_id || scene.asset_id || "",
+    tile_base_path: scene.tile_base_path || "",
+    processing_status: scene.processing_status || "",
     view: {
       lon: Number(scene.view?.lon ?? scene.lon ?? 0),
       lat: Number(scene.view?.lat ?? scene.lat ?? 0),
       fov: Number(scene.view?.fov ?? scene.fov ?? 75),
     },
     hotspots: (scene.hotspots || []).map((hotspot, hotspotIndex) => ({
-      id: String(hotspot.id || uid('hotspot')),
+      id: String(hotspot.id || uid("hotspot")),
       label: hotspot.label || hotspot.title || `Hotspot ${hotspotIndex + 1}`,
-      type: ['nav', 'point'].includes(hotspot.type || hotspot.action)
+      type: ["nav", "point"].includes(hotspot.type || hotspot.action)
         ? hotspot.type || hotspot.action
-        : (hotspot.type || hotspot.action) === 'navigate'
-          ? 'nav'
-          : 'point',
-      target_scene_id: String(hotspot.target_scene_id || hotspot.target || hotspot.scene_id || ''),
+        : (hotspot.type || hotspot.action) === "navigate"
+          ? "nav"
+          : "point",
+      target_scene_id: String(
+        hotspot.target_scene_id || hotspot.target || hotspot.scene_id || "",
+      ),
       x: Math.round(Number(hotspot.x ?? 50)),
       y: Math.round(Number(hotspot.y ?? 50)),
       lon: Number(hotspot.lon ?? 0),
       lat: Number(hotspot.lat ?? 0),
-      audio_url: hotspot.audio_url || hotspot.audio || '',
+      audio_url: hotspot.audio_url || hotspot.audio || "",
       local_audio_file: hotspot.local_audio_file || null,
     })),
   };
@@ -206,7 +247,7 @@ function normalizeTourData(data) {
   return Array.isArray(sceneList) ? sceneList.map(normalizeScene) : [];
 }
 
-function makeEmptyTourData(title = 'VR360 Tour') {
+function makeEmptyTourData(title = "VR360 Tour") {
   return {
     title,
     scenes: [],
@@ -218,12 +259,17 @@ async function loadProject() {
     const response = await listProjects();
     projects.value = normalizeResults(response.data);
     const queryProject = Number(route.query.project || 0);
-    if (queryProject && projects.value.some((project) => project.id === queryProject)) {
+    if (
+      queryProject &&
+      projects.value.some((project) => project.id === queryProject)
+    ) {
       selectedProjectId.value = queryProject;
     }
-    if (!selectedProjectId.value && projects.value.length) selectedProjectId.value = projects.value[0].id;
+    if (!selectedProjectId.value && projects.value.length)
+      selectedProjectId.value = projects.value[0].id;
   } catch (error) {
-    errorMessage.value = error.response?.data?.detail || 'Could not load project list.';
+    errorMessage.value =
+      error.response?.data?.detail || "Could not load project list.";
   }
 }
 
@@ -232,10 +278,14 @@ async function loadLocation() {
   const response = await listProjectLocations(selectedProjectId.value);
   locations.value = normalizeResults(response.data);
   const queryLocation = Number(route.query.location || 0);
-  if (queryLocation && locations.value.some((location) => location.id === queryLocation)) {
+  if (
+    queryLocation &&
+    locations.value.some((location) => location.id === queryLocation)
+  ) {
     selectedLocationId.value = queryLocation;
   }
-  if (!selectedLocationId.value && locations.value.length) selectedLocationId.value = locations.value[0].id;
+  if (!selectedLocationId.value && locations.value.length)
+    selectedLocationId.value = locations.value[0].id;
 }
 
 async function loadVersions() {
@@ -247,25 +297,28 @@ async function loadVersions() {
     selectedVersionId.value = queryVersion;
     return;
   }
-  const draft = versions.value.find((item) => item.status === 'draft');
-  selectedVersionId.value = draft?.id || versions.value[0]?.id || '';
+  const draft = versions.value.find((item) => item.status === "draft");
+  selectedVersionId.value = draft?.id || versions.value[0]?.id || "";
 }
 
 async function loadVersionDetail() {
   if (!selectedLocationId.value || !selectedVersionId.value) return;
-  errorMessage.value = '';
-  const response = await getVersion(selectedLocationId.value, selectedVersionId.value);
+  errorMessage.value = "";
+  const response = await getVersion(
+    selectedLocationId.value,
+    selectedVersionId.value,
+  );
   version.value = response.data;
   scenes.value = normalizeTourData(response.data.data);
-  activeSceneId.value = scenes.value[0]?.id || '';
-  selectedHotspotId.value = '';
+  activeSceneId.value = scenes.value[0]?.id || "";
+  selectedHotspotId.value = "";
   hydrateSceneForm();
   hydrateHotspotForm(null);
 }
 
 async function changeProject() {
-  selectedLocationId.value = '';
-  selectedVersionId.value = '';
+  selectedLocationId.value = "";
+  selectedVersionId.value = "";
   version.value = null;
   locations.value = [];
   versions.value = [];
@@ -275,7 +328,7 @@ async function changeProject() {
 }
 
 async function changeLocation() {
-  selectedVersionId.value = '';
+  selectedVersionId.value = "";
   version.value = null;
   versions.value = [];
   await loadVersions();
@@ -283,38 +336,42 @@ async function changeLocation() {
 }
 
 function hydrateSceneForm() {
-  sceneForm.id = activeScene.value?.id || '';
-  sceneForm.name = activeScene.value?.name || '';
-  sceneForm.group = activeScene.value?.group || 'Default';
-  sceneForm.description = activeScene.value?.description || '';
-  sceneForm.image_url = activeScene.value?.image_url || activeScene.value?.original_file || '';
+  sceneForm.id = activeScene.value?.id || "";
+  sceneForm.name = activeScene.value?.name || "";
+  sceneForm.group = activeScene.value?.group || "Default";
+  sceneForm.description = activeScene.value?.description || "";
+  sceneForm.image_url =
+    activeScene.value?.image_url || activeScene.value?.original_file || "";
 }
 
 function updateActiveSceneName() {
   if (!activeScene.value) return;
-  activeScene.value.name = sceneForm.name.trim() || activeScene.value.image_file_name || activeScene.value.id;
+  activeScene.value.name =
+    sceneForm.name.trim() ||
+    activeScene.value.image_file_name ||
+    activeScene.value.id;
 }
 
 function updateActiveSceneGroup() {
   if (!activeScene.value) return;
-  activeScene.value.group = sceneForm.group.trim() || 'Default';
+  activeScene.value.group = sceneForm.group.trim() || "Default";
 }
 
 function hydrateHotspotForm(hotspot) {
-  hotspotForm.id = hotspot?.id || '';
-  hotspotForm.label = hotspot?.label || '';
-  hotspotForm.type = hotspot?.type || 'nav';
-  hotspotForm.target_scene_id = hotspot?.target_scene_id || '';
+  hotspotForm.id = hotspot?.id || "";
+  hotspotForm.label = hotspot?.label || "";
+  hotspotForm.type = hotspot?.type || "nav";
+  hotspotForm.target_scene_id = hotspot?.target_scene_id || "";
   hotspotForm.x = Math.round(Number(hotspot?.x ?? 50));
   hotspotForm.y = Math.round(Number(hotspot?.y ?? 50));
   hotspotForm.lon = Math.round(Number(hotspot?.lon ?? 0) * 10) / 10;
   hotspotForm.lat = Math.round(Number(hotspot?.lat ?? 0) * 10) / 10;
-  hotspotForm.audio_url = hotspot?.audio_url || '';
+  hotspotForm.audio_url = hotspot?.audio_url || "";
 }
 
 function selectScene(sceneId) {
   activeSceneId.value = sceneId;
-  selectedHotspotId.value = '';
+  selectedHotspotId.value = "";
   isPlacingHotspot.value = false;
   hydrateSceneForm();
   hydrateHotspotForm(null);
@@ -323,25 +380,30 @@ function selectScene(sceneId) {
 function startPlacingHotspot() {
   if (!activeScene.value) return;
   isPlacingHotspot.value = true;
-  selectedHotspotId.value = '';
+  selectedHotspotId.value = "";
   hydrateHotspotForm(null);
 }
 
 function addBlankScene() {
-  const id = uid('scene');
-  scenes.value.push(normalizeScene({ id, name: `Scene ${scenes.value.length + 1}` }, scenes.value.length));
+  const id = uid("scene");
+  scenes.value.push(
+    normalizeScene(
+      { id, name: `Scene ${scenes.value.length + 1}` },
+      scenes.value.length,
+    ),
+  );
   selectScene(id);
 }
 
 function createSceneFromFile(file) {
-  const id = `img_${safeSlug(file.name.replace(/\.[^.]+$/, '')) || Date.now()}`;
+  const id = `img_${safeSlug(file.name.replace(/\.[^.]+$/, "")) || Date.now()}`;
   const uniqueId = scenes.value.some((scene) => scene.id === id) ? uid(id) : id;
   const previewUrl = URL.createObjectURL(file);
   return normalizeScene(
     {
       id: uniqueId,
-      name: file.name.replace(/\.[^.]+$/, ''),
-      image_url: '',
+      name: file.name.replace(/\.[^.]+$/, ""),
+      image_url: "",
       preview_url: previewUrl,
       preview_object_url: previewUrl,
       local_file: file,
@@ -356,10 +418,10 @@ async function uploadSceneToBackend(scene, file) {
   try {
     if (scene.scene_asset_id) {
       await deleteSceneAsset(scene.scene_asset_id);
-      scene.scene_asset_id = '';
-      scene.original_file = '';
-      scene.tile_base_path = '';
-      scene.processing_status = '';
+      scene.scene_asset_id = "";
+      scene.original_file = "";
+      scene.tile_base_path = "";
+      scene.processing_status = "";
     }
     const response = await uploadSceneAsset({
       tourVersion: selectedVersionId.value,
@@ -381,10 +443,14 @@ async function uploadSceneToBackend(scene, file) {
       scene.tile_base_path = asset.tile_base_path;
       scene.processing_status = asset.processing_status;
       scene.local_file = null;
-      errorMessage.value = error.response?.data?.detail || 'Image was saved, but tiles are not processed yet.';
+      errorMessage.value =
+        error.response?.data?.detail ||
+        "Image was saved, but tiles are not processed yet.";
       return true;
     }
-    errorMessage.value = error.response?.data?.detail || 'Image is previewed locally, but backend upload is not finished. Click Save Tour and upload again if tiles are needed.';
+    errorMessage.value =
+      error.response?.data?.detail ||
+      "Image is previewed locally, but backend upload is not finished. Click Save Tour and upload again if tiles are needed.";
     return false;
   }
 }
@@ -402,12 +468,21 @@ async function uploadPendingSceneFiles() {
 }
 
 async function uploadHotspotAudioToBackend(hotspot) {
-  if (!selectedLocationId.value || !selectedVersionId.value || !hotspot.local_audio_file) return false;
-  const response = await uploadHotspotAudio(selectedLocationId.value, selectedVersionId.value, {
-    hotspotId: hotspot.id,
-    audioFile: hotspot.local_audio_file,
-  });
-  hotspot.audio_url = response.data.audio_url || response.data.audio_path || '';
+  if (
+    !selectedLocationId.value ||
+    !selectedVersionId.value ||
+    !hotspot.local_audio_file
+  )
+    return false;
+  const response = await uploadHotspotAudio(
+    selectedLocationId.value,
+    selectedVersionId.value,
+    {
+      hotspotId: hotspot.id,
+      audioFile: hotspot.local_audio_file,
+    },
+  );
+  hotspot.audio_url = response.data.audio_url || response.data.audio_path || "";
   hotspot.local_audio_file = null;
   return true;
 }
@@ -427,12 +502,14 @@ async function uploadPendingHotspotAudioFiles() {
 }
 
 async function handleFiles(fileList) {
-  const files = Array.from(fileList || []).filter((file) => file.type.startsWith('image/'));
+  const files = Array.from(fileList || []).filter((file) =>
+    file.type.startsWith("image/"),
+  );
   if (!files.length) return;
 
   uploading.value = true;
-  errorMessage.value = '';
-  successMessage.value = '';
+  errorMessage.value = "";
+  successMessage.value = "";
 
   for (const file of files) {
     const scene = createSceneFromFile(file);
@@ -451,7 +528,7 @@ function triggerAddImage() {
 
 function uploadPanorama(event) {
   handleFiles(event.target.files);
-  event.target.value = '';
+  event.target.value = "";
 }
 
 function onDropFiles(event) {
@@ -465,29 +542,32 @@ function saveSceneMeta() {
   const nextId = sceneForm.id.trim() || oldId;
   activeScene.value.id = nextId;
   activeScene.value.name = sceneForm.name.trim() || activeScene.value.name;
-  activeScene.value.group = sceneForm.group.trim() || 'Default';
+  activeScene.value.group = sceneForm.group.trim() || "Default";
   activeScene.value.description = sceneForm.description.trim();
   activeScene.value.image_url = sceneForm.image_url.trim();
   scenes.value.forEach((scene) => {
     scene.hotspots = (scene.hotspots || []).map((hotspot) => ({
       ...hotspot,
-      target_scene_id: hotspot.target_scene_id === oldId ? nextId : hotspot.target_scene_id,
+      target_scene_id:
+        hotspot.target_scene_id === oldId ? nextId : hotspot.target_scene_id,
     }));
   });
   activeSceneId.value = nextId;
-  successMessage.value = 'Da luu thuoc tinh scene.';
+  successMessage.value = "Đã lưu thuộc tính scene.";
 }
 
 function removeScene(sceneId) {
-  if (!window.confirm('Delete scene nay?')) return;
+  if (!window.confirm("Delete scene này?")) return;
   const scene = scenes.value.find((item) => item.id === sceneId);
   if (scene?.preview_object_url) URL.revokeObjectURL(scene.preview_object_url);
   scenes.value = scenes.value.filter((item) => item.id !== sceneId);
   scenes.value.forEach((item) => {
-    item.hotspots = (item.hotspots || []).filter((hotspot) => hotspot.target_scene_id !== sceneId);
+    item.hotspots = (item.hotspots || []).filter(
+      (hotspot) => hotspot.target_scene_id !== sceneId,
+    );
   });
-  activeSceneId.value = scenes.value[0]?.id || '';
-  selectedHotspotId.value = '';
+  activeSceneId.value = scenes.value[0]?.id || "";
+  selectedHotspotId.value = "";
   hydrateSceneForm();
   hydrateHotspotForm(null);
 }
@@ -495,15 +575,15 @@ function removeScene(sceneId) {
 function addHotspotFromCanvas(point) {
   if (!activeScene.value || !isPlacingHotspot.value) return;
   const hotspot = {
-    id: uid('hotspot'),
+    id: uid("hotspot"),
     label: `Hotspot ${(activeScene.value.hotspots || []).length + 1}`,
-    type: 'nav',
+    type: "nav",
     target_scene_id: getDefaultTargetSceneId(),
     x: Math.round(point.x),
     y: Math.round(point.y),
     lon: Math.round(Number(point.lon ?? viewState.lon) * 10) / 10,
     lat: Math.round(Number(point.lat ?? viewState.lat) * 10) / 10,
-    audio_url: '',
+    audio_url: "",
     local_audio_file: null,
   };
   activeScene.value.hotspots = [...(activeScene.value.hotspots || []), hotspot];
@@ -518,10 +598,18 @@ function selectHotspot(hotspot) {
 }
 
 function getDefaultTargetSceneId() {
-  if (!activeScene.value) return '';
-  const currentIndex = scenes.value.findIndex((scene) => scene.id === activeScene.value.id);
-  const nextScene = scenes.value.find((scene, index) => index > currentIndex && scene.id !== activeScene.value.id);
-  return nextScene?.id || scenes.value.find((scene) => scene.id !== activeScene.value.id)?.id || '';
+  if (!activeScene.value) return "";
+  const currentIndex = scenes.value.findIndex(
+    (scene) => scene.id === activeScene.value.id,
+  );
+  const nextScene = scenes.value.find(
+    (scene, index) => index > currentIndex && scene.id !== activeScene.value.id,
+  );
+  return (
+    nextScene?.id ||
+    scenes.value.find((scene) => scene.id !== activeScene.value.id)?.id ||
+    ""
+  );
 }
 
 function saveHotspot() {
@@ -529,14 +617,15 @@ function saveHotspot() {
   if (!hotspot) return;
   hotspot.label = hotspotForm.label.trim() || hotspot.label;
   hotspot.type = hotspotForm.type;
-  hotspot.target_scene_id = hotspotForm.target_scene_id || getDefaultTargetSceneId();
+  hotspot.target_scene_id =
+    hotspotForm.target_scene_id || getDefaultTargetSceneId();
   hotspot.x = Number(hotspotForm.x);
   hotspot.y = Number(hotspotForm.y);
   hotspot.lon = Number(hotspotForm.lon);
   hotspot.lat = Number(hotspotForm.lat);
   hotspot.audio_url = hotspotForm.audio_url.trim();
   hotspotForm.target_scene_id = hotspot.target_scene_id;
-  successMessage.value = 'Da luu hotspot.';
+  successMessage.value = "Da luu hotspot.";
 }
 
 function onHotspotAudioChange(event) {
@@ -544,22 +633,24 @@ function onHotspotAudioChange(event) {
   const hotspot = selectedHotspot.value;
   if (!hotspot || !file) return;
   hotspot.local_audio_file = file;
-  hotspot.audio_url = '';
-  hotspotForm.audio_url = '';
-  successMessage.value = 'Da chon audio cho hotspot. Bam Save Tour de upload.';
+  hotspot.audio_url = "";
+  hotspotForm.audio_url = "";
+  successMessage.value = "Đã chọn audio cho hotspot. Bấm Save Tour để upload.";
 }
 
 function removeHotspot() {
   if (!activeScene.value || !selectedHotspotId.value) return;
-  activeScene.value.hotspots = (activeScene.value.hotspots || []).filter((hotspot) => hotspot.id !== selectedHotspotId.value);
-  selectedHotspotId.value = '';
+  activeScene.value.hotspots = (activeScene.value.hotspots || []).filter(
+    (hotspot) => hotspot.id !== selectedHotspotId.value,
+  );
+  selectedHotspotId.value = "";
   hydrateHotspotForm(null);
 }
 
 function saveDefaultView() {
   if (!activeScene.value) return;
   activeScene.value.view = { ...viewState };
-  successMessage.value = 'Da luu view mac dinh cho scene.';
+  successMessage.value = "Đã lưu view mặc định cho scene.";
 }
 
 function updateViewState(value) {
@@ -569,40 +660,41 @@ function updateViewState(value) {
 }
 
 function downloadExportJson() {
-  const blob = new Blob([exportText.value], { type: 'application/json' });
+  const blob = new Blob([exportText.value], { type: "application/json" });
   const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
+  const link = document.createElement("a");
   link.href = url;
-  link.download = 'vr360-tour.json';
+  link.download = "vr360-tour.json";
   link.click();
   URL.revokeObjectURL(url);
 }
 
 async function copyExportJson() {
   await navigator.clipboard.writeText(exportText.value);
-  successMessage.value = 'Da copy TOUR_DATA.';
+  successMessage.value = "Đã copy TOUR_DATA.";
 }
 
 function openImportModal() {
-  importText.value = '';
+  importText.value = "";
   showImportModal.value = true;
 }
 
 async function openQuickCreateModal() {
   if (!projects.value.length) await loadProject();
-  quickCreateForm.project_id = selectedProjectId.value || projects.value[0]?.id || '';
-  quickCreateForm.location_id = '';
-  quickCreateForm.version_id = '';
+  quickCreateForm.project_id =
+    selectedProjectId.value || projects.value[0]?.id || "";
+  quickCreateForm.location_id = "";
+  quickCreateForm.version_id = "";
   quickCreateForm.create_project = !quickCreateForm.project_id;
   quickCreateForm.create_location = false;
   quickCreateForm.create_version = true;
-  quickCreateForm.project_name = '';
-  quickCreateForm.project_description = '';
-  quickCreateForm.location_name = '';
-  quickCreateForm.location_description = '';
-  quickCreateForm.latitude = '';
-  quickCreateForm.longitude = '';
-  quickCreateForm.version_label = '';
+  quickCreateForm.project_name = "";
+  quickCreateForm.project_description = "";
+  quickCreateForm.location_name = "";
+  quickCreateForm.location_description = "";
+  quickCreateForm.latitude = "";
+  quickCreateForm.longitude = "";
+  quickCreateForm.version_label = "";
   quickCreateForm.background_audio_file = null;
   quickCreateForm.hotspot_point_logo_file = null;
   quickLocation.value = [];
@@ -614,32 +706,34 @@ async function openQuickCreateModal() {
 async function loadQuickLocation() {
   quickLocation.value = [];
   quickVersions.value = [];
-  quickCreateForm.location_id = '';
-  quickCreateForm.version_id = '';
+  quickCreateForm.location_id = "";
+  quickCreateForm.version_id = "";
   if (!quickCreateForm.project_id || quickCreateForm.create_project) return;
   const response = await listProjectLocations(quickCreateForm.project_id);
   quickLocation.value = normalizeResults(response.data);
-  quickCreateForm.location_id = selectedLocationId.value || quickLocation.value[0]?.id || '';
+  quickCreateForm.location_id =
+    selectedLocationId.value || quickLocation.value[0]?.id || "";
   if (quickCreateForm.location_id) await loadQuickVersions();
 }
 
 async function loadQuickVersions() {
   quickVersions.value = [];
-  quickCreateForm.version_id = '';
+  quickCreateForm.version_id = "";
   if (!quickCreateForm.location_id || quickCreateForm.create_location) return;
   const response = await listVersions(quickCreateForm.location_id);
   quickVersions.value = normalizeResults(response.data);
-  const draft = quickVersions.value.find((item) => item.status === 'draft');
-  quickCreateForm.version_id = selectedVersionId.value || draft?.id || quickVersions.value[0]?.id || '';
+  const draft = quickVersions.value.find((item) => item.status === "draft");
+  quickCreateForm.version_id =
+    selectedVersionId.value || draft?.id || quickVersions.value[0]?.id || "";
 }
 
 function enableCreateProject() {
   quickCreateForm.create_project = true;
   quickCreateForm.create_location = true;
   quickCreateForm.create_version = true;
-  quickCreateForm.project_id = '';
-  quickCreateForm.location_id = '';
-  quickCreateForm.version_id = '';
+  quickCreateForm.project_id = "";
+  quickCreateForm.location_id = "";
+  quickCreateForm.version_id = "";
   quickLocation.value = [];
   quickVersions.value = [];
 }
@@ -647,21 +741,23 @@ function enableCreateProject() {
 function useExistingProject() {
   quickCreateForm.create_project = false;
   quickCreateForm.create_location = false;
-  quickCreateForm.project_id = selectedProjectId.value || projects.value[0]?.id || '';
+  quickCreateForm.project_id =
+    selectedProjectId.value || projects.value[0]?.id || "";
   loadQuickLocation();
 }
 
 function enableCreateLocation() {
   quickCreateForm.create_location = true;
   quickCreateForm.create_version = true;
-  quickCreateForm.location_id = '';
-  quickCreateForm.version_id = '';
+  quickCreateForm.location_id = "";
+  quickCreateForm.version_id = "";
   quickVersions.value = [];
 }
 
 function useExistingLocation() {
   quickCreateForm.create_location = false;
-  quickCreateForm.location_id = selectedLocationId.value || quickLocation.value[0]?.id || '';
+  quickCreateForm.location_id =
+    selectedLocationId.value || quickLocation.value[0]?.id || "";
   loadQuickVersions();
 }
 
@@ -675,31 +771,36 @@ function onQuickVersionLogoChange(event) {
 
 async function quickCreateTour() {
   if (quickCreateForm.create_project && !quickCreateForm.project_name.trim()) {
-    errorMessage.value = 'Ban can import name project moi.';
+    errorMessage.value = "Bạn cần import name project mới.";
     return;
   }
   if (!quickCreateForm.create_project && !quickCreateForm.project_id) {
-    errorMessage.value = 'Ban can chon project hoac tao project moi.';
+    errorMessage.value = "Bạn cần chọn project hoặc tạo project mới.";
     return;
   }
-  if (quickCreateForm.create_location && !quickCreateForm.location_name.trim()) {
-    errorMessage.value = 'Ban can import name location moi.';
+  if (
+    quickCreateForm.create_location &&
+    !quickCreateForm.location_name.trim()
+  ) {
+    errorMessage.value = "Bạn cần import name location mới.";
     return;
   }
   if (!quickCreateForm.create_location && !quickCreateForm.location_id) {
-    errorMessage.value = 'Ban can chon location hoac tao location moi.';
+    errorMessage.value = "Bạn cần chọn location hoặc tạo location mới.";
     return;
   }
   if (!quickCreateForm.create_version && !quickCreateForm.version_id) {
-    errorMessage.value = 'Ban can chon version co san hoac tao version moi.';
+    errorMessage.value = "Bạn cần chọn version có sẵn hoặc tạo version mới.";
     return;
   }
 
-  errorMessage.value = '';
-  successMessage.value = '';
+  errorMessage.value = "";
+  successMessage.value = "";
 
   try {
-    let project = projects.value.find((item) => item.id === quickCreateForm.project_id);
+    let project = projects.value.find(
+      (item) => item.id === quickCreateForm.project_id,
+    );
     if (quickCreateForm.create_project) {
       const projectResponse = await createProject({
         name: quickCreateForm.project_name.trim(),
@@ -709,7 +810,9 @@ async function quickCreateTour() {
       project = projectResponse.data;
     }
 
-    let location = quickLocation.value.find((item) => item.id === quickCreateForm.location_id);
+    let location = quickLocation.value.find(
+      (item) => item.id === quickCreateForm.location_id,
+    );
     if (quickCreateForm.create_location) {
       const locationPayload = {
         name: quickCreateForm.location_name.trim(),
@@ -717,19 +820,28 @@ async function quickCreateTour() {
         is_active: true,
         order: 0,
       };
-      if (quickCreateForm.latitude !== '') locationPayload.latitude = Number(quickCreateForm.latitude);
-      if (quickCreateForm.longitude !== '') locationPayload.longitude = Number(quickCreateForm.longitude);
+      if (quickCreateForm.latitude !== "")
+        locationPayload.latitude = Number(quickCreateForm.latitude);
+      if (quickCreateForm.longitude !== "")
+        locationPayload.longitude = Number(quickCreateForm.longitude);
 
-      const locationResponse = await createLocation(project.id, locationPayload);
+      const locationResponse = await createLocation(
+        project.id,
+        locationPayload,
+      );
       location = locationResponse.data;
     }
 
-    let nextVersion = quickVersions.value.find((item) => item.id === quickCreateForm.version_id);
+    let nextVersion = quickVersions.value.find(
+      (item) => item.id === quickCreateForm.version_id,
+    );
     if (quickCreateForm.create_version) {
-      const emptyData = makeEmptyTourData(quickCreateForm.version_label.trim() || `${location.name} draft`);
+      const emptyData = makeEmptyTourData(
+        quickCreateForm.version_label.trim() || `${location.name} draft`,
+      );
       const versionResponse = await createVersion(location.id, {
         label: quickCreateForm.version_label.trim() || `${location.name} draft`,
-        changelog: 'Created from VR360 Builder.',
+        changelog: "Created from VR360 Builder.",
         data: emptyData,
         background_audio_file: quickCreateForm.background_audio_file,
         hotspot_point_logo_file: quickCreateForm.hotspot_point_logo_file,
@@ -748,20 +860,24 @@ async function quickCreateTour() {
     selectedVersionId.value = nextVersion.id;
     version.value = nextVersion;
     scenes.value.forEach((scene) => {
-      if (scene.preview_object_url) URL.revokeObjectURL(scene.preview_object_url);
+      if (scene.preview_object_url)
+        URL.revokeObjectURL(scene.preview_object_url);
     });
     scenes.value = normalizeTourData(nextVersion.data);
-    activeSceneId.value = scenes.value[0]?.id || '';
-    selectedHotspotId.value = '';
+    activeSceneId.value = scenes.value[0]?.id || "";
+    selectedHotspotId.value = "";
     hydrateSceneForm();
     hydrateHotspotForm(null);
 
     showQuickCreateModal.value = false;
     successMessage.value = quickCreateForm.create_version
-      ? 'Da tao/chon tour va tao version draft moi.'
-      : 'Da mo version co san de chinh sua.';
+      ? "Đã tạo/chọn tour và tạo version draft mới."
+      : "Đã mở version có sẵn để chỉnh sửa.";
   } catch (error) {
-    errorMessage.value = extractApiError(error, 'Could not create/select tour.');
+    errorMessage.value = extractApiError(
+      error,
+      "Could not create/select tour.",
+    );
   }
 }
 
@@ -769,33 +885,35 @@ function applyImportJson() {
   try {
     const data = JSON.parse(importText.value);
     scenes.value.forEach((scene) => {
-      if (scene.preview_object_url) URL.revokeObjectURL(scene.preview_object_url);
+      if (scene.preview_object_url)
+        URL.revokeObjectURL(scene.preview_object_url);
     });
     scenes.value = normalizeTourData(data);
     version.value = version.value ? { ...version.value, data } : version.value;
-    activeSceneId.value = scenes.value[0]?.id || '';
-    selectedHotspotId.value = '';
+    activeSceneId.value = scenes.value[0]?.id || "";
+    selectedHotspotId.value = "";
     hydrateSceneForm();
     hydrateHotspotForm(null);
     showImportModal.value = false;
-    successMessage.value = 'Da import JSON.';
+    successMessage.value = "Đã import JSON.";
   } catch {
-    errorMessage.value = 'JSON none hop le.';
+    errorMessage.value = "JSON none hợp lệ.";
   }
 }
 
 async function saveBuilder() {
   if (!selectedLocationId.value) {
-    errorMessage.value = 'Ban can chon location truoc, roi Save Tour se tu tao version draft.';
+    errorMessage.value =
+      "Bạn cần chọn location trước, rồi Save Tour sẽ tự tạo version draft.";
     return;
   }
-  errorMessage.value = '';
-  successMessage.value = '';
+  errorMessage.value = "";
+  successMessage.value = "";
   try {
     if (!selectedVersionId.value || !version.value) {
       const createResponse = await createVersion(selectedLocationId.value, {
-        label: tourData.value.title || 'VR360 Tour draft',
-        changelog: 'Created from VR360 Builder.',
+        label: tourData.value.title || "VR360 Tour draft",
+        changelog: "Created from VR360 Builder.",
         data: tourData.value,
       });
       version.value = createResponse.data;
@@ -805,9 +923,9 @@ async function saveBuilder() {
     }
 
     const hasPendingUploads = scenes.value.some((scene) => scene.local_file);
-    const hasPendingHotspotAudio = scenes.value.some((scene) => (
-      (scene.hotspots || []).some((hotspot) => hotspot.local_audio_file)
-    ));
+    const hasPendingHotspotAudio = scenes.value.some((scene) =>
+      (scene.hotspots || []).some((hotspot) => hotspot.local_audio_file),
+    );
     let uploadedCount = 0;
     let uploadedHotspotAudioCount = 0;
     if (hasPendingUploads || hasPendingHotspotAudio) {
@@ -822,17 +940,25 @@ async function saveBuilder() {
       uploadedHotspotAudioCount = await uploadPendingHotspotAudioFiles();
     }
 
-    const response = await updateVersion(selectedLocationId.value, selectedVersionId.value, {
-      label: version.value.label,
-      changelog: version.value.changelog,
-      data: tourData.value,
-    });
+    const response = await updateVersion(
+      selectedLocationId.value,
+      selectedVersionId.value,
+      {
+        label: version.value.label,
+        changelog: version.value.changelog,
+        data: tourData.value,
+      },
+    );
     version.value = response.data;
-    successMessage.value = hasPendingUploads || hasPendingHotspotAudio
-      ? `Saved tour and uploaded ${uploadedCount} image(s), ${uploadedHotspotAudioCount} hotspot audio file(s).`
-      : 'Saved draft tour version successfully.';
+    successMessage.value =
+      hasPendingUploads || hasPendingHotspotAudio
+        ? `Saved tour and uploaded ${uploadedCount} image(s), ${uploadedHotspotAudioCount} hotspot audio file(s).`
+        : "Saved draft tour version successfully.";
   } catch (error) {
-    errorMessage.value = extractApiError(error, 'Could not save builder. Published versions cannot be edited.');
+    errorMessage.value = extractApiError(
+      error,
+      "Could not save builder. Published versions cannot be edited.",
+    );
   }
 }
 
@@ -843,7 +969,8 @@ async function boot() {
     await loadVersions();
     await loadVersionDetail();
   } catch (error) {
-    errorMessage.value = error.response?.data?.detail || 'Could not load builder data.';
+    errorMessage.value =
+      error.response?.data?.detail || "Could not load builder data.";
   }
 }
 
@@ -852,7 +979,7 @@ function goBack() {
     router.back();
     return;
   }
-  router.push('/dashboard');
+  router.push("/dashboard");
 }
 
 watch([errorMessage, successMessage], scheduleMessageAutoDismiss);
@@ -870,37 +997,96 @@ onBeforeUnmount(() => {
 <template>
   <section class="builder-page">
     <header class="builder-topbar">
-      <button class="builder-tool-button builder-back-button" type="button" @click="goBack">&lt; Back</button>
+      <button
+        class="builder-tool-button builder-back-button"
+        type="button"
+        @click="goBack"
+      >
+        &lt; Back
+      </button>
       <div class="builder-brand">VR360 Builder</div>
       <div class="builder-top-actions">
-        <button class="builder-tool-button" type="button" @click="triggerAddImage">+ Add image</button>
-        <button class="builder-tool-button" type="button" @click="openImportModal">Import JSON</button>
-        <button class="builder-tool-button" type="button" @click="loadVersionDetail">Load Tour</button>
-        <button class="builder-save-button" type="button" @click="saveBuilder">Save Tour</button>
-        <button class="builder-quick-button" type="button" @click="openQuickCreateModal">
+        <button
+          class="builder-tool-button"
+          type="button"
+          @click="triggerAddImage"
+        >
+          + Add image
+        </button>
+        <button
+          class="builder-tool-button"
+          type="button"
+          @click="openImportModal"
+        >
+          Import JSON
+        </button>
+        <button
+          class="builder-tool-button"
+          type="button"
+          @click="loadVersionDetail"
+        >
+          Load Tour
+        </button>
+        <button class="builder-save-button" type="button" @click="saveBuilder">
+          Save Tour
+        </button>
+        <button
+          class="builder-quick-button"
+          type="button"
+          @click="openQuickCreateModal"
+        >
           + Create new tour
         </button>
         <select v-model="selectedProjectId" @change="changeProject">
           <option value="">Select project</option>
-          <option v-for="project in projects" :key="project.id" :value="project.id">{{ project.name }}</option>
+          <option
+            v-for="project in projects"
+            :key="project.id"
+            :value="project.id"
+          >
+            {{ project.name }}
+          </option>
         </select>
         <select v-model="selectedLocationId" @change="changeLocation">
           <option value="">Select location</option>
-          <option v-for="location in locations" :key="location.id" :value="location.id">{{ location.name }}</option>
+          <option
+            v-for="location in locations"
+            :key="location.id"
+            :value="location.id"
+          >
+            {{ location.name }}
+          </option>
         </select>
         <select v-model="selectedVersionId" @change="loadVersionDetail">
           <option value="">Select version</option>
-          <option v-for="item in versions" :key="item.id" :value="item.id">v{{ item.version_number }} - {{ item.status }}</option>
+          <option v-for="item in versions" :key="item.id" :value="item.id">
+            v{{ item.version_number }} - {{ item.status }}
+          </option>
         </select>
       </div>
       <div class="builder-right-actions">
-        <button class="builder-export-button" type="button" @click="showExportModal = true">Export JSON</button>
+        <button
+          class="builder-export-button"
+          type="button"
+          @click="showExportModal = true"
+        >
+          Export JSON
+        </button>
       </div>
-      <input ref="fileInput" class="hidden-input" type="file" multiple accept="image/*" @change="uploadPanorama" />
+      <input
+        ref="fileInput"
+        class="hidden-input"
+        type="file"
+        multiple
+        accept="image/*"
+        @change="uploadPanorama"
+      />
     </header>
 
     <p v-if="errorMessage" class="builder-alert error">{{ errorMessage }}</p>
-    <p v-if="successMessage" class="builder-alert success">{{ successMessage }}</p>
+    <p v-if="successMessage" class="builder-alert success">
+      {{ successMessage }}
+    </p>
 
     <div class="builder-shell">
       <aside
@@ -927,10 +1113,20 @@ onBeforeUnmount(() => {
           @keydown.space.prevent="selectScene(scene.id)"
         >
           <span class="scene-index">{{ index + 1 }}</span>
-          <span class="scene-thumb" :style="resolveSceneImage(scene) ? { backgroundImage: `url(${resolveSceneImage(scene)})` } : {}"></span>
+          <span
+            class="scene-thumb"
+            :style="
+              resolveSceneImage(scene)
+                ? { backgroundImage: `url(${resolveSceneImage(scene)})` }
+                : {}
+            "
+          ></span>
           <span class="scene-copy">
             <strong>{{ scene.name || scene.id }}</strong>
-            <small>{{ scene.hotspots?.length || 0 }} hotspot · {{ scene.group || 'Default' }}</small>
+            <small
+              >{{ scene.hotspots?.length || 0 }} hotspot ·
+              {{ scene.group || "Default" }}</small
+            >
           </span>
           <button
             class="scene-delete-button"
@@ -960,7 +1156,13 @@ onBeforeUnmount(() => {
             @view-change="updateViewState"
           />
           <div class="viewer-help">
-            {{ !activeScene ? 'Them anh panorama 360° de bat dau' : isPlacingHotspot ? 'Selecting hotspot position: click image to pin point' : 'Drag mouse to rotate. Click + Add hotspot then click image to place point.' }}
+            {{
+              !activeScene
+                ? "Thêm ảnh panorama 360° để bắt đầu"
+                : isPlacingHotspot
+                  ? "Selecting hotspot position: click image to pin point"
+                  : "Drag mouse to rotate. Click + Add hotspot then click image to place point."
+            }}
           </div>
           <div class="view-meter">
             <span>LON {{ viewState.lon }}°</span>
@@ -975,21 +1177,61 @@ onBeforeUnmount(() => {
 
         <template v-if="activeScene">
           <div class="inspector-image-row">
-            <span class="inspector-thumb" :style="sceneBackground ? { backgroundImage: `url(${sceneBackground})` } : {}"></span>
-            <button class="builder-tool-button wide" type="button" @click="triggerAddImage">
-              {{ uploading ? 'Uploading...' : 'Change image' }}
+            <span
+              class="inspector-thumb"
+              :style="
+                sceneBackground
+                  ? { backgroundImage: `url(${sceneBackground})` }
+                  : {}
+              "
+            ></span>
+            <button
+              class="builder-tool-button wide"
+              type="button"
+              @click="triggerAddImage"
+            >
+              {{ uploading ? "Uploading..." : "Change image" }}
             </button>
           </div>
 
           <div class="form">
             <label>Scene ID<input v-model="sceneForm.id" /></label>
-            <label>Scene name<input v-model="sceneForm.name" @input="updateActiveSceneName" /></label>
-            <label>Group<input v-model="sceneForm.group" @input="updateActiveSceneGroup" /></label>
-            <label>Description<textarea v-model="sceneForm.description" rows="3"></textarea></label>
-            <label>URL cloud / file<input v-model="sceneForm.image_url" placeholder="/media/... hoac https://..." /></label>
+            <label
+              >Scene name<input
+                v-model="sceneForm.name"
+                @input="updateActiveSceneName"
+            /></label>
+            <label
+              >Group<input
+                v-model="sceneForm.group"
+                @input="updateActiveSceneGroup"
+            /></label>
+            <label
+              >Description<textarea
+                v-model="sceneForm.description"
+                rows="3"
+              ></textarea>
+            </label>
+            <label
+              >URL cloud / file<input
+                v-model="sceneForm.image_url"
+                placeholder="/media/... hoac https://..."
+            /></label>
             <div class="actions-row">
-              <button class="secondary-button" type="button" @click="saveSceneMeta">Save scene</button>
-              <button class="danger-button" type="button" @click="removeScene(activeScene.id)">Delete scene</button>
+              <button
+                class="secondary-button"
+                type="button"
+                @click="saveSceneMeta"
+              >
+                Save scene
+              </button>
+              <button
+                class="danger-button"
+                type="button"
+                @click="removeScene(activeScene.id)"
+              >
+                Delete scene
+              </button>
             </div>
           </div>
 
@@ -1002,7 +1244,13 @@ onBeforeUnmount(() => {
               <label>LAT<input :value="viewState.lat" readonly /></label>
               <label>FOV<input :value="viewState.fov" readonly /></label>
             </div>
-            <button class="builder-outline-button" type="button" @click="saveDefaultView">Save current view</button>
+            <button
+              class="builder-outline-button"
+              type="button"
+              @click="saveDefaultView"
+            >
+              Save current view
+            </button>
           </section>
 
           <hr />
@@ -1010,8 +1258,13 @@ onBeforeUnmount(() => {
           <section class="inspector-section">
             <div class="panel-title-row">
               <h3>Hotspots ({{ activeScene.hotspots?.length || 0 }})</h3>
-              <button class="builder-mini-button" type="button" :class="{ active: isPlacingHotspot }" @click="startPlacingHotspot">
-                {{ isPlacingHotspot ? 'Click image...' : '+ Add hotspot' }}
+              <button
+                class="builder-mini-button"
+                type="button"
+                :class="{ active: isPlacingHotspot }"
+                @click="startPlacingHotspot"
+              >
+                {{ isPlacingHotspot ? "Click image..." : "+ Add hotspot" }}
               </button>
             </div>
             <div v-if="activeScene.hotspots?.length" class="hotspot-list">
@@ -1031,15 +1284,27 @@ onBeforeUnmount(() => {
                   <strong>{{ hotspot.label || `Hotspot ${index + 1}` }}</strong>
                   <small>
                     Lon:{{ Math.round(Number(hotspot.lon || 0) * 10) / 10 }}°
-                    Lat:{{ Math.round(Number(hotspot.lat || 0) * 10) / 10 }}°
-                    → {{ hotspot.target_scene_id || 'not selected' }} ({{ hotspot.type || 'point' }})
+                    Lat:{{ Math.round(Number(hotspot.lat || 0) * 10) / 10 }}° →
+                    {{ hotspot.target_scene_id || "not selected" }} ({{
+                      hotspot.type || "point"
+                    }})
                   </small>
                 </span>
-                <button class="hotspot-remove" type="button" @click.stop="selectedHotspotId = hotspot.id; removeHotspot()">×</button>
+                <button
+                  class="hotspot-remove"
+                  type="button"
+                  @click.stop="
+                    selectedHotspotId = hotspot.id;
+                    removeHotspot();
+                  "
+                >
+                  ×
+                </button>
               </div>
             </div>
             <p v-if="!selectedHotspot" class="builder-muted">
-              Click "+ Add hotspot", then click image to pin hotspot in the 360 position.
+              Click "+ Add hotspot", then click image to pin hotspot in the 360
+              position.
             </p>
           </section>
 
@@ -1057,74 +1322,175 @@ onBeforeUnmount(() => {
               Target scene
               <select v-model="hotspotForm.target_scene_id">
                 <option value="">None</option>
-                <option v-for="scene in targetSceneOptions" :key="scene.id" :value="scene.id">{{ scene.name || scene.id }}</option>
+                <option
+                  v-for="scene in targetSceneOptions"
+                  :key="scene.id"
+                  :value="scene.id"
+                >
+                  {{ scene.name || scene.id }}
+                </option>
               </select>
             </label>
             <div class="two-inputs">
-              <label>LON<input v-model="hotspotForm.lon" type="number" step="0.1" /></label>
-              <label>LAT<input v-model="hotspotForm.lat" type="number" step="0.1" /></label>
+              <label
+                >LON<input v-model="hotspotForm.lon" type="number" step="0.1"
+              /></label>
+              <label
+                >LAT<input v-model="hotspotForm.lat" type="number" step="0.1"
+              /></label>
             </div>
             <div class="two-inputs">
-              <label>X %<input v-model="hotspotForm.x" type="number" min="0" max="100" /></label>
-              <label>Y %<input v-model="hotspotForm.y" type="number" min="0" max="100" /></label>
+              <label
+                >X %<input
+                  v-model="hotspotForm.x"
+                  type="number"
+                  min="0"
+                  max="100"
+              /></label>
+              <label
+                >Y %<input
+                  v-model="hotspotForm.y"
+                  type="number"
+                  min="0"
+                  max="100"
+              /></label>
             </div>
             <label>
               Hotspot audio
-              <input type="file" accept="audio/*" @change="onHotspotAudioChange" />
+              <input
+                type="file"
+                accept="audio/*"
+                @change="onHotspotAudioChange"
+              />
             </label>
             <label>
               Audio URL
-              <input v-model="hotspotForm.audio_url" placeholder="/media/... or https://..." />
+              <input
+                v-model="hotspotForm.audio_url"
+                placeholder="/media/... or https://..."
+              />
             </label>
             <p class="builder-muted">
-              {{ selectedHotspot.local_audio_file ? `Selected: ${selectedHotspot.local_audio_file.name}` : (hotspotForm.audio_url ? 'Hotspot has audio.' : 'No audio for this hotspot.') }}
+              {{
+                selectedHotspot.local_audio_file
+                  ? `Selected: ${selectedHotspot.local_audio_file.name}`
+                  : hotspotForm.audio_url
+                    ? "Hotspot has audio."
+                    : "No audio for this hotspot."
+              }}
             </p>
             <div class="actions-row">
-              <button class="primary-button" type="button" @click="saveHotspot">Save hotspot</button>
-              <button class="danger-button" type="button" @click="removeHotspot">Delete</button>
+              <button class="primary-button" type="button" @click="saveHotspot">
+                Save hotspot
+              </button>
+              <button
+                class="danger-button"
+                type="button"
+                @click="removeHotspot"
+              >
+                Delete
+              </button>
             </div>
           </div>
         </template>
 
         <div v-else class="empty-inspector">
           <p>Select a scene on the left to edit properties.</p>
-          <button class="builder-tool-button wide" type="button" @click="addBlankScene">+ Create empty scene</button>
+          <button
+            class="builder-tool-button wide"
+            type="button"
+            @click="addBlankScene"
+          >
+            + Create empty scene
+          </button>
         </div>
       </aside>
     </div>
 
-    <div v-if="showExportModal" class="builder-modal-backdrop" @click.self="showExportModal = false">
+    <div
+      v-if="showExportModal"
+      class="builder-modal-backdrop"
+      @click.self="showExportModal = false"
+    >
       <div class="builder-modal">
         <div class="panel-title-row">
           <h2>Export TOUR_DATA</h2>
-          <button class="builder-mini-button" type="button" @click="showExportModal = false">Close</button>
+          <button
+            class="builder-mini-button"
+            type="button"
+            @click="showExportModal = false"
+          >
+            Close
+          </button>
         </div>
         <textarea readonly rows="18" :value="exportText"></textarea>
         <div class="actions-row">
-          <button class="builder-save-button" type="button" @click="downloadExportJson">Download JSON</button>
-          <button class="builder-tool-button" type="button" @click="copyExportJson">Copy</button>
+          <button
+            class="builder-save-button"
+            type="button"
+            @click="downloadExportJson"
+          >
+            Download JSON
+          </button>
+          <button
+            class="builder-tool-button"
+            type="button"
+            @click="copyExportJson"
+          >
+            Copy
+          </button>
         </div>
       </div>
     </div>
 
-    <div v-if="showImportModal" class="builder-modal-backdrop" @click.self="showImportModal = false">
+    <div
+      v-if="showImportModal"
+      class="builder-modal-backdrop"
+      @click.self="showImportModal = false"
+    >
       <div class="builder-modal">
         <div class="panel-title-row">
           <h2>Import JSON</h2>
-          <button class="builder-mini-button" type="button" @click="showImportModal = false">Cancel</button>
+          <button
+            class="builder-mini-button"
+            type="button"
+            @click="showImportModal = false"
+          >
+            Cancel
+          </button>
         </div>
-        <textarea v-model="importText" rows="18" placeholder="Paste TOUR_DATA JSON here..."></textarea>
+        <textarea
+          v-model="importText"
+          rows="18"
+          placeholder="Paste TOUR_DATA JSON here..."
+        ></textarea>
         <div class="actions-row">
-          <button class="builder-save-button" type="button" @click="applyImportJson">Nhap</button>
+          <button
+            class="builder-save-button"
+            type="button"
+            @click="applyImportJson"
+          >
+            Nhap
+          </button>
         </div>
       </div>
     </div>
 
-    <div v-if="showQuickCreateModal" class="builder-modal-backdrop" @click.self="showQuickCreateModal = false">
+    <div
+      v-if="showQuickCreateModal"
+      class="builder-modal-backdrop"
+      @click.self="showQuickCreateModal = false"
+    >
       <div class="builder-modal builder-modal-small">
         <div class="panel-title-row">
           <h2>Select or create tour</h2>
-          <button class="builder-mini-button" type="button" @click="showQuickCreateModal = false">Close</button>
+          <button
+            class="builder-mini-button"
+            type="button"
+            @click="showQuickCreateModal = false"
+          >
+            Close
+          </button>
         </div>
         <div class="form">
           <section class="quick-step">
@@ -1133,21 +1499,47 @@ onBeforeUnmount(() => {
               <button
                 class="builder-mini-button"
                 type="button"
-                @click="quickCreateForm.create_project ? useExistingProject() : enableCreateProject()"
+                @click="
+                  quickCreateForm.create_project
+                    ? useExistingProject()
+                    : enableCreateProject()
+                "
               >
-                {{ quickCreateForm.create_project ? 'Select project co san' : '+ Create new project' }}
+                {{
+                  quickCreateForm.create_project
+                    ? "Select project có sẵn"
+                    : "+ Create new project"
+                }}
               </button>
             </div>
 
             <template v-if="quickCreateForm.create_project">
-              <label>New project name *<input v-model="quickCreateForm.project_name" placeholder="VD: Xa Co Do" /></label>
-              <label>Description project<textarea v-model="quickCreateForm.project_description" rows="2"></textarea></label>
+              <label
+                >New project name *<input
+                  v-model="quickCreateForm.project_name"
+                  placeholder="VD: Xa Co Do"
+              /></label>
+              <label
+                >Description project<textarea
+                  v-model="quickCreateForm.project_description"
+                  rows="2"
+                ></textarea>
+              </label>
             </template>
             <label v-else>
               Select project co san
-              <select v-model="quickCreateForm.project_id" @change="loadQuickLocation">
+              <select
+                v-model="quickCreateForm.project_id"
+                @change="loadQuickLocation"
+              >
                 <option value="">Select project</option>
-                <option v-for="project in projects" :key="project.id" :value="project.id">{{ project.name }}</option>
+                <option
+                  v-for="project in projects"
+                  :key="project.id"
+                  :value="project.id"
+                >
+                  {{ project.name }}
+                </option>
               </select>
             </label>
           </section>
@@ -1158,26 +1550,67 @@ onBeforeUnmount(() => {
               <button
                 class="builder-mini-button"
                 type="button"
-                :disabled="quickCreateForm.create_project || (!quickCreateForm.create_project && !quickCreateForm.project_id)"
-                @click="quickCreateForm.create_location ? useExistingLocation() : enableCreateLocation()"
+                :disabled="
+                  quickCreateForm.create_project ||
+                  (!quickCreateForm.create_project &&
+                    !quickCreateForm.project_id)
+                "
+                @click="
+                  quickCreateForm.create_location
+                    ? useExistingLocation()
+                    : enableCreateLocation()
+                "
               >
-                {{ quickCreateForm.create_location ? 'Select location co san' : '+ Create new location' }}
+                {{
+                  quickCreateForm.create_location
+                    ? "Select location co san"
+                    : "+ Create new location"
+                }}
               </button>
             </div>
 
             <template v-if="quickCreateForm.create_location">
-              <label>New location name *<input v-model="quickCreateForm.location_name" placeholder="VD: Den Dan Ha" /></label>
-              <label>Description location<textarea v-model="quickCreateForm.location_description" rows="2"></textarea></label>
+              <label
+                >New location name *<input
+                  v-model="quickCreateForm.location_name"
+                  placeholder="VD: Den Dan Ha"
+              /></label>
+              <label
+                >Description location<textarea
+                  v-model="quickCreateForm.location_description"
+                  rows="2"
+                ></textarea>
+              </label>
               <div class="two-inputs">
-                <label>Latitude<input v-model="quickCreateForm.latitude" type="number" step="0.000001" /></label>
-                <label>Longitude<input v-model="quickCreateForm.longitude" type="number" step="0.000001" /></label>
+                <label
+                  >Latitude<input
+                    v-model="quickCreateForm.latitude"
+                    type="number"
+                    step="0.000001"
+                /></label>
+                <label
+                  >Longitude<input
+                    v-model="quickCreateForm.longitude"
+                    type="number"
+                    step="0.000001"
+                /></label>
               </div>
             </template>
             <label v-else>
               Select location co san
-              <select v-model="quickCreateForm.location_id" :disabled="!quickLocation.length" @change="loadQuickVersions">
+              <select
+                v-model="quickCreateForm.location_id"
+                :disabled="!quickLocation.length"
+                @change="loadQuickVersions"
+              >
                 <option value="">Select location</option>
-                <option v-for="location in quickLocation" :key="location.id" :value="location.id">{{ location.name }}</option>
+                <option
+                  v-for="location in quickLocation"
+                  :key="location.id"
+                  :value="location.id"
+                >
+                  {{ location.name }}
+                </option>
               </select>
             </label>
           </section>
@@ -1189,47 +1622,100 @@ onBeforeUnmount(() => {
                 v-if="!quickCreateForm.create_location"
                 class="builder-mini-button"
                 type="button"
-                @click="quickCreateForm.create_version = !quickCreateForm.create_version"
+                @click="
+                  quickCreateForm.create_version =
+                    !quickCreateForm.create_version
+                "
               >
-                {{ quickCreateForm.create_version ? 'Select version co san' : '+ Create new version' }}
+                {{
+                  quickCreateForm.create_version
+                    ? "Select version co san"
+                    : "+ Create new version"
+                }}
               </button>
             </div>
 
-            <label v-if="!quickCreateForm.create_version && !quickCreateForm.create_location">
+            <label
+              v-if="
+                !quickCreateForm.create_version &&
+                !quickCreateForm.create_location
+              "
+            >
               Select version de chinh sua
-              <select v-model="quickCreateForm.version_id" :disabled="!quickVersions.length">
+              <select
+                v-model="quickCreateForm.version_id"
+                :disabled="!quickVersions.length"
+              >
                 <option value="">Select version</option>
-                <option v-for="item in quickVersions" :key="item.id" :value="item.id">
-                  v{{ item.version_number }} - {{ item.status }} - {{ item.label || 'No label' }}
+                <option
+                  v-for="item in quickVersions"
+                  :key="item.id"
+                  :value="item.id"
+                >
+                  v{{ item.version_number }} - {{ item.status }} -
+                  {{ item.label || "No label" }}
                 </option>
               </select>
             </label>
 
             <label v-else>
               New draft version label
-              <input v-model="quickCreateForm.version_label" placeholder="Leave empty to auto-name" />
+              <input
+                v-model="quickCreateForm.version_label"
+                placeholder="Leave empty to auto-name"
+              />
             </label>
-            <template v-if="quickCreateForm.create_version || quickCreateForm.create_location">
+            <template
+              v-if="
+                quickCreateForm.create_version ||
+                quickCreateForm.create_location
+              "
+            >
               <label>
                 Background audio
-                <input type="file" accept="audio/*" @change="onQuickVersionAudioChange" />
+                <input
+                  type="file"
+                  accept="audio/*"
+                  @change="onQuickVersionAudioChange"
+                />
               </label>
               <label>
                 Point hotspot logo
-                <input type="file" accept="image/*" @change="onQuickVersionLogoChange" />
+                <input
+                  type="file"
+                  accept="image/*"
+                  @change="onQuickVersionLogoChange"
+                />
               </label>
-              <p class="builder-muted">Logo nay se dung cho hotspot loai point trong viewer.</p>
+              <p class="builder-muted">
+                Logo này sẽ dùng cho hotspot loai point trong viewer.
+              </p>
             </template>
             <p v-if="quickCreateForm.create_location" class="builder-muted">
-              New location has no version, so Builder will create a new draft version.
+              New location has no version, so Builder will create a new draft
+              version.
             </p>
           </section>
 
           <div class="actions-row">
-            <button class="builder-save-button" type="button" @click="quickCreateTour">
-              {{ quickCreateForm.create_version ? 'Create/select tour' : 'Open version to edit' }}
+            <button
+              class="builder-save-button"
+              type="button"
+              @click="quickCreateTour"
+            >
+              {{
+                quickCreateForm.create_version
+                  ? "Create/select tour"
+                  : "Open version to edit"
+              }}
             </button>
-            <button class="builder-tool-button" type="button" @click="showQuickCreateModal = false">Cancel</button>
+            <button
+              class="builder-tool-button"
+              type="button"
+              @click="showQuickCreateModal = false"
+            >
+              Cancel
+            </button>
           </div>
         </div>
       </div>

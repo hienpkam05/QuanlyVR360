@@ -30,7 +30,7 @@ const filters = reactive({
 });
 
 const periodOptions = [
-  { label: 'Tuan', value: 'week', hint: 'Theo tuan' },
+  { label: 'Tuan', value: 'week', hint: '7 ngay' },
   { label: 'Thang', value: 'month', hint: 'Theo thang' },
   { label: 'Nam', value: 'year', hint: 'Theo nam' },
 ];
@@ -237,14 +237,14 @@ onMounted(boot);
       </article>
     </section>
 
-    <section class="analytics-codein-grid">
+    <section class="analytics-main-grid">
       <article class="panel analytics-chart-card">
         <div class="panel-title-row">
           <div>
             <h2>Bieu do truy cap</h2>
             <p class="chart-subtitle">Luot truy cap theo {{ periodOptions.find((item) => item.value === filters.granularity)?.label.toLowerCase() }}</p>
           </div>
-          <span class="chart-badge">Codex {{ maxVisits }}</span>
+          <span class="chart-badge">Cao nhat {{ maxVisits }}</span>
         </div>
 
         <div v-if="timeseries.length" class="analytics-chart large">

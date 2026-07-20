@@ -1,25 +1,32 @@
 <script setup>
-import { computed, onMounted, ref } from 'vue';
-import { useRouter } from 'vue-router';
+import { computed, onMounted, ref } from "vue";
+import { useRouter } from "vue-router";
 
-import { listPublishedTours } from '../api/publishedToursApi';
+import { listPublishedTours } from "../api/publishedToursApi";
 
 const router = useRouter();
 const tours = ref([]);
-const search = ref('');
+const search = ref("");
 const loading = ref(false);
-const errorMessage = ref('');
+const errorMessage = ref("");
 
 const filteredTours = computed(() => {
   const keyword = search.value.trim().toLowerCase();
   if (!keyword) return tours.value;
   return tours.value.filter((tour) =>
-    [tour.location_name, tour.project_name, tour.location_description, tour.version_label]
+    [
+      tour.location_name,
+      tour.project_name,
+      tour.location_description,
+      tour.version_label,
+    ]
       .filter(Boolean)
       .some((value) => String(value).toLowerCase().includes(keyword)),
   );
 });
-const totalScenes = computed(() => tours.value.reduce((sum, tour) => sum + Number(tour.scene_count || 0), 0));
+const totalScenes = computed(() =>
+  tours.value.reduce((sum, tour) => sum + Number(tour.scene_count || 0), 0),
+);
 
 function normalizeResults(data) {
   if (Array.isArray(data)) return data;
@@ -30,13 +37,15 @@ function normalizeResults(data) {
 }
 
 function formatDate(value) {
-  if (!value) return 'Chua ro ngay publish';
-  return new Intl.DateTimeFormat('vi-VN', { dateStyle: 'medium' }).format(new Date(value));
+  if (!value) return "Chua ro ngay publish";
+  return new Intl.DateTimeFormat("vi-VN", { dateStyle: "medium" }).format(
+    new Date(value),
+  );
 }
 
 function openViewer(tour) {
   router.push({
-    path: '/viewer',
+    path: "/viewer",
     query: {
       token: tour.public_token,
       project: tour.project_id,
@@ -48,12 +57,13 @@ function openViewer(tour) {
 
 async function loadTours() {
   loading.value = true;
-  errorMessage.value = '';
+  errorMessage.value = "";
   try {
     const response = await listPublishedTours();
     tours.value = normalizeResults(response.data);
   } catch (error) {
-    errorMessage.value = error.response?.data?.detail || 'Could not load published tour list.';
+    errorMessage.value =
+      error.response?.data?.detail || "Could not load published tour list.";
   } finally {
     loading.value = false;
   }
@@ -66,53 +76,77 @@ onMounted(loadTours);
   <section class="page home-page">
     <header class="home-hero">
       <div>
-        <p class="eyebrow">Thu vien VR360</p>
-        <h1>Kham pha cac tour VR360 da publish</h1>
-        <p>
-          Browse published VR360 tours. Choose a tour to open it in the viewer.
-        </p>
+        <p class="eyebrow">Thư viện VR360</p>
+        <h1>Khám phá tour VR360</h1>
+        <p>Chọn một tour đã publish để xem nhanh trong VR360 Viewer.</p>
         <div class="home-hero-actions">
-          <input v-model="search" placeholder="Tim theo project, location..." />
-          <button class="secondary-button" type="button" :disabled="loading" @click="loadTours">
-            {{ loading ? 'Loading...' : 'Refresh' }}
+          <input v-model="search" placeholder="Tìm theo project, location..." />
+          <button
+            class="secondary-button"
+            type="button"
+            :disabled="loading"
+            @click="loadTours"
+          >
+            {{ loading ? "Loading..." : "Refresh" }}
           </button>
         </div>
       </div>
       <div class="home-summary-card">
-        <span>Da publish</span>
+        <span>Đã publish</span>
         <strong>{{ tours.length }}</strong>
-        <small>{{ totalScenes }} scene dang san sang</small>
+        <small>{{ totalScenes }} scene sẵn sàng</small>
       </div>
     </header>
 
     <p v-if="errorMessage" class="builder-alert error">{{ errorMessage }}</p>
 
     <section v-if="filteredTours.length" class="published-tour-grid">
-      <article v-for="tour in filteredTours" :key="tour.id" class="published-tour-card">
+      <article
+        v-for="tour in filteredTours"
+        :key="tour.id"
+        class="published-tour-card"
+      >
         <div
           class="published-tour-cover"
-          :style="tour.tour_thumbnail || tour.location_thumbnail ? { backgroundImage: `url(${tour.tour_thumbnail || tour.location_thumbnail})` } : {}"
+          :style="
+            tour.tour_thumbnail || tour.location_thumbnail
+              ? {
+                  backgroundImage: `url(${tour.tour_thumbnail || tour.location_thumbnail})`,
+                }
+              : {}
+          "
         >
-          <span>Da xuat ban</span>
+          <span>Đã xuất bản</span>
         </div>
         <div class="published-tour-body">
           <small>{{ tour.project_name }}</small>
           <h2>{{ tour.location_name }}</h2>
-          <p>{{ tour.location_description || 'This VR360 tour is published and ready to view.' }}</p>
+          <p>
+            {{ tour.location_description || "Tour VR360 đã sẵn sàng để xem." }}
+          </p>
           <div class="published-tour-meta">
-            <span>v{{ tour.version_number }} {{ tour.version_label ? `· ${tour.version_label}` : '' }}</span>
+            <span
+              >v{{ tour.version_number }}
+              {{ tour.version_label ? `· ${tour.version_label}` : "" }}</span
+            >
             <span>{{ tour.scene_count }} scenes</span>
           </div>
           <div class="published-tour-footer">
             <em>{{ formatDate(tour.published_at) }}</em>
-            <button class="primary-button" type="button" @click="openViewer(tour)">View tour</button>
+            <button
+              class="primary-button compact-button"
+              type="button"
+              @click="openViewer(tour)"
+            >
+              View tour
+            </button>
           </div>
         </div>
       </article>
     </section>
 
     <section v-else class="panel empty-state">
-      {{ loading ? 'Loading tour list...' : 'No published tours yet.' }}
+      {{ loading ? "Loading tour list..." : "No published tours yet." }}
     </section>
   </section>
 </template>
