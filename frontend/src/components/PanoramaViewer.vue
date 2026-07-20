@@ -64,6 +64,7 @@ let isDragging = false;
 let pointerDown = null;
 let lastInteractionAt = 0;
 let lastFrameAt = 0;
+let cameraTween = null;
 let lon = 0;
 let lat = 0;
 let fov = 75;
@@ -82,6 +83,16 @@ function emitViewChange() {
 
 function markInteraction() {
   lastInteractionAt = performance.now();
+}
+
+function easeInOutCubic(value) {
+  return value < 0.5
+    ? 4 * value * value * value
+    : 1 - Math.pow(-2 * value + 2, 3) / 2;
+}
+
+function shortestLonDelta(from, to) {
+  return ((((to - from) % 360) + 540) % 360) - 180;
 }
 
 function lonLatToVector(hotspotLon, hotspotLat, radius = 500) {
@@ -158,10 +169,26 @@ function renderLoop() {
   const now = performance.now();
   const deltaSeconds = lastFrameAt ? (now - lastFrameAt) / 1000 : 0;
   lastFrameAt = now;
+  if (cameraTween) {
+    const progress = Math.min((now - cameraTween.startedAt) / cameraTween.duration, 1);
+    const eased = easeInOutCubic(progress);
+    lon = cameraTween.from.lon + cameraTween.lonDelta * eased;
+    lat = cameraTween.from.lat + (cameraTween.to.lat - cameraTween.from.lat) * eased;
+    fov = cameraTween.from.fov + (cameraTween.to.fov - cameraTween.from.fov) * eased;
+    emitViewChange();
+    if (progress >= 1) {
+      lon = cameraTween.to.lon;
+      lat = cameraTween.to.lat;
+      fov = cameraTween.to.fov;
+      cameraTween.resolve();
+      cameraTween = null;
+    }
+  }
   if (
     props.autoRotate &&
     hasImage.value &&
     !isDragging &&
+    !cameraTween &&
     now - lastInteractionAt >= props.autoRotateDelay
   ) {
     lon += props.autoRotateSpeed * deltaSeconds;
@@ -172,6 +199,24 @@ function renderLoop() {
   updateTransitionFade();
   renderer.render(scene, camera);
   animationId = requestAnimationFrame(renderLoop);
+}
+
+function animateToView(targetView = {}, duration = 520) {
+  markInteraction();
+  cameraTween?.resolve?.();
+  return new Promise((resolve) => {
+    const targetLon = Number(targetView.lon ?? lon);
+    const targetLat = clamp(Number(targetView.lat ?? lat), -85, 85);
+    const targetFov = clamp(Number(targetView.fov ?? fov), 35, 100);
+    cameraTween = {
+      startedAt: performance.now(),
+      duration,
+      from: { lon, lat, fov },
+      to: { lon: targetLon, lat: targetLat, fov: targetFov },
+      lonDelta: shortestLonDelta(lon, targetLon),
+      resolve,
+    };
+  });
 }
 
 function resize() {
@@ -385,6 +430,10 @@ onBeforeUnmount(() => {
     mesh.material.dispose();
   }
   renderer?.dispose();
+});
+
+defineExpose({
+  animateToView,
 });
 </script>
 

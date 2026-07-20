@@ -146,7 +146,7 @@ onMounted(boot);
 
     <p v-if="errorMessage" class="error-message">{{ errorMessage }}</p>
 
-    <section class="panel selector-grid">
+    <section class="panel selector-grid publish-selector-grid">
       <label>
         Project
         <select v-model="selectedProjectId" @change="changeProject">
@@ -167,14 +167,14 @@ onMounted(boot);
           </option>
         </select>
       </label>
-      <button class="primary-button" type="button" @click="publish">Publish</button>
+      <button class="primary-button publish-button" type="button" @click="publish">Publish</button>
     </section>
 
     <section class="two-column">
       <div class="panel">
         <h2>Cau hinh export ban</h2>
         <pre class="json-preview">{{ publishState || 'Chua co cau hinh publish.' }}</pre>
-        <div class="actions-row">
+        <div class="actions-row publish-config-actions">
           <button class="secondary-button" type="button" @click="toggleActive">Bat/tat active</button>
           <button class="secondary-button" type="button" @click="renewToken">Regenerate token</button>
           <button class="danger-button" type="button" @click="unpublish">Cancel publish</button>

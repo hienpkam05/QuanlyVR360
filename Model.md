@@ -1,8 +1,8 @@
-# Tài liệu Models — VR360 Management
+# Models — VR360 Management
 
-Tài liệu này giải thích các model hiện có trong dự án, ý nghĩa từng thuộc tính, quan hệ giữa các bảng và các quy tắc dữ liệu quan trọng.
+Tai lieu nay mo ta cac model hien co trong backend Django, y nghia tung truong, quan he giua cac bang va cac luu y khi thao tac du lieu.
 
-## 1. Sơ đồ quan hệ tổng quát
+## 1. So do quan he tong quat
 
 ```text
 User
@@ -21,361 +21,354 @@ Project
         └── DailyStat
 ```
 
-## Cơ chế xóa mềm dùng chung
+## 2. Soft delete dung chung
 
-Tất cả model nghiệp vụ kế thừa `backend.models.SoftDeleteModel`. Ứng dụng không xóa vật lý bản ghi khi gọi `delete()`.
+Phan lon model nghiep vu ke thua `backend.models.SoftDeleteModel`, nen khi goi `delete()` se xoa mem thay vi xoa cung ban ghi.
 
-| Thuộc tính dùng chung | Kiểu | Giải thích |
+| Truong | Kieu | Giai thich |
 |---|---|---|
-| `is_deleted` | BooleanField | Đánh dấu bản ghi đã xóa mềm. Mặc định `False`, có database index và không sửa trực tiếp qua form. |
-| `deleted_at` | DateTimeField | Thời điểm xóa mềm; bằng `NULL` khi bản ghi còn hoạt động. |
+| `is_deleted` | BooleanField | Danh dau ban ghi da bi xoa mem. Mac dinh `False`. |
+| `deleted_at` | DateTimeField | Thoi diem xoa mem. Bang `NULL` neu ban ghi con hoat dong. |
 
-Cách truy vấn:
+Manager:
 
-- `Model.objects.all()`: chỉ trả về bản ghi chưa xóa.
-- `Model.all_objects.all()`: trả về cả bản ghi hoạt động và đã xóa.
-- `Model.all_objects.deleted()`: chỉ trả về bản ghi đã xóa.
-- `instance.delete()`: đặt `is_deleted=True` và ghi `deleted_at`, không chạy lệnh SQL `DELETE`.
-- `queryset.delete()`: gọi soft delete cho từng bản ghi, không xóa hàng khỏi database.
-- `instance.restore()`: khôi phục một bản ghi bằng cách đặt `is_deleted=False` và `deleted_at=NULL`.
+- `Model.objects`: chi lay ban ghi chua xoa.
+- `Model.all_objects`: lay ca ban ghi chua xoa va da xoa.
+- `Model.all_objects.deleted()`: lay ban ghi da xoa.
+- `instance.restore()`: khoi phuc ban ghi da xoa mem.
 
-Soft-cascade đang được áp dụng theo chuỗi:
+Soft-cascade hien tai:
 
 ```text
-Project → Location → TourVersion → SceneAsset
-                   └→ PublishConfig → WhitelistDomain, TourVisit, DailyStat
+Project -> Location -> TourVersion -> SceneAsset
+                  └-> PublishConfig -> WhitelistDomain, TourVisit, DailyStat
 ```
 
-Khi xóa mềm đối tượng cha, các đối tượng con đang hoạt động cũng được xóa mềm. `restore()` chỉ khôi phục đúng bản ghi được gọi; hệ thống không tự khôi phục toàn bộ cây con nhằm tránh phục hồi nhầm dữ liệu đã bị xóa độc lập trước đó.
+Luu y: soft delete giu ban ghi trong database, nhung rieng `SceneAsset.delete()` hien dang xoa ca file anh goc va thu muc tile tren storage/media de tranh rac file.
 
-Các khai báo `on_delete=CASCADE/SET_NULL` trên ForeignKey chỉ là lớp bảo vệ toàn vẹn ở cấp database nếu có thao tác xóa vật lý ngoài ứng dụng. Luồng Django thông thường luôn sử dụng soft delete.
+## 3. `app_projects.Project`
 
-Các model không khai báo khóa chính riêng nên Django tự tạo trường `id` kiểu số nguyên tăng tự động.
+Dai dien cho mot du an VR360. Mot project co the co nhieu location.
 
-## 2. `app_projects.Project`
+Bang mac dinh: `app_projects_project`
 
-Đại diện cho một dự án VR360 cấp cao nhất. Một dự án có thể chứa nhiều địa điểm.
-
-Tên bảng mặc định: `app_projects_project`.
-
-| Thuộc tính | Kiểu | Bắt buộc | Giải thích |
+| Truong | Kieu | Bat buoc | Giai thich |
 |---|---|---:|---|
-| `id` | AutoField | Có | Khóa chính do Django tự tạo. |
-| `name` | CharField(255) | Có | Tên dự án hiển thị cho người quản trị. |
-| `slug` | SlugField(275) | Tự sinh | Chuỗi thân thiện URL. Duy nhất giữa các project chưa xóa. |
-| `description` | TextField | Không | Mô tả chi tiết về dự án. |
-| `thumbnail` | ImageField | Không | Ảnh đại diện, lưu dưới `media/projects/thumbnails/`. |
-| `created_by` | ForeignKey(User) | Không | Người tạo dự án, chỉ dùng audit. User bị xóa thì trường này thành `NULL`. |
-| `is_active` | BooleanField | Có | Cho biết dự án đang hoạt động hay đã bị ẩn/ngừng sử dụng. Mặc định `True`. |
-| `created_at` | DateTimeField | Tự động | Thời điểm tạo bản ghi. |
-| `updated_at` | DateTimeField | Tự động | Thời điểm cập nhật gần nhất. |
+| `id` | AutoField | Co | Khoa chinh Django tu tao. |
+| `name` | CharField(255) | Co | Ten du an. |
+| `slug` | SlugField(275) | Tu sinh | Slug than thien URL, duy nhat voi cac project chua xoa. |
+| `description` | TextField | Khong | Mo ta du an. |
+| `thumbnail` | ImageField | Khong | Anh dai dien, luu duoi `media/projects/thumbnails/`. |
+| `created_by` | ForeignKey(User) | Khong | User tao du an, `SET_NULL` neu user bi xoa cung. |
+| `is_active` | BooleanField | Co | Trang thai hoat dong/an du an. Mac dinh `True`. |
+| `created_at` | DateTimeField | Tu dong | Thoi diem tao. |
+| `updated_at` | DateTimeField | Tu dong | Thoi diem cap nhat gan nhat. |
 
-Quan hệ ngược:
+Quy tac:
 
-- `project.locations.all()`: lấy các địa điểm chưa xóa thuộc dự án.
-- `user.created_projects.all()`: lấy các dự án do một user tạo.
+- Mac dinh sap xep `-created_at`.
+- Constraint `unique_active_project_slug`: khong trung slug giua cac project chua xoa.
+- Index tren `is_active`.
+- Khi xoa project, cac `locations` ben trong cung bi xoa mem.
 
-Quy tắc và hành vi:
+## 4. `app_locations.Location`
 
-- Dữ liệu mặc định được sắp xếp theo `created_at` giảm dần.
-- Có index trên `is_active` để tối ưu truy vấn dự án đang hoạt động.
-- Constraint `unique_active_project_slug` bảo đảm không trùng slug giữa các project chưa xóa.
-- Nếu không truyền `slug`, phương thức `save()` tạo slug từ `name`.
-- Nếu slug đã tồn tại, hệ thống tự thêm hậu tố `-2`, `-3`, ...
-- Nếu tên không thể chuyển thành slug, giá trị cơ sở là `project`.
+Dai dien cho dia diem thuoc mot project.
 
-## 3. `app_locations.Location`
+Bang mac dinh: `app_locations_location`
 
-Đại diện cho một địa điểm nằm trong dự án, ví dụ một di tích, khu du lịch hoặc điểm tham quan.
-
-Tên bảng mặc định: `app_locations_location`.
-
-| Thuộc tính | Kiểu | Bắt buộc | Giải thích |
+| Truong | Kieu | Bat buoc | Giai thich |
 |---|---|---:|---|
-| `id` | AutoField | Có | Khóa chính. |
-| `project` | ForeignKey(Project) | Có | Dự án sở hữu địa điểm. Xóa mềm dự án sẽ soft-cascade các địa điểm bên trong. |
-| `name` | CharField(255) | Có | Tên địa điểm. |
-| `slug` | SlugField(275) | Tự sinh | Slug của địa điểm, chỉ cần duy nhất trong cùng một project. |
-| `description` | TextField | Không | Nội dung giới thiệu địa điểm. |
-| `thumbnail` | ImageField | Không | Ảnh đại diện, lưu dưới `media/locations/thumbnails/`. |
-| `latitude` | DecimalField(9,6) | Không | Vĩ độ, chỉ nhận giá trị từ `-90` đến `90`. |
-| `longitude` | DecimalField(9,6) | Không | Kinh độ, chỉ nhận giá trị từ `-180` đến `180`. |
-| `order` | PositiveIntegerField | Có | Thứ tự hiển thị và drag-drop. Mặc định `0`. |
-| `is_active` | BooleanField | Có | Trạng thái hoạt động của địa điểm. Mặc định `True`. |
-| `created_at` | DateTimeField | Tự động | Thời điểm tạo. |
-| `updated_at` | DateTimeField | Tự động | Thời điểm cập nhật gần nhất. |
+| `id` | AutoField | Co | Khoa chinh. |
+| `project` | ForeignKey(Project) | Co | Project so huu location. |
+| `name` | CharField(255) | Co | Ten dia diem. |
+| `slug` | SlugField(275) | Tu sinh | Slug cua dia diem, duy nhat trong cung project voi cac location chua xoa. |
+| `description` | TextField | Khong | Mo ta/gioi thieu dia diem. |
+| `thumbnail` | ImageField | Khong | Anh dai dien, luu duoi `media/locations/thumbnails/`. |
+| `latitude` | DecimalField(9,6) | Khong | Vi do, tu `-90` den `90`. |
+| `longitude` | DecimalField(9,6) | Khong | Kinh do, tu `-180` den `180`. |
+| `order` | PositiveIntegerField | Co | Thu tu hien thi/drag-drop. Mac dinh `0`. |
+| `is_active` | BooleanField | Co | Trang thai hoat dong. Mac dinh `True`. |
+| `created_at` | DateTimeField | Tu dong | Thoi diem tao. |
+| `updated_at` | DateTimeField | Tu dong | Thoi diem cap nhat. |
 
-Quan hệ ngược:
+Quy tac:
 
-- `location.versions.all()`: các phiên bản tour của địa điểm.
-- `location.publish_configs.all()`: các cấu hình public chưa xóa của địa điểm; constraint bảo đảm tối đa một cấu hình đang hoạt động.
+- Mac dinh sap xep theo `order`, sau do `created_at`.
+- Constraint `unique_active_location_slug_per_project`.
+- Index `project + is_active`.
+- Khi xoa location, cac `versions` va `publish_configs` lien quan cung bi xoa mem.
 
-Constraint và index:
+## 5. `app_tours.TourVersion`
 
-- `unique_active_location_slug_per_project`: không cho phép hai location chưa xóa trong cùng project có cùng slug.
-- Index `project + is_active`: tối ưu danh sách địa điểm hoạt động theo dự án.
-- Thứ tự mặc định là `order`, sau đó đến `created_at`.
+Dai dien cho mot phien ban tour VR360 cua mot location. Moi location co the co nhieu version de lam ban nhap, publish, rollback hoac tiep tuc edit.
 
-Slug được tự sinh tương tự `Project`, nhưng việc kiểm tra trùng chỉ diễn ra trong phạm vi project hiện tại.
+Bang mac dinh: `app_tours_tourversion`
 
-## 4. `app_tours.TourVersion`
+### Status
 
-Đại diện cho một lần tạo hoặc chỉnh sửa nội dung VR360 của một địa điểm. Một location có thể có nhiều version để hỗ trợ lịch sử, preview, publish và rollback.
-
-Tên bảng mặc định: `app_tours_tourversion`.
-
-### Trạng thái
-
-| Giá trị | Ý nghĩa |
+| Gia tri | Y nghia |
 |---|---|
-| `draft` | Bản nháp, còn được phép chỉnh sửa. |
-| `published` | Phiên bản đã hoặc đang được xuất bản. |
-| `archived` | Phiên bản đã lưu trữ, không dùng để chỉnh sửa trực tiếp. |
+| `draft` | Ban nhap, duoc edit. |
+| `published` | Ban dang/da publish. Hien tai day la status bi khoa edit tren API/frontend. |
+| `archived` | Ban luu tru. Theo logic hien tai van co the edit, chi `published` moi khong duoc edit. |
 
-### Thuộc tính
+### Truong du lieu
 
-| Thuộc tính | Kiểu | Bắt buộc | Giải thích |
+| Truong | Kieu | Bat buoc | Giai thich |
 |---|---|---:|---|
-| `id` | AutoField | Có | Khóa chính. |
-| `location` | ForeignKey(Location) | Có | Địa điểm sở hữu version. Xóa mềm location sẽ soft-cascade các version. |
-| `version_number` | PositiveIntegerField | Tự sinh | Số thứ tự version trong phạm vi location; không cho sửa trực tiếp. |
-| `label` | CharField(100) | Không | Nhãn dễ đọc, ví dụ `Bản cập nhật tháng 7`. |
-| `data` | JSONField | Có | Toàn bộ cấu trúc tour như scenes, hotspots và initial view. |
-| `thumbnail` | ImageField | Không | Ảnh đại diện version, lưu tại `media/tours/thumbnails/`. |
-| `status` | CharField(20) | Có | Trạng thái version. Mặc định `draft`. |
-| `changelog` | TextField | Không | Nội dung mô tả những thay đổi của version. |
-| `created_by` | ForeignKey(User) | Không | Người tạo version. User bị xóa thì trường thành `NULL`. |
-| `created_at` | DateTimeField | Tự động | Thời điểm tạo. |
-| `updated_at` | DateTimeField | Tự động | Thời điểm chỉnh sửa gần nhất. |
+| `id` | AutoField | Co | Khoa chinh. |
+| `location` | ForeignKey(Location) | Co | Location so huu version. |
+| `version_number` | PositiveIntegerField | Tu sinh | So version trong pham vi location. Khong sua truc tiep. |
+| `label` | CharField(100) | Khong | Ten goi de doc, vi du `v1`, `Ban thang 7`. |
+| `data` | JSONField | Co | Cau truc tour gom `scenes`, `hotspots`, view, audio hotspot... |
+| `thumbnail` | ImageField | Khong | Anh dai dien version, luu duoi `media/tours/thumbnails/`. |
+| `background_audio` | FileField | Khong | Nhac nen cua version, luu duoi `media/tours/audio/`. Field nay moi duoc them. |
+| `hotspot_point_logo` | ImageField | Khong | Logo/icon rieng cho hotspot loai `point`, luu duoi `media/tours/hotspot_logos/`. Field nay moi duoc them. |
+| `status` | CharField(20) | Co | Trang thai version. Mac dinh `draft`. |
+| `changelog` | TextField | Khong | Ghi chu thay doi cua version. |
+| `created_by` | ForeignKey(User) | Khong | User tao version. |
+| `created_at` | DateTimeField | Tu dong | Thoi diem tao. |
+| `updated_at` | DateTimeField | Tu dong | Thoi diem cap nhat. |
 
-### Validation trường `data`
+### Cau truc `data`
 
-Hàm `validate_tour_data` đảm bảo:
+`data` phai la JSON object va bat buoc co `scenes` la danh sach.
 
-- Giá trị gốc phải là JSON object.
-- Phải có thuộc tính `scenes` kiểu danh sách.
-- Mỗi phần tử trong `scenes` phải là object và có `id`.
-- Không được có hai scene trùng `id` trong cùng một version.
-
-Ví dụ tối thiểu hợp lệ:
+Vi du toi thieu:
 
 ```json
 {
-  "scenes": [
-    {"id": "scene-entrance", "title": "Cổng chính"}
-  ]
+  "title": "Tour demo",
+  "scenes": []
 }
 ```
 
-Constraint và index:
+Moi scene thuong co:
 
-- `unique_tour_version_per_location`: một location không thể có hai bản ghi cùng `version_number`.
-- Index `location + status`: tối ưu truy vấn version theo địa điểm và trạng thái.
-- Sắp xếp mặc định theo `version_number` giảm dần.
+```json
+{
+  "id": "scene-1",
+  "name": "San chinh",
+  "image_url": "/media/scenes/originals/example.jpg",
+  "view": { "lon": 0, "lat": 0, "fov": 75 },
+  "hotspots": []
+}
+```
 
-Khi tạo version mới, hệ thống khóa bản ghi Location trong transaction bằng `select_for_update()`, lấy số version lớn nhất rồi cộng `1`. Cách này hạn chế việc hai request đồng thời sinh cùng số version.
+Moi hotspot thuong co:
 
-## 5. `app_media.SceneAsset`
+```json
+{
+  "id": "hotspot-1",
+  "label": "Di vao trong",
+  "type": "nav",
+  "target_scene_id": "scene-2",
+  "lon": 12.5,
+  "lat": -8.2,
+  "audio_url": "/media/tours/hotspot_audio/v1/hotspot-1/audio.mp3"
+}
+```
 
-Đại diện cho ảnh panorama thật của một scene và trạng thái tile hóa ảnh. `scene_key` liên kết logic với `id` của scene nằm trong `TourVersion.data`.
+Luu y: audio tung hotspot hien khong phai mot model rieng. File duoc upload vao storage, con duong dan duoc luu trong `TourVersion.data` tai truong `hotspot.audio_url`.
 
-Tên bảng mặc định: `app_media_sceneasset`.
+Validation `data`:
 
-### Trạng thái xử lý
+- Gia tri goc phai la object.
+- Phai co `scenes` la list.
+- Moi scene phai la object va co `id`.
+- Scene id trong cung version khong duoc trung nhau.
 
-| Giá trị | Ý nghĩa |
-|---|---|
-| `pending` | Đã upload nhưng chưa bắt đầu xử lý. |
-| `processing` | Worker đang tạo tile. |
-| `done` | Xử lý hoàn tất. |
-| `failed` | Xử lý thất bại; xem `error_message`. |
+Quy tac:
 
-### Thuộc tính
+- Constraint `unique_tour_version_per_location`: mot location khong co hai version cung `version_number`.
+- Index `location + status`.
+- Mac dinh sap xep `-version_number`.
+- Khi tao moi, `version_number` duoc lay theo so lon nhat hien co cua location + 1 trong transaction.
+- Khi xoa version, cac `scene_assets` cua version cung bi xoa; file anh goc/tile cua `SceneAsset` cung duoc don.
 
-| Thuộc tính | Kiểu | Bắt buộc | Giải thích |
+## 6. `app_media.SceneAsset`
+
+Dai dien cho file panorama that cua mot scene va trang thai xu ly tile.
+
+Bang mac dinh: `app_media_sceneasset`
+
+| Truong | Kieu | Bat buoc | Giai thich |
 |---|---|---:|---|
-| `id` | AutoField | Có | Khóa chính. |
-| `tour_version` | ForeignKey(TourVersion) | Có | Version chứa scene. Xóa mềm version sẽ soft-cascade metadata scene. |
-| `scene_key` | CharField(100) | Có | ID ổn định của scene, khớp với scene trong JSON. |
-| `original_file` | ImageField | Có | File panorama gốc, lưu tại `media/scenes/originals/`. |
-| `original_width` | PositiveIntegerField | Không | Chiều rộng ảnh gốc theo pixel. |
-| `original_height` | PositiveIntegerField | Không | Chiều cao ảnh gốc theo pixel. |
-| `file_size` | PositiveBigIntegerField | Không | Kích thước file tính theo byte. |
-| `checksum_sha256` | CharField(64) | Không | Mã SHA-256 để kiểm tra trùng hoặc tính toàn vẹn file. Có index. |
-| `mime_type` | CharField(100) | Không | Loại nội dung, ví dụ `image/jpeg`. |
-| `tile_base_path` | CharField(500) | Không | Thư mục gốc chứa tile đã sinh. |
-| `max_zoom_level` | PositiveSmallIntegerField | Có | Cấp zoom lớn nhất. Mặc định `3`. |
-| `tile_size` | PositiveSmallIntegerField | Có | Kích thước cạnh của mỗi tile. Mặc định `512` pixel. |
-| `processing_status` | CharField(20) | Có | Trạng thái xử lý hiện tại. Mặc định `pending`. |
-| `celery_task_id` | CharField(255) | Không | ID task Celery đang hoặc đã xử lý ảnh. Có index. |
-| `retry_count` | PositiveSmallIntegerField | Có | Số lần worker thử xử lý lại. Mặc định `0`. |
-| `error_message` | TextField | Không | Chi tiết lỗi gần nhất nếu xử lý thất bại. |
-| `created_at` | DateTimeField | Tự động | Thời điểm tạo asset. |
-| `processing_started_at` | DateTimeField | Không | Thời điểm bắt đầu xử lý. |
-| `processed_at` | DateTimeField | Không | Thời điểm xử lý hoàn tất hoặc kết thúc. |
-| `updated_at` | DateTimeField | Tự động | Thời điểm cập nhật gần nhất. |
+| `id` | AutoField | Co | Khoa chinh. |
+| `tour_version` | ForeignKey(TourVersion) | Co | Version chua asset. |
+| `scene_key` | CharField(100) | Co | ID scene, khop voi `scene.id` trong `TourVersion.data`. |
+| `original_file` | ImageField | Co | Anh panorama goc, luu duoi `media/scenes/originals/`. |
+| `original_width` | PositiveIntegerField | Khong | Chieu rong anh goc. |
+| `original_height` | PositiveIntegerField | Khong | Chieu cao anh goc. |
+| `file_size` | PositiveBigIntegerField | Khong | Dung luong file theo byte. |
+| `checksum_sha256` | CharField(64) | Khong | Ma hash SHA-256, co index. |
+| `mime_type` | CharField(100) | Khong | MIME type, vi du `image/jpeg`. |
+| `tile_base_path` | CharField(500) | Khong | Thu muc tile da sinh. |
+| `max_zoom_level` | PositiveSmallIntegerField | Co | Zoom toi da. Mac dinh `3`. |
+| `tile_size` | PositiveSmallIntegerField | Co | Kich thuoc tile. Mac dinh `512`. |
+| `processing_status` | CharField(20) | Co | `pending`, `processing`, `done`, `failed`. |
+| `celery_task_id` | CharField(255) | Khong | ID Celery task, co index. |
+| `retry_count` | PositiveSmallIntegerField | Co | So lan retry. Mac dinh `0`. |
+| `error_message` | TextField | Khong | Loi xu ly gan nhat. |
+| `created_at` | DateTimeField | Tu dong | Thoi diem tao. |
+| `processing_started_at` | DateTimeField | Khong | Thoi diem bat dau xu ly. |
+| `processed_at` | DateTimeField | Khong | Thoi diem xu ly xong. |
+| `updated_at` | DateTimeField | Tu dong | Thoi diem cap nhat. |
 
-Constraint `unique_active_scene_key_per_tour_version` bảo đảm mỗi `scene_key` chỉ xuất hiện một lần trong các asset chưa xóa của một tour version.
+Constraint:
 
-## 6. `app_publishing.PublishConfig`
+- `unique_active_scene_key_per_tour_version`: moi `scene_key` chi co mot asset chua xoa trong cung version.
 
-Quản lý link public cố định của một location. Mỗi location chỉ có tối đa một PublishConfig chưa xóa, nhưng `published_version` có thể đổi để update hoặc rollback.
+Luu y quan trong:
 
-Tên bảng mặc định: `app_publishing_publishconfig`.
+- Khi `SceneAsset.delete()` duoc goi, ban ghi van xoa mem nhung file `original_file` va thu muc tile se bi xoa tren storage/local media.
+- Vi vay neu xoa version thi anh trong `media/scenes/originals/` cua version do cung duoc don theo.
 
-| Thuộc tính | Kiểu | Bắt buộc | Giải thích |
+## 7. `app_publishing.PublishConfig`
+
+Quan ly cau hinh publish public cua mot location.
+
+Bang mac dinh: `app_publishing_publishconfig`
+
+| Truong | Kieu | Bat buoc | Giai thich |
 |---|---|---:|---|
-| `id` | AutoField | Có | Khóa chính. |
-| `location` | ForeignKey(Location) | Có | Location được public. Constraint có điều kiện giới hạn một cấu hình chưa xóa cho mỗi location. |
-| `public_token` | CharField(64) | Tự sinh | Token duy nhất dùng trong URL public; không chỉnh trực tiếp. |
-| `published_version` | ForeignKey(TourVersion) | Không | Version đang được public. Soft delete bị chặn ở validation publish; `SET_NULL` chỉ áp dụng nếu version bị xóa vật lý ngoài ứng dụng. |
-| `is_active` | BooleanField | Có | Cho phép hoặc ngừng truy cập public. Mặc định `False`. |
-| `published_at` | DateTimeField | Không/Tự động | Lần đầu cấu hình được kích hoạt với một version. |
-| `published_by` | ForeignKey(User) | Không | Người thực hiện publish. User bị xóa thì trường thành `NULL`. |
-| `updated_at` | DateTimeField | Tự động | Thời điểm cập nhật cấu hình gần nhất. |
+| `id` | AutoField | Co | Khoa chinh. |
+| `location` | ForeignKey(Location) | Co | Location duoc publish. |
+| `public_token` | CharField(64) | Tu sinh | Token public duy nhat dung trong URL `/vr360/{token}/`. |
+| `published_version` | ForeignKey(TourVersion) | Khong | Version dang duoc public. |
+| `is_active` | BooleanField | Co | Bat/tat public. Mac dinh `False`. |
+| `published_at` | DateTimeField | Khong | Thoi diem publish lan dau. |
+| `published_by` | ForeignKey(User) | Khong | User thuc hien publish. |
+| `updated_at` | DateTimeField | Tu dong | Thoi diem cap nhat. |
 
-Quy tắc nghiệp vụ trong `clean()` và `save()`:
+Quy tac:
 
-- `is_active=True` bắt buộc phải có `published_version`.
-- Version được chọn phải thuộc đúng `location` của PublishConfig.
-- Không thể publish một TourVersion đã bị xóa mềm.
-- Token được sinh bằng `secrets.token_urlsafe(24)` và kiểm tra không trùng.
-- Khi kích hoạt lần đầu, `published_at` được đặt bằng thời gian hiện tại.
-- `save()` luôn gọi `full_clean()` trước khi ghi database.
+- Mot location chi co toi da mot PublishConfig chua xoa (`unique_active_publish_config_per_location`).
+- `is_active=True` bat buoc co `published_version`.
+- `published_version` phai thuoc dung `location`.
+- Khong publish version da xoa mem.
+- `regenerate_token()` sinh token moi.
+- Xoa PublishConfig se xoa mem whitelist domain, visit va daily stat lien quan.
 
-Phương thức hỗ trợ:
+## 8. `app_publishing.WhitelistDomain`
 
-- `regenerate_token()`: thu hồi token hiện tại và sinh token mới.
-- `public_url(base_url)`: ghép base URL với token thành `/vr360/{token}/`.
+Danh sach domain duoc phep truy cap tour public.
 
-Quan hệ ngược:
+Bang mac dinh: `app_publishing_whitelistdomain`
 
-- `publish_config.whitelist_domains.all()`
-- `publish_config.visits.all()`
-- `publish_config.daily_stats.all()`
-
-## 7. `app_publishing.WhitelistDomain`
-
-Danh sách domain được phép nhúng hoặc truy cập tour public của một PublishConfig.
-
-Tên bảng mặc định: `app_publishing_whitelistdomain`.
-
-| Thuộc tính | Kiểu | Bắt buộc | Giải thích |
+| Truong | Kieu | Bat buoc | Giai thich |
 |---|---|---:|---|
-| `id` | AutoField | Có | Khóa chính. |
-| `publish_config` | ForeignKey(PublishConfig) | Có | Cấu hình publish sở hữu whitelist. |
-| `domain` | CharField(255) | Có | Hostname được cho phép, có thể kèm port. |
-| `label` | CharField(100) | Không | Ghi chú dễ đọc cho quản trị viên. |
-| `is_active` | BooleanField | Có | Bật hoặc tắt domain mà không cần xóa. Mặc định `True`. |
-| `created_at` | DateTimeField | Tự động | Thời điểm thêm domain. |
+| `id` | AutoField | Co | Khoa chinh. |
+| `publish_config` | ForeignKey(PublishConfig) | Co | Cau hinh publish so huu domain. |
+| `domain` | CharField(255) | Co | Domain duoc cho phep, co the kem port, vi du `localhost:5174`. |
+| `label` | CharField(100) | Khong | Ghi chu hien thi. |
+| `is_active` | BooleanField | Co | Bat/tat domain. Mac dinh `True`. |
+| `created_at` | DateTimeField | Tu dong | Thoi diem them. |
 
-Chuẩn hóa domain:
+Quy tac:
 
-- Loại bỏ khoảng trắng và chuyển về chữ thường.
-- Loại bỏ protocol như `https://`.
-- Chuyển domain Unicode sang IDNA/Punycode khi cần.
-- Giữ lại port nếu người dùng khai báo.
-- Không chấp nhận path, query string hoặc fragment.
-- `save()` gọi `full_clean()` trước khi lưu.
+- Domain duoc chuan hoa ve hostname + port.
+- Khong chap nhan path/query/fragment.
+- Constraint `unique_active_domain_per_publish_config`.
 
-Constraint `unique_active_domain_per_publish_config` không cho phép trùng domain giữa các bản ghi chưa xóa trong cùng một PublishConfig.
+## 9. `app_analytics.TourVisit`
 
-## 8. `app_analytics.TourVisit`
+Luu tung luot truy cap tour public. Moi lan frontend goi:
 
-Lưu log chi tiết từng lượt truy cập tour public. Đây là dữ liệu nguồn để tính thống kê theo ngày.
+```text
+POST /api/public/tour/{public_token}/track-visit/
+```
 
-Tên bảng mặc định: `app_analytics_tourvisit`.
+thi backend tao mot ban ghi `TourVisit`.
 
-### Loại thiết bị
+Bang mac dinh: `app_analytics_tourvisit`
 
-- `mobile`: điện thoại.
-- `tablet`: máy tính bảng.
-- `desktop`: máy tính để bàn/laptop.
-- `other`: thiết bị chưa xác định.
-
-### Thuộc tính
-
-| Thuộc tính | Kiểu | Bắt buộc | Giải thích |
+| Truong | Kieu | Bat buoc | Giai thich |
 |---|---|---:|---|
-| `id` | AutoField | Có | Khóa chính. |
-| `publish_config` | ForeignKey(PublishConfig) | Có | Tour public nhận lượt truy cập. |
-| `visitor_hash` | CharField(64) | Có | Hash định danh visitor mà không lưu IP thô. Có index. |
-| `country_code` | CharField(2) | Không | Mã quốc gia ISO hai ký tự, ví dụ `VN`. |
-| `city` | CharField(100) | Không | Thành phố được suy ra từ IP/GeoIP. |
-| `device_type` | CharField(10) | Có | Nhóm thiết bị; mặc định `other`. |
-| `browser` | CharField(50) | Không | Trình duyệt đã chuẩn hóa. |
-| `os` | CharField(50) | Không | Hệ điều hành đã chuẩn hóa. |
-| `referrer_domain` | CharField(255) | Không | Domain giới thiệu người dùng đến tour. |
-| `visited_at` | DateTimeField | Tự động | Thời điểm truy cập. Có index. |
+| `id` | AutoField | Co | Khoa chinh. |
+| `publish_config` | ForeignKey(PublishConfig) | Co | Tour public duoc truy cap. |
+| `visitor_hash` | CharField(64) | Co | Hash visitor, khong luu IP tho. Co index. |
+| `country_code` | CharField(2) | Khong | Ma quoc gia. |
+| `city` | CharField(100) | Khong | Thanh pho neu co. |
+| `device_type` | CharField(10) | Co | `mobile`, `tablet`, `desktop`, `other`. |
+| `browser` | CharField(50) | Khong | Trinh duyet. |
+| `os` | CharField(50) | Khong | He dieu hanh. |
+| `referrer_domain` | CharField(255) | Khong | Domain gioi thieu. |
+| `visited_at` | DateTimeField | Tu dong | Thoi diem truy cap. Co index. |
 
-Các index kết hợp hỗ trợ truy vấn thống kê theo:
+Index:
 
-- PublishConfig và thời gian.
-- PublishConfig và quốc gia.
-- PublishConfig và thiết bị.
-- PublishConfig và referrer.
+- `publish_config + visited_at`
+- `publish_config + country_code`
+- `publish_config + device_type`
+- `publish_config + referrer_domain`
 
-Khi xóa mềm PublishConfig, toàn bộ visit đang hoạt động liên quan cũng được xóa mềm.
+## 10. `app_analytics.DailyStat`
 
-## 9. `app_analytics.DailyStat`
+Bang tong hop thong ke theo ngay.
 
-Bảng tổng hợp thống kê theo ngày để dashboard không phải quét toàn bộ TourVisit ở mỗi request.
+Bang mac dinh: `app_analytics_dailystat`
 
-Tên bảng mặc định: `app_analytics_dailystat`.
-
-| Thuộc tính | Kiểu | Bắt buộc | Giải thích |
+| Truong | Kieu | Bat buoc | Giai thich |
 |---|---|---:|---|
-| `id` | AutoField | Có | Khóa chính. |
-| `publish_config` | ForeignKey(PublishConfig) | Có | Tour public được thống kê. |
-| `date` | DateField | Có | Ngày thống kê theo timezone dự án. |
-| `total_visits` | PositiveIntegerField | Có | Tổng số lượt truy cập trong ngày. |
-| `unique_visitors` | PositiveIntegerField | Có | Số visitor duy nhất trong ngày. |
-| `country_breakdown` | JSONField | Có | Thống kê theo quốc gia, ví dụ `{"VN": 120}`. |
-| `device_breakdown` | JSONField | Có | Thống kê theo thiết bị, ví dụ `{"mobile": 80}`. |
-| `referrer_breakdown` | JSONField | Có | Thống kê theo domain giới thiệu. |
+| `id` | AutoField | Co | Khoa chinh. |
+| `publish_config` | ForeignKey(PublishConfig) | Co | Tour public duoc thong ke. |
+| `date` | DateField | Co | Ngay thong ke. |
+| `total_visits` | PositiveIntegerField | Co | Tong luot truy cap. |
+| `unique_visitors` | PositiveIntegerField | Co | So visitor duy nhat. |
+| `country_breakdown` | JSONField | Co | Thong ke theo quoc gia. |
+| `device_breakdown` | JSONField | Co | Thong ke theo thiet bi. |
+| `referrer_breakdown` | JSONField | Co | Thong ke theo referrer. |
 
-Constraint `unique_active_daily_stat_per_publish_config` bảo đảm một PublishConfig chỉ có một bản tổng hợp chưa xóa cho mỗi ngày. Dữ liệu mặc định sắp xếp theo ngày giảm dần.
+Constraint:
 
-## 10. `app_dashboard.ActivityLog`
+- `unique_active_daily_stat_per_publish_config`: moi publish config chi co mot daily stat chua xoa cho moi ngay.
 
-Lưu hoạt động nghiệp vụ gần đây để phục vụ dashboard và audit nhẹ, ví dụ tạo version, publish, rollback hoặc thay đổi project.
+## 11. `app_dashboard.ActivityLog`
 
-Tên bảng mặc định: `app_dashboard_activitylog`.
+Luu log hoat dong he thong.
 
-| Thuộc tính | Kiểu | Bắt buộc | Giải thích |
+Bang mac dinh: `app_dashboard_activitylog`
+
+| Truong | Kieu | Bat buoc | Giai thich |
 |---|---|---:|---|
-| `id` | AutoField | Có | Khóa chính. |
-| `actor` | ForeignKey(User) | Không | Người thực hiện hành động. User bị xóa thì giữ log và đặt actor thành `NULL`. |
-| `action` | CharField(100) | Có | Mã hành động, ví dụ `tour.created` hoặc `location.published`. |
-| `entity_type` | CharField(100) | Có | Loại đối tượng bị tác động, ví dụ `TourVersion`. |
-| `entity_id` | CharField(100) | Có | ID đối tượng dưới dạng chuỗi, hỗ trợ cả integer và UUID. |
-| `description` | CharField(500) | Không | Nội dung mô tả dễ đọc. |
-| `metadata` | JSONField | Có | Dữ liệu mở rộng tùy hành động. Mặc định `{}`. |
-| `created_at` | DateTimeField | Tự động | Thời điểm ghi nhận hoạt động. Có index. |
+| `id` | AutoField | Co | Khoa chinh. |
+| `actor` | ForeignKey(User) | Khong | User thuc hien hanh dong. |
+| `action` | CharField(100) | Co | Ma hanh dong, vi du `tour.created`. |
+| `entity_type` | CharField(100) | Co | Loai doi tuong bi tac dong. |
+| `entity_id` | CharField(100) | Co | ID doi tuong dang chuoi. |
+| `description` | CharField(500) | Khong | Mo ta de doc. |
+| `metadata` | JSONField | Co | Du lieu phu dang JSON. Mac dinh `{}`. |
+| `created_at` | DateTimeField | Tu dong | Thoi diem tao log. Co index. |
 
-Model có index kết hợp `entity_type + entity_id` để tìm lịch sử của một đối tượng. Dữ liệu mặc định sắp xếp mới nhất trước.
+Mac dinh sap xep `-created_at`, co index `entity_type + entity_id`.
 
-## 11. Các app không có model riêng
+## 12. Cac app khong co model rieng
 
 ### `app_auth`
 
-Hiện sử dụng `django.contrib.auth` và model `auth.User` mặc định của Django. App này chịu trách nhiệm cho login, refresh token, logout, thông tin user và đổi mật khẩu; chưa định nghĩa user model tùy chỉnh.
+Dung `django.contrib.auth.models.User` mac dinh. App nay xu ly login, refresh token, logout, `/me/`, doi mat khau va role/permission.
 
 ### `app_public`
 
-Không lưu bảng riêng. App đọc dữ liệu từ `PublishConfig`, `TourVersion`, `SceneAsset` và ghi lượt truy cập thông qua `TourVisit`.
+Khong co bang rieng. Doc du lieu tu `PublishConfig`, `TourVersion`, `SceneAsset` va ghi visit vao `TourVisit`.
 
-### `app_api_gate_way`
+### `backend`
 
-Chỉ là tầng tổng hợp URL, không phải domain dữ liệu và không có model.
+Chua co model nghiep vu rieng, nhung co `SoftDeleteModel`, manager va queryset dung chung.
 
-## 12. Lưu ý khi làm việc với model
+## 13. Ghi chu khi thay doi model
 
-- Thay đổi field, constraint hoặc index phải chạy `python manage.py makemigrations` và `python manage.py migrate`.
-- Validation trong `clean()` không tự chạy khi dùng `QuerySet.update()` hoặc `bulk_create()`.
-- Không dùng `QuerySet.update(is_deleted=True)` thay cho `delete()`, vì cách đó bỏ qua soft-cascade và không tự ghi `deleted_at`.
-- Dùng manager `all_objects` khi xây dựng màn hình thùng rác hoặc chức năng khôi phục.
-- `ImageField` lưu đường dẫn trong database; file thật nằm trong `MEDIA_ROOT` hoặc storage được cấu hình.
-- Soft delete giữ nguyên file của `ImageField` để có thể khôi phục. Nếu cần xóa vĩnh viễn sau thời hạn lưu trữ, phải có tác vụ dọn file và dữ liệu riêng.
-- Các trường audit như `created_by` và `published_by` nên được gán từ `request.user` ở view/service, không nhận trực tiếp từ client.
-- Trạng thái publish, archive và xử lý scene nên thay đổi qua service nghiệp vụ để đảm bảo nhiều bảng luôn nhất quán.
+- Neu thay doi field/constraint/index thi chay:
+
+```bash
+python manage.py makemigrations
+python manage.py migrate
+```
+
+- `ImageField` va `FileField` chi luu duong dan file trong PostgreSQL; file that nam trong `MEDIA_ROOT` hoac cloud storage neu cau hinh.
+- `background_audio`, `hotspot_point_logo`, `thumbnail`, `original_file` deu la duong dan file, khong phai blob luu truc tiep trong PostgreSQL.
+- Audio tung hotspot hien duoc luu duong dan trong `TourVersion.data`, khong co bang rieng.
+- Khong dung `QuerySet.update(is_deleted=True)` de xoa, vi se bo qua soft-cascade va `deleted_at`.
+- Khi can xem/thung rac/khoi phuc ban ghi da xoa, dung `Model.all_objects`.

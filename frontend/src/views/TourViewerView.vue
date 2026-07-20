@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 
 import PanoramaViewer from '../components/PanoramaViewer.vue';
@@ -20,11 +20,14 @@ const selectedLocationId = ref('');
 const selectedVersionId = ref('');
 const version = ref(null);
 const scenes = ref([]);
+const panoramaRef = ref(null);
 const activeSceneId = ref('');
 const sidebarOpen = ref(false);
 const thumbsOpen = ref(true);
 const errorMessage = ref('');
 const selectedPointHotspot = ref(null);
+const isTransitioning = ref(false);
+const transitionMessage = ref('');
 const backgroundAudioPlaying = ref(false);
 const backgroundAudioBlocked = ref(false);
 const sceneAudioBlocked = ref(false);
@@ -71,6 +74,58 @@ function resolveSceneImage(scene) {
   return resolveUrl(scene.image_url || scene.original_file || scene.thumbnail || scene.thumb || scene.panorama || '');
 }
 
+function sleep(ms) {
+  return new Promise((resolve) => {
+    window.setTimeout(resolve, ms);
+  });
+}
+
+function preloadImage(url) {
+  if (!url) return Promise.resolve();
+  return new Promise((resolve) => {
+    const image = new Image();
+    image.onload = resolve;
+    image.onerror = resolve;
+    image.src = url;
+  });
+}
+
+function disposeAudio(player) {
+  if (!player) return;
+  try {
+    player.pause();
+    player.currentTime = 0;
+    player.removeAttribute('src');
+    player.load();
+  } catch {
+    // Audio cleanup should never block changing tour/scene.
+  }
+}
+
+function stopHotspotAudio() {
+  disposeAudio(hotspotAudioPlayer);
+  hotspotAudioPlayer = null;
+}
+
+function stopSceneAudio() {
+  disposeAudio(sceneAudioPlayer);
+  sceneAudioPlayer = null;
+  sceneAudioBlocked.value = false;
+}
+
+function stopBackgroundAudio() {
+  disposeAudio(backgroundAudioPlayer);
+  backgroundAudioPlayer = null;
+  backgroundAudioPlaying.value = false;
+  backgroundAudioBlocked.value = false;
+}
+
+function stopTourAudio() {
+  stopHotspotAudio();
+  stopSceneAudio();
+  stopBackgroundAudio();
+}
+
 function normalizeScene(scene, index = 0) {
   return {
     id: String(scene.id || scene.key || scene.scene_key || `scene-${index + 1}`),
@@ -107,6 +162,7 @@ function normalizeTourData(data) {
 }
 
 function applyTourPayload(payload) {
+  stopTourAudio();
   version.value = payload.version || payload;
   scenes.value = normalizeTourData(payload.data || payload);
   activeSceneId.value = scenes.value[0]?.id || '';
@@ -121,9 +177,12 @@ function getSceneAudioUrl(scene) {
 }
 
 async function tryPlayBackgroundAudio() {
-  if (!backgroundAudioUrl.value) return;
+  if (!backgroundAudioUrl.value) {
+    stopBackgroundAudio();
+    return;
+  }
   if (!backgroundAudioPlayer || backgroundAudioPlayer.src !== backgroundAudioUrl.value) {
-    backgroundAudioPlayer?.pause();
+    stopBackgroundAudio();
     backgroundAudioPlayer = new Audio(backgroundAudioUrl.value);
     backgroundAudioPlayer.loop = true;
     backgroundAudioPlayer.volume = 0.55;
@@ -205,6 +264,7 @@ async function loadVersionsForLocation() {
 async function loadVersionDetail() {
   if (!selectedLocationId.value || !selectedVersionId.value) return;
   errorMessage.value = '';
+  stopTourAudio();
   try {
     const response = await getVersion(selectedLocationId.value, selectedVersionId.value);
     applyTourPayload(response.data);
@@ -217,6 +277,7 @@ async function loadVersionDetail() {
 
 async function loadPublishedTourByToken(publicToken) {
   if (!publicToken) return false;
+  stopTourAudio();
   const response = await getPublicTour(publicToken);
   applyTourPayload(response.data);
   await playActiveSceneAudio();
@@ -276,6 +337,8 @@ async function loadPublishedFallback() {
 }
 
 async function changeProject() {
+  stopTourAudio();
+  selectedPointHotspot.value = null;
   selectedLocationId.value = '';
   selectedVersionId.value = '';
   locations.value = [];
@@ -287,6 +350,8 @@ async function changeProject() {
 }
 
 async function changeLocation() {
+  stopTourAudio();
+  selectedPointHotspot.value = null;
   selectedVersionId.value = '';
   versions.value = [];
   scenes.value = [];
@@ -295,12 +360,12 @@ async function changeLocation() {
 }
 
 async function playActiveSceneAudio() {
+  stopSceneAudio();
   const audioUrl = getSceneAudioUrl(activeScene.value);
   if (!audioUrl) {
     sceneAudioBlocked.value = false;
     return;
   }
-  sceneAudioPlayer?.pause();
   sceneAudioPlayer = new Audio(audioUrl);
   try {
     await sceneAudioPlayer.play();
@@ -310,11 +375,34 @@ async function playActiveSceneAudio() {
   }
 }
 
-function goToScene(sceneId) {
-  activeSceneId.value = sceneId;
-  sidebarOpen.value = false;
+async function goToScene(sceneId, options = {}) {
+  if (!sceneId || isTransitioning.value) return;
+  const targetScene = scenes.value.find((scene) => scene.id === sceneId);
+  if (!targetScene) return;
+  const isSameScene = sceneId === activeSceneId.value;
+  if (isSameScene && !options.force) return;
+
+  isTransitioning.value = true;
+  transitionMessage.value = targetScene.name || 'Loading scene';
   selectedPointHotspot.value = null;
-  playActiveSceneAudio();
+  stopHotspotAudio();
+  stopSceneAudio();
+
+  const targetImageUrl = resolveSceneImage(targetScene);
+  const entryView = options.targetView || targetScene.view || targetScene.initialView || { lon: 0, lat: 0, fov: 75 };
+
+  try {
+    await preloadImage(targetImageUrl);
+    activeSceneId.value = sceneId;
+    sidebarOpen.value = false;
+    await nextTick();
+    await panoramaRef.value?.animateToView?.(entryView, 180);
+    await playActiveSceneAudio();
+  } finally {
+    await sleep(80);
+    isTransitioning.value = false;
+    transitionMessage.value = '';
+  }
 }
 
 function goNext() {
@@ -338,19 +426,25 @@ function getNextSceneId() {
 function playHotspotAudio(hotspot) {
   const audioUrl = resolveUrl(hotspot.audio_url || hotspot.audio || '');
   if (!audioUrl) return;
-  hotspotAudioPlayer?.pause();
+  stopHotspotAudio();
   hotspotAudioPlayer = new Audio(audioUrl);
   hotspotAudioPlayer.play().catch(() => {
-    errorMessage.value = 'Could not play hotspot audio.';
+    // Some browsers reject overlapping/autoplay audio promises even when another tour audio is playing.
+    // Keep viewer clean; the next user interaction can play audio again.
   });
 }
 
-function onHotspotClick(hotspot) {
+async function onHotspotClick(hotspot) {
+  if (isTransitioning.value) return;
+  errorMessage.value = '';
   selectedPointHotspot.value = null;
   playHotspotAudio(hotspot);
   const targetId = hotspot.target_scene_id;
   if (targetId && scenes.value.some((scene) => scene.id === targetId)) {
-    goToScene(targetId);
+    await goToScene(targetId, {
+      hotspot,
+      targetView: hotspot.target_view || hotspot.view,
+    });
     return;
   }
 
@@ -358,7 +452,7 @@ function onHotspotClick(hotspot) {
 
   const fallbackSceneId = getNextSceneId();
   if (fallbackSceneId) {
-    goToScene(fallbackSceneId);
+    await goToScene(fallbackSceneId, { hotspot });
   }
 }
 
@@ -370,8 +464,10 @@ function updateViewState(value) {
 
 async function boot() {
   errorMessage.value = '';
+  const hasPublicToken = Boolean(route.query.token || route.query.public_token);
+  const hasPrivateSelection = Boolean(route.query.project || route.query.location || route.query.version);
 
-  if (route.query.token || route.query.public_token || route.query.project || route.query.location || route.query.version) {
+  if (hasPublicToken) {
     try {
       await loadPublishedFallback();
       errorMessage.value = '';
@@ -383,24 +479,28 @@ async function boot() {
     }
   }
 
-  try {
-    await loadProject();
-    await loadLocation();
-    await loadVersionsForLocation();
-    await loadVersionDetail();
+  if (!hasPublicToken || hasPrivateSelection) {
+    try {
+      await loadProject();
+      await loadLocation();
+      await loadVersionsForLocation();
+      await loadVersionDetail();
 
-    if (scenes.value.length) return;
-  } catch (error) {
-    errorMessage.value = error.response?.data?.detail || 'Could not load private tour data.';
+      if (scenes.value.length || projects.value.length) return;
+    } catch (error) {
+      errorMessage.value = error.response?.data?.detail || 'Could not load private tour data.';
+    }
   }
 
-  try {
-    await loadPublishedFallback();
-    errorMessage.value = '';
-  } catch (error) {
-    errorMessage.value = error.response?.data?.detail
-      || error.message
-      || 'Could not load published tour data.';
+  if (!hasPrivateSelection) {
+    try {
+      await loadPublishedFallback();
+      errorMessage.value = '';
+    } catch (error) {
+      errorMessage.value = error.response?.data?.detail
+        || error.message
+        || 'Could not load published tour data.';
+    }
   }
 }
 
@@ -414,14 +514,7 @@ function goBack() {
 
 onMounted(boot);
 
-onBeforeUnmount(() => {
-  hotspotAudioPlayer?.pause();
-  hotspotAudioPlayer = null;
-  sceneAudioPlayer?.pause();
-  sceneAudioPlayer = null;
-  backgroundAudioPlayer?.pause();
-  backgroundAudioPlayer = null;
-});
+onBeforeUnmount(stopTourAudio);
 </script>
 
 <template>
@@ -450,6 +543,7 @@ onBeforeUnmount(() => {
     <p v-if="errorMessage" class="viewer-error">{{ errorMessage }}</p>
 
     <PanoramaViewer
+      ref="panoramaRef"
       class="tour-panorama"
       :image-url="sceneImage"
       :hotspots="displayHotspots"
@@ -462,6 +556,13 @@ onBeforeUnmount(() => {
       @hotspot-click="onHotspotClick"
       @view-change="updateViewState"
     />
+
+    <div class="viewer-transition-overlay" :class="{ active: isTransitioning }">
+      <div class="viewer-transition-card">
+        <span></span>
+        <strong>{{ transitionMessage || 'Loading scene' }}</strong>
+      </div>
+    </div>
 
     <button
       v-if="backgroundAudioUrl"

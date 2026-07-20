@@ -915,13 +915,16 @@ onBeforeUnmount(() => {
           <span>{{ scenes.length }}</span>
         </div>
 
-        <button
+        <article
           v-for="(scene, index) in scenes"
           :key="scene.id"
           class="scene-list-item"
           :class="{ active: scene.id === activeSceneId }"
-          type="button"
+          role="button"
+          tabindex="0"
           @click="selectScene(scene.id)"
+          @keydown.enter.prevent="selectScene(scene.id)"
+          @keydown.space.prevent="selectScene(scene.id)"
         >
           <span class="scene-index">{{ index + 1 }}</span>
           <span class="scene-thumb" :style="resolveSceneImage(scene) ? { backgroundImage: `url(${resolveSceneImage(scene)})` } : {}"></span>
@@ -929,7 +932,16 @@ onBeforeUnmount(() => {
             <strong>{{ scene.name || scene.id }}</strong>
             <small>{{ scene.hotspots?.length || 0 }} hotspot · {{ scene.group || 'Default' }}</small>
           </span>
-        </button>
+          <button
+            class="scene-delete-button"
+            type="button"
+            title="Delete scene"
+            aria-label="Delete scene"
+            @click.stop="removeScene(scene.id)"
+          >
+            🗑
+          </button>
+        </article>
 
         <button class="drop-zone-button" type="button" @click="triggerAddImage">
           + Keo tha hoac click de them anh 360°

@@ -329,7 +329,7 @@ async function submitVersion() {
   successMessage.value = '';
   try {
     const label = versionForm.label.trim() || `${selectedLocation.value?.name || 'Tour'} draft`;
-    const response = await createVersion(selectedLocationId.value, {
+    await createVersion(selectedLocationId.value, {
       label,
       changelog: 'Created from Projects flow.',
       data: {
@@ -342,10 +342,6 @@ async function submitVersion() {
     closeVersionModal();
     successMessage.value = 'Version created.';
     await loadVersionsForLocation();
-    const created = versions.value.find((item) => item.id === response.data.id);
-    if (created) {
-      openBuilder(created);
-    }
   } catch (error) {
     errorMessage.value = extractApiError(error, 'Could not create version.');
   }
@@ -505,7 +501,6 @@ onBeforeUnmount(() => {
         </article>
         <div v-if="selectedLocation && !versions.length && !loadingVersions" class="empty-flow-card">
           <p class="muted">No version yet.</p>
-          <button class="primary-button" type="button" @click="openBuilder()">Create in Builder</button>
         </div>
       </div>
     </section>
