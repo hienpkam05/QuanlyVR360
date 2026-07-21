@@ -213,6 +213,43 @@ class HotspotAudioUploadView(APIView):
         )
 
 
+class HotspotInfoImageUploadView(APIView):
+    parser_classes = (MultiPartParser, FormParser)
+
+    def post(self, request, location_id, pk):
+        version = get_object_or_404(TourVersion.objects.select_related("location"), pk=pk, location_id=location_id)
+        if version.status == TourVersion.Status.PUBLISHED:
+            return Response(
+                {"detail": "Published tour versions cannot be edited. Archive or create a new draft first."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        image_file = request.FILES.get("image")
+        hotspot_id = request.data.get("hotspot_id") or "hotspot"
+        if not image_file:
+            return Response({"image": "Image file is required."}, status=status.HTTP_400_BAD_REQUEST)
+
+        content_type = image_file.content_type or ""
+        if content_type and not content_type.startswith("image/"):
+            return Response({"image": "Only image files are allowed."}, status=status.HTTP_400_BAD_REQUEST)
+
+        safe_hotspot = slugify(str(hotspot_id)) or "hotspot"
+        safe_name = slugify(str(image_file.name).rsplit(".", 1)[0]) or "image"
+        extension = str(image_file.name).rsplit(".", 1)[-1].lower() if "." in str(image_file.name) else "jpg"
+        path = default_storage.save(
+            f"tours/hotspot_info/v{version.pk}/{safe_hotspot}/{safe_name}-{uuid4().hex[:8]}.{extension}",
+            image_file,
+        )
+        url = default_storage.url(path)
+        return Response(
+            {
+                "image_url": request.build_absolute_uri(url),
+                "image_path": url,
+            },
+            status=status.HTTP_201_CREATED,
+        )
+
+
 class TourVersionCompareView(APIView):
     def get(self, request, location_id):
         location = get_object_or_404(Location.objects.select_related("project"), pk=location_id)

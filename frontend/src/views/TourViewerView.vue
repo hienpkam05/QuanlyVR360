@@ -34,6 +34,7 @@ const transitionMessage = ref('');
 const backgroundAudioPlaying = ref(false);
 const backgroundAudioBlocked = ref(false);
 const sceneAudioBlocked = ref(false);
+const selectedInfoHotspot = ref(null);
 const viewState = reactive({ lon: 0, lat: 0, fov: 75 });
 let hotspotAudioPlayer = null;
 let backgroundAudioPlayer = null;
@@ -53,8 +54,16 @@ const displayHotspots = computed(() => {
     const targetScene = scenes.value.find((item) => item.id === hotspot.target_scene_id);
     return {
       ...hotspot,
-      preview_image: resolveSceneImage(targetScene || scene),
+      preview_image:
+        ['info', 'info_area'].includes(hotspot.type)
+          ? resolveUrl(hotspot.info?.image_url || hotspot.image_url || '') || resolveSceneImage(targetScene || scene)
+          : resolveSceneImage(targetScene || scene),
       audio_url: resolveUrl(hotspot.audio_url || hotspot.audio || ''),
+      info: {
+        title: hotspot.info?.title || hotspot.info_title || hotspot.label || '',
+        description: hotspot.info?.description || hotspot.info_description || hotspot.description || '',
+        image_url: resolveUrl(hotspot.info?.image_url || hotspot.info_image_url || hotspot.image_url || ''),
+      },
     };
   });
 });
@@ -148,13 +157,27 @@ function normalizeScene(scene, index = 0) {
     hotspots: (scene.hotspots || []).map((hotspot, hotspotIndex) => ({
       id: String(hotspot.id || `hotspot-${index + 1}-${hotspotIndex + 1}`),
       label: hotspot.label || hotspot.title || `Hotspot ${hotspotIndex + 1}`,
-      type: ['nav', 'point'].includes(hotspot.type) ? hotspot.type : hotspot.type === 'navigate' ? 'nav' : 'point',
+      type: ['nav', 'point', 'info', 'info_area'].includes(hotspot.type) ? hotspot.type : hotspot.type === 'navigate' ? 'nav' : 'point',
       target_scene_id: String(hotspot.target_scene_id || hotspot.target || hotspot.scene_id || ''),
       lon: Number(hotspot.lon ?? 0),
       lat: Number(hotspot.lat ?? 0),
       x: Number(hotspot.x ?? 50),
       y: Number(hotspot.y ?? 50),
       audio_url: hotspot.audio_url || hotspot.audio || '',
+      area_points: Array.isArray(hotspot.area_points)
+        ? hotspot.area_points.map((point) => ({
+          lon: Number(point.lon ?? 0),
+          lat: Number(point.lat ?? 0),
+          x: Number(point.x ?? 50),
+          y: Number(point.y ?? 50),
+        }))
+        : [],
+      info: {
+        title: hotspot.info?.title || hotspot.info_title || '',
+        description: hotspot.info?.description || hotspot.info_description || hotspot.description || '',
+        image_url: hotspot.info?.image_url || hotspot.info_image_url || hotspot.image_url || '',
+      },
+      glow: hotspot.glow ?? hotspot.style?.glow ?? true,
     })),
   };
 }
@@ -170,6 +193,7 @@ function applyTourPayload(payload) {
   version.value = payload.version || payload;
   scenes.value = normalizeTourData(payload.data || payload);
   activeSceneId.value = scenes.value[0]?.id || '';
+  selectedInfoHotspot.value = null;
 }
 
 function getSceneAudioUrl(scene) {
@@ -390,6 +414,7 @@ async function loadPublishedFallback() {
 async function changeProject() {
   stopTourAudio();
   selectedPointHotspot.value = null;
+  selectedInfoHotspot.value = null;
   if (isPublicViewerMode.value) {
     selectedLocationId.value = '';
     selectedVersionId.value = '';
@@ -411,6 +436,7 @@ async function changeProject() {
 async function changeLocation() {
   stopTourAudio();
   selectedPointHotspot.value = null;
+  selectedInfoHotspot.value = null;
   if (isPublicViewerMode.value) {
     selectedVersionId.value = '';
     scenes.value = [];
@@ -451,6 +477,7 @@ async function goToScene(sceneId, options = {}) {
   isTransitioning.value = true;
   transitionMessage.value = targetScene.name || 'Loading scene';
   selectedPointHotspot.value = null;
+  selectedInfoHotspot.value = null;
   stopHotspotAudio();
   stopSceneAudio();
 
@@ -504,6 +531,14 @@ async function onHotspotClick(hotspot) {
   if (isTransitioning.value) return;
   errorMessage.value = '';
   selectedPointHotspot.value = null;
+  selectedInfoHotspot.value = null;
+
+  if (['info', 'info_area'].includes(hotspot.type)) {
+    selectedInfoHotspot.value = hotspot;
+    playHotspotAudio(hotspot);
+    return;
+  }
+
   playHotspotAudio(hotspot);
   const targetId = hotspot.target_scene_id;
   if (targetId && scenes.value.some((scene) => scene.id === targetId)) {
@@ -665,6 +700,30 @@ onBeforeUnmount(stopTourAudio);
         <strong>{{ selectedPointHotspot.label || 'Hotspot' }}</strong>
         <p>{{ activeScene?.description || 'Point info trong tour 360.' }}</p>
       </div>
+    </div>
+
+    <div
+      v-if="selectedInfoHotspot"
+      class="viewer-info-modal-backdrop"
+      @click.self="selectedInfoHotspot = null"
+    >
+      <article class="viewer-info-modal">
+        <button class="viewer-info-close" type="button" @click="selectedInfoHotspot = null">×</button>
+        <span
+          v-if="selectedInfoHotspot.info?.image_url"
+          class="viewer-info-image"
+          :style="{ backgroundImage: `url(${selectedInfoHotspot.info.image_url})` }"
+        ></span>
+        <small>INFO HOTSPOT</small>
+        <h2>{{ selectedInfoHotspot.info?.title || selectedInfoHotspot.label || 'Information' }}</h2>
+        <p>
+          {{
+            selectedInfoHotspot.info?.description ||
+            selectedInfoHotspot.description ||
+            'No information has been added for this hotspot yet.'
+          }}
+        </p>
+      </article>
     </div>
 
     <aside class="viewer-sidebar" :class="{ open: sidebarOpen }">

@@ -42,6 +42,13 @@ export function uploadHotspotAudio(locationId, versionId, { hotspotId, audioFile
   return http.post(`/api/locations/${locationId}/versions/${versionId}/hotspot-audio/`, formData);
 }
 
+export function uploadHotspotInfoImage(locationId, versionId, { hotspotId, imageFile }) {
+  const formData = new FormData();
+  formData.append('hotspot_id', hotspotId);
+  formData.append('image', imageFile);
+  return http.post(`/api/locations/${locationId}/versions/${versionId}/hotspot-info-image/`, formData);
+}
+
 export function deleteVersion(locationId, versionId) {
   return http.delete(`/api/locations/${locationId}/versions/${versionId}/`);
 }

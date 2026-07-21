@@ -20,6 +20,7 @@ import {
   listVersions,
   updateVersion,
   uploadHotspotAudio,
+  uploadHotspotInfoImage,
 } from "../api/toursApi";
 
 const router = useRouter();
@@ -43,6 +44,8 @@ const showImportModal = ref(false);
 const showExportModal = ref(false);
 const showQuickCreateModal = ref(false);
 const isPlacingHotspot = ref(false);
+const isDrawingInfoArea = ref(false);
+const infoAreaDraftPoints = ref([]);
 const fileInput = ref(null);
 const quickLocation = ref([]);
 const quickVersions = ref([]);
@@ -64,6 +67,10 @@ const hotspotForm = reactive({
   lon: 0,
   lat: 0,
   audio_url: "",
+  info_title: "",
+  info_description: "",
+  info_image_url: "",
+  glow: true,
 });
 const viewState = reactive({ lon: 0, lat: 0, fov: 75 });
 const importText = ref("");
@@ -111,6 +118,23 @@ const activeInitialView = computed(
 const targetSceneOptions = computed(() =>
   scenes.value.filter((scene) => scene.id !== activeScene.value?.id),
 );
+const activeSceneHotspots = computed(() => {
+  const baseHotspots = activeScene.value?.hotspots || [];
+  if (!isDrawingInfoArea.value || !infoAreaDraftPoints.value.length) {
+    return baseHotspots;
+  }
+  return [
+    ...baseHotspots,
+    {
+      id: "__draft_info_area__",
+      label: "Draft info area",
+      type: "info_area",
+      area_points: infoAreaDraftPoints.value,
+      info: { title: "Draft info area", description: "", image_url: "" },
+      isDraft: true,
+    },
+  ];
+});
 const tourData = computed(() => ({
   ...(version.value?.data || {}),
   title: version.value?.label || version.value?.data?.title || "VR360 Tour",
@@ -119,7 +143,12 @@ const tourData = computed(() => ({
     return {
       ...payload,
       hotspots: (payload.hotspots || []).map((hotspot) => {
-        const { local_audio_file, ...hotspotPayload } = hotspot;
+        const {
+          local_audio_file,
+          local_info_image_file,
+          local_info_image_preview,
+          ...hotspotPayload
+        } = hotspot;
         return hotspotPayload;
       }),
     };
@@ -223,7 +252,9 @@ function normalizeScene(scene, index = 0) {
     hotspots: (scene.hotspots || []).map((hotspot, hotspotIndex) => ({
       id: String(hotspot.id || uid("hotspot")),
       label: hotspot.label || hotspot.title || `Hotspot ${hotspotIndex + 1}`,
-      type: ["nav", "point"].includes(hotspot.type || hotspot.action)
+      type: ["nav", "point", "info", "info_area"].includes(
+        hotspot.type || hotspot.action,
+      )
         ? hotspot.type || hotspot.action
         : (hotspot.type || hotspot.action) === "navigate"
           ? "nav"
@@ -237,6 +268,33 @@ function normalizeScene(scene, index = 0) {
       lat: Number(hotspot.lat ?? 0),
       audio_url: hotspot.audio_url || hotspot.audio || "",
       local_audio_file: hotspot.local_audio_file || null,
+      local_info_image_file: hotspot.local_info_image_file || null,
+      local_info_image_preview: hotspot.local_info_image_preview || "",
+      area_points: Array.isArray(hotspot.area_points)
+        ? hotspot.area_points.map((point) => ({
+            lon: Number(point.lon ?? 0),
+            lat: Number(point.lat ?? 0),
+            x: Math.round(Number(point.x ?? 50)),
+            y: Math.round(Number(point.y ?? 50)),
+          }))
+        : [],
+      info: {
+        title:
+          hotspot.info?.title ||
+          hotspot.info_title ||
+          (hotspot.type === "info" ? hotspot.title || hotspot.label || "" : ""),
+        description:
+          hotspot.info?.description ||
+          hotspot.info_description ||
+          hotspot.description ||
+          "",
+        image_url:
+          hotspot.info?.image_url ||
+          hotspot.info_image_url ||
+          hotspot.image_url ||
+          "",
+      },
+      glow: hotspot.glow ?? hotspot.style?.glow ?? true,
     })),
   };
 }
@@ -367,12 +425,18 @@ function hydrateHotspotForm(hotspot) {
   hotspotForm.lon = Math.round(Number(hotspot?.lon ?? 0) * 10) / 10;
   hotspotForm.lat = Math.round(Number(hotspot?.lat ?? 0) * 10) / 10;
   hotspotForm.audio_url = hotspot?.audio_url || "";
+  hotspotForm.info_title = hotspot?.info?.title || "";
+  hotspotForm.info_description = hotspot?.info?.description || "";
+  hotspotForm.info_image_url = hotspot?.info?.image_url || "";
+  hotspotForm.glow = hotspot?.glow ?? true;
 }
 
 function selectScene(sceneId) {
   activeSceneId.value = sceneId;
   selectedHotspotId.value = "";
   isPlacingHotspot.value = false;
+  isDrawingInfoArea.value = false;
+  infoAreaDraftPoints.value = [];
   hydrateSceneForm();
   hydrateHotspotForm(null);
 }
@@ -380,8 +444,20 @@ function selectScene(sceneId) {
 function startPlacingHotspot() {
   if (!activeScene.value) return;
   isPlacingHotspot.value = true;
+  isDrawingInfoArea.value = false;
+  infoAreaDraftPoints.value = [];
   selectedHotspotId.value = "";
   hydrateHotspotForm(null);
+}
+
+function startDrawingInfoArea() {
+  if (!activeScene.value) return;
+  isDrawingInfoArea.value = true;
+  isPlacingHotspot.value = false;
+  selectedHotspotId.value = "";
+  infoAreaDraftPoints.value = [];
+  hydrateHotspotForm(null);
+  successMessage.value = "Click multiple points on the panorama, then Finish area.";
 }
 
 function addBlankScene() {
@@ -501,6 +577,48 @@ async function uploadPendingHotspotAudioFiles() {
   return uploadedCount;
 }
 
+async function uploadHotspotInfoImageToBackend(hotspot) {
+  if (
+    !selectedLocationId.value ||
+    !selectedVersionId.value ||
+    !hotspot.local_info_image_file
+  )
+    return false;
+  const response = await uploadHotspotInfoImage(
+    selectedLocationId.value,
+    selectedVersionId.value,
+    {
+      hotspotId: hotspot.id,
+      imageFile: hotspot.local_info_image_file,
+    },
+  );
+  hotspot.info = {
+    ...(hotspot.info || {}),
+    image_url: response.data.image_url || response.data.image_path || "",
+  };
+  if (hotspot.local_info_image_preview) {
+    URL.revokeObjectURL(hotspot.local_info_image_preview);
+  }
+  hotspot.local_info_image_file = null;
+  hotspot.local_info_image_preview = "";
+  hotspotForm.info_image_url = hotspot.info.image_url;
+  return true;
+}
+
+async function uploadPendingHotspotInfoImages() {
+  if (!selectedVersionId.value) return 0;
+  let uploadedCount = 0;
+  for (const scene of scenes.value) {
+    for (const hotspot of scene.hotspots || []) {
+      if (hotspot.local_info_image_file) {
+        const uploaded = await uploadHotspotInfoImageToBackend(hotspot);
+        if (uploaded) uploadedCount += 1;
+      }
+    }
+  }
+  return uploadedCount;
+}
+
 async function handleFiles(fileList) {
   const files = Array.from(fileList || []).filter((file) =>
     file.type.startsWith("image/"),
@@ -573,7 +691,20 @@ function removeScene(sceneId) {
 }
 
 function addHotspotFromCanvas(point) {
-  if (!activeScene.value || !isPlacingHotspot.value) return;
+  if (!activeScene.value) return;
+  if (isDrawingInfoArea.value) {
+    infoAreaDraftPoints.value = [
+      ...infoAreaDraftPoints.value,
+      {
+        x: Math.round(point.x),
+        y: Math.round(point.y),
+        lon: Math.round(Number(point.lon ?? viewState.lon) * 10) / 10,
+        lat: Math.round(Number(point.lat ?? viewState.lat) * 10) / 10,
+      },
+    ];
+    return;
+  }
+  if (!isPlacingHotspot.value) return;
   const hotspot = {
     id: uid("hotspot"),
     label: `Hotspot ${(activeScene.value.hotspots || []).length + 1}`,
@@ -585,11 +716,66 @@ function addHotspotFromCanvas(point) {
     lat: Math.round(Number(point.lat ?? viewState.lat) * 10) / 10,
     audio_url: "",
     local_audio_file: null,
+    local_info_image_file: null,
+    local_info_image_preview: "",
+    area_points: [],
+    info: { title: "", description: "", image_url: "" },
+    glow: true,
   };
   activeScene.value.hotspots = [...(activeScene.value.hotspots || []), hotspot];
   selectedHotspotId.value = hotspot.id;
   isPlacingHotspot.value = false;
   hydrateHotspotForm(hotspot);
+}
+
+function finishInfoArea() {
+  if (!activeScene.value || infoAreaDraftPoints.value.length < 3) {
+    errorMessage.value = "Info area needs at least 3 points.";
+    return;
+  }
+  const points = [...infoAreaDraftPoints.value];
+  const average = points.reduce(
+    (total, point) => ({
+      x: total.x + Number(point.x || 0),
+      y: total.y + Number(point.y || 0),
+      lon: total.lon + Number(point.lon || 0),
+      lat: total.lat + Number(point.lat || 0),
+    }),
+    { x: 0, y: 0, lon: 0, lat: 0 },
+  );
+  const count = points.length || 1;
+  const hotspot = {
+    id: uid("info-area"),
+    label: `Info area ${(activeScene.value.hotspots || []).length + 1}`,
+    type: "info_area",
+    target_scene_id: "",
+    x: Math.round(average.x / count),
+    y: Math.round(average.y / count),
+    lon: Math.round((average.lon / count) * 10) / 10,
+    lat: Math.round((average.lat / count) * 10) / 10,
+    audio_url: "",
+    local_audio_file: null,
+    local_info_image_file: null,
+    local_info_image_preview: "",
+    area_points: points,
+    info: { title: "", description: "", image_url: "" },
+    glow: true,
+  };
+  activeScene.value.hotspots = [...(activeScene.value.hotspots || []), hotspot];
+  selectedHotspotId.value = hotspot.id;
+  isDrawingInfoArea.value = false;
+  infoAreaDraftPoints.value = [];
+  hydrateHotspotForm(hotspot);
+  successMessage.value = "Created info area. Add title, image and description.";
+}
+
+function undoInfoAreaPoint() {
+  infoAreaDraftPoints.value = infoAreaDraftPoints.value.slice(0, -1);
+}
+
+function cancelInfoArea() {
+  isDrawingInfoArea.value = false;
+  infoAreaDraftPoints.value = [];
 }
 
 function selectHotspot(hotspot) {
@@ -618,12 +804,24 @@ function saveHotspot() {
   hotspot.label = hotspotForm.label.trim() || hotspot.label;
   hotspot.type = hotspotForm.type;
   hotspot.target_scene_id =
-    hotspotForm.target_scene_id || getDefaultTargetSceneId();
+    ["info", "info_area"].includes(hotspotForm.type)
+      ? ""
+      : hotspotForm.target_scene_id || getDefaultTargetSceneId();
   hotspot.x = Number(hotspotForm.x);
   hotspot.y = Number(hotspotForm.y);
   hotspot.lon = Number(hotspotForm.lon);
   hotspot.lat = Number(hotspotForm.lat);
   hotspot.audio_url = hotspotForm.audio_url.trim();
+  hotspot.info = {
+    title: hotspotForm.info_title.trim(),
+    description: hotspotForm.info_description.trim(),
+    image_url:
+      hotspot.local_info_image_preview ||
+      hotspotForm.info_image_url.trim() ||
+      hotspot.info?.image_url ||
+      "",
+  };
+  hotspot.glow = Boolean(hotspotForm.glow);
   hotspotForm.target_scene_id = hotspot.target_scene_id;
   successMessage.value = "Da luu hotspot.";
 }
@@ -636,6 +834,29 @@ function onHotspotAudioChange(event) {
   hotspot.audio_url = "";
   hotspotForm.audio_url = "";
   successMessage.value = "Đã chọn audio cho hotspot. Bấm Save Tour để upload.";
+}
+
+function onHotspotInfoImageChange(event) {
+  const file = event.target.files?.[0] || null;
+  const hotspot = selectedHotspot.value;
+  if (!hotspot || !file) return;
+  if (!file.type.startsWith("image/")) {
+    errorMessage.value = "Only image files are allowed.";
+    event.target.value = "";
+    return;
+  }
+  if (hotspot.local_info_image_preview) {
+    URL.revokeObjectURL(hotspot.local_info_image_preview);
+  }
+  hotspot.local_info_image_file = file;
+  hotspot.local_info_image_preview = URL.createObjectURL(file);
+  hotspot.info = {
+    ...(hotspot.info || {}),
+    image_url: hotspot.local_info_image_preview,
+  };
+  hotspotForm.info_image_url = "";
+  successMessage.value = "Selected info image. Click Save Tour to upload it.";
+  event.target.value = "";
 }
 
 function removeHotspot() {
@@ -926,9 +1147,13 @@ async function saveBuilder() {
     const hasPendingHotspotAudio = scenes.value.some((scene) =>
       (scene.hotspots || []).some((hotspot) => hotspot.local_audio_file),
     );
+    const hasPendingHotspotInfoImages = scenes.value.some((scene) =>
+      (scene.hotspots || []).some((hotspot) => hotspot.local_info_image_file),
+    );
     let uploadedCount = 0;
     let uploadedHotspotAudioCount = 0;
-    if (hasPendingUploads || hasPendingHotspotAudio) {
+    let uploadedHotspotInfoImageCount = 0;
+    if (hasPendingUploads || hasPendingHotspotAudio || hasPendingHotspotInfoImages) {
       version.value = (
         await updateVersion(selectedLocationId.value, selectedVersionId.value, {
           label: version.value.label,
@@ -938,6 +1163,7 @@ async function saveBuilder() {
       ).data;
       uploadedCount = await uploadPendingSceneFiles();
       uploadedHotspotAudioCount = await uploadPendingHotspotAudioFiles();
+      uploadedHotspotInfoImageCount = await uploadPendingHotspotInfoImages();
     }
 
     const response = await updateVersion(
@@ -951,8 +1177,8 @@ async function saveBuilder() {
     );
     version.value = response.data;
     successMessage.value =
-      hasPendingUploads || hasPendingHotspotAudio
-        ? `Saved tour and uploaded ${uploadedCount} image(s), ${uploadedHotspotAudioCount} hotspot audio file(s).`
+      hasPendingUploads || hasPendingHotspotAudio || hasPendingHotspotInfoImages
+        ? `Saved tour and uploaded ${uploadedCount} panorama image(s), ${uploadedHotspotAudioCount} hotspot audio file(s), ${uploadedHotspotInfoImageCount} info image(s).`
         : "Saved draft tour version successfully.";
   } catch (error) {
     errorMessage.value = extractApiError(
@@ -1148,7 +1374,7 @@ onBeforeUnmount(() => {
         <div class="builder-canvas">
           <PanoramaViewer
             :image-url="sceneBackground"
-            :hotspots="activeScene?.hotspots || []"
+            :hotspots="activeSceneHotspots"
             :selected-hotspot-id="selectedHotspotId"
             :initial-view="activeInitialView"
             @panorama-click="addHotspotFromCanvas"
@@ -1159,7 +1385,9 @@ onBeforeUnmount(() => {
             {{
               !activeScene
                 ? "Thêm ảnh panorama 360° để bắt đầu"
-                : isPlacingHotspot
+                : isDrawingInfoArea
+                  ? `Drawing info area: ${infoAreaDraftPoints.length} point(s). Click wall/object edges, then Finish area.`
+                  : isPlacingHotspot
                   ? "Selecting hotspot position: click image to pin point"
                   : "Drag mouse to rotate. Click + Add hotspot then click image to place point."
             }}
@@ -1266,6 +1494,32 @@ onBeforeUnmount(() => {
               >
                 {{ isPlacingHotspot ? "Click image..." : "+ Add hotspot" }}
               </button>
+              <button
+                class="builder-mini-button"
+                type="button"
+                :class="{ active: isDrawingInfoArea }"
+                @click="startDrawingInfoArea"
+              >
+                + Draw area
+              </button>
+            </div>
+            <div v-if="isDrawingInfoArea" class="info-area-toolbar">
+              <span>{{ infoAreaDraftPoints.length }} point(s)</span>
+              <button
+                type="button"
+                :disabled="!infoAreaDraftPoints.length"
+                @click="undoInfoAreaPoint"
+              >
+                Undo
+              </button>
+              <button
+                type="button"
+                :disabled="infoAreaDraftPoints.length < 3"
+                @click="finishInfoArea"
+              >
+                Finish
+              </button>
+              <button type="button" @click="cancelInfoArea">Cancel</button>
             </div>
             <div v-if="activeScene.hotspots?.length" class="hotspot-list">
               <div
@@ -1285,9 +1539,11 @@ onBeforeUnmount(() => {
                   <small>
                     Lon:{{ Math.round(Number(hotspot.lon || 0) * 10) / 10 }}°
                     Lat:{{ Math.round(Number(hotspot.lat || 0) * 10) / 10 }}° →
-                    {{ hotspot.target_scene_id || "not selected" }} ({{
-                      hotspot.type || "point"
-                    }})
+                    {{
+                      ["info", "info_area"].includes(hotspot.type)
+                        ? hotspot.info?.title || "info popup"
+                        : hotspot.target_scene_id || "not selected"
+                    }} ({{ hotspot.type || "point" }})
                   </small>
                 </span>
                 <button
@@ -1316,9 +1572,11 @@ onBeforeUnmount(() => {
               <select v-model="hotspotForm.type">
                 <option value="point">POINT</option>
                 <option value="nav">NAV</option>
+                <option value="info">INFO</option>
+                <option value="info_area">INFO AREA</option>
               </select>
             </label>
-            <label>
+            <label v-if="!['info', 'info_area'].includes(hotspotForm.type)">
               Target scene
               <select v-model="hotspotForm.target_scene_id">
                 <option value="">None</option>
@@ -1331,6 +1589,73 @@ onBeforeUnmount(() => {
                 </option>
               </select>
             </label>
+            <div
+              v-if="['info', 'info_area'].includes(hotspotForm.type)"
+              class="info-hotspot-fields"
+            >
+              <div class="info-editor-head">
+                <span>{{ hotspotForm.type === "info_area" ? "Area content" : "Info content" }}</span>
+                <small>
+                  {{
+                    hotspotForm.type === "info_area"
+                      ? "Click glowing area to open this card."
+                      : "Click hotspot to open this card."
+                  }}
+                </small>
+              </div>
+              <label>
+                Title
+                <input
+                  v-model="hotspotForm.info_title"
+                  placeholder="Painting / object / highlight name"
+                />
+              </label>
+              <div class="info-image-uploader">
+                <span
+                  class="info-image-preview"
+                  :style="
+                    selectedHotspot.info?.image_url
+                      ? { backgroundImage: `url(${selectedHotspot.info.image_url})` }
+                      : {}
+                  "
+                >
+                  <small v-if="!selectedHotspot.info?.image_url">No image</small>
+                </span>
+                <div class="info-image-actions">
+                  <label class="info-upload-button">
+                    Upload image
+                    <input
+                      type="file"
+                      accept="image/*"
+                      @change="onHotspotInfoImageChange"
+                    />
+                  </label>
+                  <input
+                    v-model="hotspotForm.info_image_url"
+                    placeholder="Or paste image URL..."
+                  />
+                  <small>
+                    {{
+                      selectedHotspot.local_info_image_file
+                        ? `Selected: ${selectedHotspot.local_info_image_file.name}`
+                        : "Image will show in the viewer popup."
+                    }}
+                  </small>
+                </div>
+              </div>
+              <label>
+                Description
+                <textarea
+                  v-model="hotspotForm.info_description"
+                  rows="4"
+                  placeholder="This text is shown when viewer clicks the info hotspot."
+                ></textarea>
+              </label>
+              <label class="checkbox-row info-glow-row">
+                <input v-model="hotspotForm.glow" type="checkbox" />
+                <span>Glow effect</span>
+              </label>
+            </div>
             <div class="two-inputs">
               <label
                 >LON<input v-model="hotspotForm.lon" type="number" step="0.1"

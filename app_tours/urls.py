@@ -2,6 +2,7 @@ from django.urls import path
 
 from .views import (
     HotspotAudioUploadView,
+    HotspotInfoImageUploadView,
     LocationTourVersionViewSet,
     TourVersionCompareView,
     TourVersionImportView,
@@ -20,6 +21,7 @@ urlpatterns = [
     path("locations/<int:location_id>/versions/compare/", TourVersionCompareView.as_view(), name="tour-version-compare"),
     path("locations/<int:location_id>/versions/<int:pk>/", version_detail, name="tour-version-detail"),
     path("locations/<int:location_id>/versions/<int:pk>/hotspot-audio/", HotspotAudioUploadView.as_view(), name="hotspot-audio-upload"),
+    path("locations/<int:location_id>/versions/<int:pk>/hotspot-info-image/", HotspotInfoImageUploadView.as_view(), name="hotspot-info-image-upload"),
     path("locations/<int:location_id>/versions/<int:pk>/export/", version_export, name="tour-version-export"),
     path("locations/<int:location_id>/versions/<int:pk>/preview/", version_preview, name="tour-version-preview"),
 ]

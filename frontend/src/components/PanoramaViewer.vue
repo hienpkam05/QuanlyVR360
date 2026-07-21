@@ -45,6 +45,8 @@ const emit = defineEmits(['panorama-click', 'hotspot-click', 'view-change']);
 
 const container = ref(null);
 const projectedHotspots = ref([]);
+const projectedInfoAreas = ref([]);
+const isTextureLoading = ref(false);
 const hasImage = computed(() => Boolean(props.imageUrl));
 
 let renderer;
@@ -116,8 +118,9 @@ function vectorToLonLat(vector) {
 }
 
 function updateProjectedHotspots() {
-  if (!container.value || !camera) {
+  if (!container.value || !camera || isTextureLoading.value) {
     projectedHotspots.value = [];
+    projectedInfoAreas.value = [];
     return;
   }
 
@@ -126,29 +129,61 @@ function updateProjectedHotspots() {
   const cameraDirection = new THREE.Vector3();
   camera.getWorldDirection(cameraDirection);
 
+  function projectLonLat(item) {
+    const worldPosition = lonLatToVector(item.lon, item.lat);
+    const directionToPoint = worldPosition.clone().normalize();
+    const isInFront = cameraDirection.dot(directionToPoint) > 0;
+    const screenPosition = worldPosition.clone().project(camera);
+    return {
+      visible:
+        isInFront &&
+        screenPosition.z > -1 &&
+        screenPosition.z < 1 &&
+        screenPosition.x >= -1.2 &&
+        screenPosition.x <= 1.2 &&
+        screenPosition.y >= -1.2 &&
+        screenPosition.y <= 1.2,
+      screenX: (screenPosition.x * 0.5 + 0.5) * width,
+      screenY: (-screenPosition.y * 0.5 + 0.5) * height,
+    };
+  }
+
   projectedHotspots.value = props.hotspots
+    .filter((hotspot) => hotspot.type !== 'info_area')
     .map((hotspot, index) => {
-      const worldPosition = lonLatToVector(hotspot.lon, hotspot.lat);
-      const directionToHotspot = worldPosition.clone().normalize();
-      const isInFront = cameraDirection.dot(directionToHotspot) > 0;
-      const screenPosition = worldPosition.clone().project(camera);
+      const projected = projectLonLat(hotspot);
 
       return {
         ...hotspot,
         index,
-        visible:
-          isInFront &&
-          screenPosition.z > -1 &&
-          screenPosition.z < 1 &&
-          screenPosition.x >= -1.12 &&
-          screenPosition.x <= 1.12 &&
-          screenPosition.y >= -1.12 &&
-          screenPosition.y <= 1.12,
-        screenX: (screenPosition.x * 0.5 + 0.5) * width,
-        screenY: (-screenPosition.y * 0.5 + 0.5) * height,
+        ...projected,
       };
     })
     .filter((hotspot) => hotspot.visible);
+
+  projectedInfoAreas.value = props.hotspots
+    .filter((hotspot) => hotspot.type === 'info_area' && Array.isArray(hotspot.area_points))
+    .map((hotspot, index) => {
+      const projectedPoints = hotspot.area_points.map(projectLonLat);
+      const visiblePoints = projectedPoints.filter((point) => point.visible);
+      const minimumPoints = hotspot.isDraft ? 2 : 3;
+      const allPointsVisible = projectedPoints.length > 0 && visiblePoints.length === projectedPoints.length;
+      const xs = projectedPoints.map((point) => point.screenX);
+      const ys = projectedPoints.map((point) => point.screenY);
+      const boxWidth = Math.max(...xs) - Math.min(...xs);
+      const boxHeight = Math.max(...ys) - Math.min(...ys);
+      const crossesScreenEdge = boxWidth > width * 0.72 || boxHeight > height * 0.72;
+      const canRenderDraft = hotspot.isDraft && projectedPoints.length >= minimumPoints && visiblePoints.length >= minimumPoints;
+      const canRenderArea = !hotspot.isDraft && projectedPoints.length >= minimumPoints && allPointsVisible && !crossesScreenEdge;
+      const drawablePoints = hotspot.isDraft ? visiblePoints : projectedPoints;
+      return {
+        ...hotspot,
+        index,
+        visible: canRenderDraft || canRenderArea,
+        polygonPoints: drawablePoints.map((point) => `${point.screenX},${point.screenY}`).join(' '),
+      };
+    })
+    .filter((area) => area.visible);
 }
 
 function updateCamera() {
@@ -277,12 +312,16 @@ function updateTransitionFade() {
 
 function loadTexture() {
   if (!mesh) return;
+  isTextureLoading.value = true;
+  projectedHotspots.value = [];
+  projectedInfoAreas.value = [];
   if (!props.imageUrl) {
     disposeTexture();
     clearTransition();
     mesh.material.map = null;
     mesh.material.color.set(0x111827);
     mesh.material.needsUpdate = true;
+    isTextureLoading.value = false;
     return;
   }
   const loader = new THREE.TextureLoader();
@@ -297,6 +336,7 @@ function loadTexture() {
       mesh.material.color.set(0xffffff);
       mesh.material.needsUpdate = true;
       if (oldTexture) startTextureTransition(oldTexture);
+      isTextureLoading.value = false;
       resize();
     },
     undefined,
@@ -304,6 +344,7 @@ function loadTexture() {
       mesh.material.map = null;
       mesh.material.color.set(0x111827);
       mesh.material.needsUpdate = true;
+      isTextureLoading.value = false;
     },
   );
 }
@@ -452,6 +493,21 @@ defineExpose({
     <span v-if="!hasImage" class="canvas-empty-text">
       Upload panorama JPG 360 de xem preview, keo chuot de xoay ngang/doc.
     </span>
+    <svg v-if="projectedInfoAreas.length" class="panorama-info-area-layer" aria-hidden="true">
+      <template v-for="area in projectedInfoAreas" :key="area.id">
+        <polyline
+          v-if="area.isDraft"
+          class="panorama-info-area draft"
+          :points="area.polygonPoints"
+        />
+        <polygon
+          v-else
+          class="panorama-info-area"
+          :points="area.polygonPoints"
+          @click.stop="markInteraction(); emit('hotspot-click', area, $event)"
+        />
+      </template>
+    </svg>
     <button
       v-for="hotspot in projectedHotspots"
       :key="hotspot.id"
@@ -470,10 +526,11 @@ defineExpose({
       </template>
       <template v-else>
         <span
-          v-if="hotspotDisplayMode === 'viewer' && pointHotspotLogo"
+          v-if="hotspotDisplayMode === 'viewer' && pointHotspotLogo && hotspot.type !== 'info'"
           class="viewer-point-logo"
           :style="{ backgroundImage: `url(${pointHotspotLogo})` }"
         ></span>
+        <span v-else-if="hotspotDisplayMode === 'viewer' && hotspot.type === 'info'" class="viewer-info-dot">i</span>
         <span v-else class="viewer-point-dot">{{ hotspot.index + 1 }}</span>
         <span class="hotspot-label">{{ hotspot.label || 'Hotspot' }}</span>
         <span class="viewer-hotspot-preview" v-if="hotspotDisplayMode === 'viewer' && hotspot.preview_image" :style="{ backgroundImage: `url(${hotspot.preview_image})` }"></span>
