@@ -1,30 +1,35 @@
 <script setup>
-import { reactive, ref } from 'vue';
+import { reactive, ref } from "vue";
 
-import { getPublicTour, trackPublicVisit } from '../api/publicApi';
+import { getPublicTour, trackPublicVisit } from "../api/publicApi";
 
 const form = reactive({
-  token: '',
+  token: "",
   origin: window.location.origin,
 });
 const tour = ref(null);
-const errorMessage = ref('');
+const errorMessage = ref("");
 const tracked = ref(false);
 
 async function loadTour() {
-  errorMessage.value = '';
+  errorMessage.value = "";
   tracked.value = false;
   try {
     const response = await getPublicTour(form.token, form.origin);
     tour.value = response.data;
   } catch (error) {
     tour.value = null;
-    errorMessage.value = error.response?.data?.detail || 'Could not load public tour.';
+    errorMessage.value =
+      error.response?.data?.detail || "Could not load public tour.";
   }
 }
 
 async function trackVisit() {
-  await trackPublicVisit(form.token, { country_code: 'VN', city: 'Ha Noi' }, form.origin);
+  await trackPublicVisit(
+    form.token,
+    { country_code: "VN", city: "Ha Noi" },
+    form.origin,
+  );
   tracked.value = true;
 }
 </script>
@@ -50,14 +55,20 @@ async function trackVisit() {
     <section v-if="tour" class="two-column">
       <div class="panel">
         <h2>{{ tour.location.name }}</h2>
-        <p class="muted">Version v{{ tour.version.version_number }} - {{ tour.version.label }}</p>
+        <p class="muted">
+          Version v{{ tour.version.version_number }} - {{ tour.version.label }}
+        </p>
         <button class="secondary-button" type="button" @click="trackVisit">
-          {{ tracked ? 'Da track visit' : 'Track visit' }}
+          {{ tracked ? "Da track visit" : "Track visit" }}
         </button>
         <div class="scene-grid">
-          <article v-for="scene in tour.data.scenes" :key="scene.id" class="scene-card">
+          <article
+            v-for="scene in tour.data.scenes"
+            :key="scene.id"
+            class="scene-card"
+          >
             <strong>{{ scene.name || scene.id }}</strong>
-            <span>{{ scene.tile_url ? 'Co tile URL' : 'Chua co tile' }}</span>
+            <span>{{ scene.tile_url ? "Có tile URL" : "Chưa có tile" }}</span>
             <small>{{ scene.tile_url }}</small>
           </article>
         </div>

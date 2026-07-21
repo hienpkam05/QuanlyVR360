@@ -2,37 +2,138 @@
   "info": {
     "_postman_id": "f99b4c2c-3b84-49f7-8f72-vr360-api",
     "name": "VR360 Management API",
-    "description": "Postman collection for the VR360 Django backend. Run Auth > Login first, then create project, location, version and publish.",
+    "description": "Postman collection for the VR360 Django backend. Run Auth > Login first, then use saved variables for Project, Location, Version, Media, Publishing, Public Viewer, Analytics and Dashboard APIs.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
-    { "key": "base_url", "value": "http://127.0.0.1:8000" },
-    { "key": "username", "value": "admin" },
-    { "key": "password", "value": "123456" },
-    { "key": "access_token", "value": "" },
-    { "key": "refresh_token", "value": "" },
-    { "key": "project_id", "value": "1" },
-    { "key": "location_id", "value": "1" },
-    { "key": "version_id", "value": "1" },
-    { "key": "version_number", "value": "1" },
-    { "key": "scene_asset_id", "value": "1" },
-    { "key": "scene_key", "value": "scene-1" },
-    { "key": "domain_id", "value": "1" },
-    { "key": "public_token", "value": "" },
-    { "key": "viewer_origin", "value": "http://localhost:5173" }
+    {
+      "key": "base_url",
+      "value": "http://127.0.0.1:8000"
+    },
+    {
+      "key": "frontend_origin",
+      "value": "http://127.0.0.1:5174"
+    },
+    {
+      "key": "viewer_origin",
+      "value": "http://127.0.0.1:5174"
+    },
+    {
+      "key": "username",
+      "value": "admin"
+    },
+    {
+      "key": "password",
+      "value": "123456"
+    },
+    {
+      "key": "access_token",
+      "value": ""
+    },
+    {
+      "key": "refresh_token",
+      "value": ""
+    },
+    {
+      "key": "project_id",
+      "value": "1"
+    },
+    {
+      "key": "location_id",
+      "value": "1"
+    },
+    {
+      "key": "version_id",
+      "value": "1"
+    },
+    {
+      "key": "version_number",
+      "value": "1"
+    },
+    {
+      "key": "scene_asset_id",
+      "value": "1"
+    },
+    {
+      "key": "scene_key",
+      "value": "scene-1"
+    },
+    {
+      "key": "hotspot_id",
+      "value": "hotspot-1"
+    },
+    {
+      "key": "domain_id",
+      "value": "1"
+    },
+    {
+      "key": "public_token",
+      "value": ""
+    },
+    {
+      "key": "allowed_domain",
+      "value": "localhost:5174"
+    },
+    {
+      "key": "from_date",
+      "value": "2026-01-01"
+    },
+    {
+      "key": "to_date",
+      "value": "2026-12-31"
+    },
+    {
+      "key": "panorama_file",
+      "value": "D:/Download_o_D/vr/Anh su dung/sample.jpg"
+    },
+    {
+      "key": "thumbnail_file",
+      "value": "D:/Download_o_D/vr/Anh su dung/thumb.jpg"
+    },
+    {
+      "key": "audio_file",
+      "value": "D:/Download_o_D/vr/audio/background.mp3"
+    },
+    {
+      "key": "logo_file",
+      "value": "D:/Download_o_D/vr/icons/point-logo.png"
+    }
   ],
   "auth": {
     "type": "bearer",
     "bearer": [
-      { "key": "token", "value": "{{access_token}}", "type": "string" }
+      {
+        "key": "token",
+        "value": "{{access_token}}",
+        "type": "string"
+      }
     ]
   },
   "item": [
     {
       "name": "Auth",
+      "description": "",
       "item": [
         {
-          "name": "Login",
+          "name": "Login - get JWT",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/auth/login/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{username}}\",\n  \"password\": \"{{password}}\"\n}"
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
           "event": [
             {
               "listen": "test",
@@ -45,20 +146,28 @@
                 ]
               }
             }
-          ],
-          "request": {
-            "auth": { "type": "noauth" },
-            "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"username\": \"{{username}}\",\n  \"password\": \"{{password}}\"\n}"
-            },
-            "url": "{{base_url}}/api/auth/login/"
-          }
+          ]
         },
         {
-          "name": "Refresh Token",
+          "name": "Refresh access token",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/auth/refresh/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refresh\": \"{{refresh_token}}\"\n}"
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
           "event": [
             {
               "listen": "test",
@@ -70,51 +179,85 @@
                 ]
               }
             }
-          ],
+          ]
+        },
+        {
+          "name": "Logout - blacklist refresh",
           "request": {
-            "auth": { "type": "noauth" },
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "body": { "mode": "raw", "raw": "{\n  \"refresh\": \"{{refresh_token}}\"\n}" },
-            "url": "{{base_url}}/api/auth/refresh/"
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/auth/logout/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refresh\": \"{{refresh_token}}\"\n}"
+            }
           }
         },
         {
           "name": "Me",
-          "request": { "method": "GET", "url": "{{base_url}}/api/auth/me/" }
-        },
-        {
-          "name": "Change Password",
           "request": {
-            "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"old_password\": \"{{password}}\",\n  \"new_password\": \"new-password-123\"\n}"
-            },
-            "url": "{{base_url}}/api/auth/change-password/"
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/api/auth/me/",
+            "description": ""
           }
         },
         {
-          "name": "Logout",
+          "name": "Change password",
           "request": {
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "body": { "mode": "raw", "raw": "{\n  \"refresh\": \"{{refresh_token}}\"\n}" },
-            "url": "{{base_url}}/api/auth/logout/"
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/auth/change-password/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"old_password\": \"123456\",\n  \"new_password\": \"12345678Strong!\",\n  \"confirm_password\": \"12345678Strong!\"\n}"
+            }
           }
         }
       ]
     },
     {
       "name": "Projects",
+      "description": "",
       "item": [
         {
-          "name": "List Projects",
-          "request": { "method": "GET", "url": "{{base_url}}/api/projects/" }
+          "name": "List projects",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/api/projects/?search=&ordering=-created_at",
+            "description": ""
+          }
         },
         {
-          "name": "Create Project",
+          "name": "Create project",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/projects/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Demo VR360\",\n  \"description\": \"Demo project\",\n  \"is_active\": true\n}"
+            }
+          },
           "event": [
             {
               "listen": "test",
@@ -126,62 +269,104 @@
                 ]
               }
             }
-          ],
+          ]
+        },
+        {
+          "name": "Project detail",
           "request": {
-            "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"name\": \"Demo VR360 Project\",\n  \"description\": \"Project created from Postman\",\n  \"is_active\": true\n}"
-            },
-            "url": "{{base_url}}/api/projects/"
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/api/projects/{{project_id}}/",
+            "description": ""
           }
         },
         {
-          "name": "Project Detail",
-          "request": { "method": "GET", "url": "{{base_url}}/api/projects/{{project_id}}/" }
-        },
-        {
-          "name": "Update Project",
+          "name": "Update project",
           "request": {
             "method": "PATCH",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "body": { "mode": "raw", "raw": "{\n  \"description\": \"Updated from Postman\"\n}" },
-            "url": "{{base_url}}/api/projects/{{project_id}}/"
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/projects/{{project_id}}/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Demo VR360 updated\",\n  \"description\": \"Updated description\",\n  \"is_active\": true\n}"
+            }
           }
         },
         {
-          "name": "Upload Project Thumbnail",
+          "name": "Upload project thumbnail",
           "request": {
             "method": "POST",
+            "header": [],
+            "url": "{{base_url}}/api/projects/{{project_id}}/upload-thumbnail/",
+            "description": "",
             "body": {
               "mode": "formdata",
               "formdata": [
-                { "key": "thumbnail", "type": "file", "src": "" }
+                {
+                  "key": "thumbnail",
+                  "type": "file",
+                  "src": "{{thumbnail_file}}"
+                }
               ]
-            },
-            "url": "{{base_url}}/api/projects/{{project_id}}/upload-thumbnail/"
+            }
           }
         },
         {
-          "name": "Project Dashboard",
-          "request": { "method": "GET", "url": "{{base_url}}/api/projects/{{project_id}}/dashboard/" }
+          "name": "Project dashboard",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/api/projects/{{project_id}}/dashboard/",
+            "description": ""
+          }
         },
         {
-          "name": "Delete Project",
-          "request": { "method": "DELETE", "url": "{{base_url}}/api/projects/{{project_id}}/" }
+          "name": "Soft delete project",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": "{{base_url}}/api/projects/{{project_id}}/",
+            "description": ""
+          }
         }
       ]
     },
     {
       "name": "Locations",
+      "description": "",
       "item": [
         {
-          "name": "List Project Locations",
-          "request": { "method": "GET", "url": "{{base_url}}/api/projects/{{project_id}}/locations/" }
+          "name": "List project locations",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/api/projects/{{project_id}}/locations/?ordering=order",
+            "description": ""
+          }
         },
         {
-          "name": "Create Location",
+          "name": "Create location",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/projects/{{project_id}}/locations/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Demo location\",\n  \"description\": \"Diem tham quan demo\",\n  \"latitude\": \"21.4024514\",\n  \"longitude\": \"105.807476\",\n  \"order\": 1,\n  \"is_active\": true\n}"
+            }
+          },
           "event": [
             {
               "listen": "test",
@@ -193,70 +378,113 @@
                 ]
               }
             }
-          ],
+          ]
+        },
+        {
+          "name": "Location detail",
           "request": {
-            "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"name\": \"Lobby\",\n  \"description\": \"Main lobby\",\n  \"latitude\": 21.027763,\n  \"longitude\": 105.834160,\n  \"order\": 1,\n  \"is_active\": true\n}"
-            },
-            "url": "{{base_url}}/api/projects/{{project_id}}/locations/"
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/api/locations/{{location_id}}/",
+            "description": ""
           }
         },
         {
-          "name": "Location Detail",
-          "request": { "method": "GET", "url": "{{base_url}}/api/locations/{{location_id}}/" }
-        },
-        {
-          "name": "Update Location",
+          "name": "Update location",
           "request": {
             "method": "PATCH",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "body": { "mode": "raw", "raw": "{\n  \"description\": \"Updated location\"\n}" },
-            "url": "{{base_url}}/api/locations/{{location_id}}/"
-          }
-        },
-        {
-          "name": "Reorder Locations",
-          "request": {
-            "method": "PATCH",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/locations/{{location_id}}/",
+            "description": "",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"locations\": [\n    {\"id\": {{location_id}}, \"order\": 1}\n  ]\n}"
-            },
-            "url": "{{base_url}}/api/projects/{{project_id}}/locations/reorder/"
+              "raw": "{\n  \"name\": \"Demo location updated\",\n  \"description\": \"Updated\",\n  \"latitude\": \"21.4\",\n  \"longitude\": \"105.8\",\n  \"order\": 2,\n  \"is_active\": true\n}"
+            }
           }
         },
         {
-          "name": "Upload Location Thumbnail",
+          "name": "Reorder locations",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/projects/{{project_id}}/locations/reorder/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"locations\": [\n    {\n      \"id\": \"{{location_id}}\",\n      \"order\": 1\n    }\n  ]\n}"
+            }
+          }
+        },
+        {
+          "name": "Upload location thumbnail",
           "request": {
             "method": "POST",
+            "header": [],
+            "url": "{{base_url}}/api/locations/{{location_id}}/upload-thumbnail/",
+            "description": "",
             "body": {
               "mode": "formdata",
               "formdata": [
-                { "key": "thumbnail", "type": "file", "src": "" }
+                {
+                  "key": "thumbnail",
+                  "type": "file",
+                  "src": "{{thumbnail_file}}"
+                }
               ]
-            },
-            "url": "{{base_url}}/api/locations/{{location_id}}/upload-thumbnail/"
+            }
           }
         },
         {
-          "name": "Delete Location",
-          "request": { "method": "DELETE", "url": "{{base_url}}/api/locations/{{location_id}}/" }
+          "name": "Soft delete location",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": "{{base_url}}/api/locations/{{location_id}}/",
+            "description": ""
+          }
         }
       ]
     },
     {
       "name": "Tour Versions",
+      "description": "",
       "item": [
         {
-          "name": "List Versions",
-          "request": { "method": "GET", "url": "{{base_url}}/api/locations/{{location_id}}/versions/" }
+          "name": "List versions",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/api/locations/{{location_id}}/versions/?ordering=-version_number",
+            "description": ""
+          }
         },
         {
-          "name": "Create Version",
+          "name": "Create version JSON",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/locations/{{location_id}}/versions/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"label\": \"v1\",\n  \"changelog\": \"Created from Postman\",\n  \"data\": {\n    \"scenes\": [],\n    \"initial_scene_id\": \"\",\n    \"settings\": {\n      \"auto_rotate\": true,\n      \"transition\": \"smooth\"\n    }\n  }\n}"
+            }
+          },
           "event": [
             {
               "listen": "test",
@@ -269,65 +497,230 @@
                 ]
               }
             }
-          ],
+          ]
+        },
+        {
+          "name": "Create version multipart audio + point logo",
           "request": {
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [],
+            "url": "{{base_url}}/api/locations/{{location_id}}/versions/",
+            "description": "",
             "body": {
-              "mode": "raw",
-              "raw": "{\n  \"label\": \"Draft v1\",\n  \"changelog\": \"Initial version\",\n  \"data\": {\n    \"scenes\": [\n      {\"id\": \"scene-1\", \"name\": \"Lobby\", \"hotspots\": []}\n    ]\n  }\n}"
-            },
-            "url": "{{base_url}}/api/locations/{{location_id}}/versions/"
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "label",
+                  "type": "text",
+                  "value": "v-new"
+                },
+                {
+                  "key": "changelog",
+                  "type": "text",
+                  "value": "Created with background audio and point logo"
+                },
+                {
+                  "key": "data",
+                  "type": "text",
+                  "value": "{\"scenes\": [], \"initial_scene_id\": \"\", \"settings\": {\"auto_rotate\": true, \"transition\": \"smooth\"}}"
+                },
+                {
+                  "key": "background_audio",
+                  "type": "file",
+                  "src": "{{audio_file}}"
+                },
+                {
+                  "key": "hotspot_point_logo",
+                  "type": "file",
+                  "src": "{{logo_file}}"
+                }
+              ]
+            }
           }
         },
         {
-          "name": "Version Detail",
-          "request": { "method": "GET", "url": "{{base_url}}/api/locations/{{location_id}}/versions/{{version_id}}/" }
+          "name": "Version detail",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/api/locations/{{location_id}}/versions/{{version_id}}/",
+            "description": ""
+          }
         },
         {
-          "name": "Update Draft Version",
+          "name": "Patch version data",
           "request": {
             "method": "PATCH",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "body": { "mode": "raw", "raw": "{\n  \"label\": \"Draft v1 updated\"\n}" },
-            "url": "{{base_url}}/api/locations/{{location_id}}/versions/{{version_id}}/"
-          }
-        },
-        {
-          "name": "Export Version JSON",
-          "request": { "method": "GET", "url": "{{base_url}}/api/locations/{{location_id}}/versions/{{version_id}}/export/" }
-        },
-        {
-          "name": "Preview Version",
-          "request": { "method": "GET", "url": "{{base_url}}/api/locations/{{location_id}}/versions/{{version_id}}/preview/" }
-        },
-        {
-          "name": "Import Version JSON",
-          "request": {
-            "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/locations/{{location_id}}/versions/{{version_id}}/",
+            "description": "",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"label\": \"Imported version\",\n  \"changelog\": \"Imported from Postman\",\n  \"data\": {\n    \"scenes\": [\n      {\"id\": \"scene-1\", \"name\": \"Imported Scene\", \"hotspots\": []}\n    ]\n  }\n}"
-            },
-            "url": "{{base_url}}/api/locations/{{location_id}}/versions/import/"
+              "raw": "{\n  \"label\": \"v1 updated\",\n  \"changelog\": \"Updated tour data\",\n  \"data\": {\n    \"scenes\": [],\n    \"initial_scene_id\": \"\",\n    \"settings\": {\n      \"auto_rotate\": true,\n      \"transition\": \"smooth\"\n    }\n  }\n}"
+            }
           }
         },
         {
-          "name": "Compare Versions",
-          "request": { "method": "GET", "url": "{{base_url}}/api/locations/{{location_id}}/versions/compare/?from={{version_id}}&to={{version_id}}" }
+          "name": "Patch version multipart",
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "url": "{{base_url}}/api/locations/{{location_id}}/versions/{{version_id}}/",
+            "description": "",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "label",
+                  "type": "text",
+                  "value": "v1 with media"
+                },
+                {
+                  "key": "data",
+                  "type": "text",
+                  "value": "{\"scenes\": [], \"initial_scene_id\": \"\", \"settings\": {\"auto_rotate\": true, \"transition\": \"smooth\"}}"
+                },
+                {
+                  "key": "background_audio",
+                  "type": "file",
+                  "src": "{{audio_file}}"
+                },
+                {
+                  "key": "hotspot_point_logo",
+                  "type": "file",
+                  "src": "{{logo_file}}"
+                }
+              ]
+            }
+          }
         },
         {
-          "name": "Delete Draft Version",
-          "request": { "method": "DELETE", "url": "{{base_url}}/api/locations/{{location_id}}/versions/{{version_id}}/" }
+          "name": "Upload hotspot audio",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{base_url}}/api/locations/{{location_id}}/versions/{{version_id}}/hotspot-audio/",
+            "description": "",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "hotspot_id",
+                  "type": "text",
+                  "value": "{{hotspot_id}}"
+                },
+                {
+                  "key": "audio",
+                  "type": "file",
+                  "src": "{{audio_file}}"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Export version",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/api/locations/{{location_id}}/versions/{{version_id}}/export/",
+            "description": ""
+          }
+        },
+        {
+          "name": "Preview version",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/api/locations/{{location_id}}/versions/{{version_id}}/preview/",
+            "description": ""
+          }
+        },
+        {
+          "name": "Import version JSON",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/locations/{{location_id}}/versions/import/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"label\": \"Imported\",\n  \"changelog\": \"Imported from JSON\",\n  \"data\": {\n    \"scenes\": [],\n    \"initial_scene_id\": \"\",\n    \"settings\": {\n      \"auto_rotate\": true,\n      \"transition\": \"smooth\"\n    }\n  }\n}"
+            }
+          }
+        },
+        {
+          "name": "Compare versions",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/api/locations/{{location_id}}/versions/compare/?from={{version_id}}&to={{version_id}}",
+            "description": ""
+          }
+        },
+        {
+          "name": "Soft delete draft version",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": "{{base_url}}/api/locations/{{location_id}}/versions/{{version_id}}/",
+            "description": ""
+          }
         }
       ]
     },
     {
-      "name": "Media",
+      "name": "Media / Scene Assets",
+      "description": "",
       "item": [
         {
-          "name": "Upload Scene Panorama",
+          "name": "Upload scene panorama",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{base_url}}/api/media/scenes/upload/",
+            "description": "scene_key ph?i t?n t?i trong TourVersion.data.scenes tr??c khi upload.",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "tour_version",
+                  "type": "text",
+                  "value": "{{version_id}}"
+                },
+                {
+                  "key": "scene_key",
+                  "type": "text",
+                  "value": "{{scene_key}}"
+                },
+                {
+                  "key": "original_file",
+                  "type": "file",
+                  "src": "{{panorama_file}}"
+                },
+                {
+                  "key": "max_zoom_level",
+                  "type": "text",
+                  "value": "3"
+                },
+                {
+                  "key": "tile_size",
+                  "type": "text",
+                  "value": "512"
+                }
+              ]
+            }
+          },
           "event": [
             {
               "listen": "test",
@@ -335,80 +728,80 @@
                 "type": "text/javascript",
                 "exec": [
                   "const json = pm.response.json();",
-                  "const asset = json.asset || json;",
-                  "if (asset.id) pm.collectionVariables.set('scene_asset_id', asset.id);"
+                  "if (json.id) pm.collectionVariables.set('scene_asset_id', json.id);"
                 ]
               }
             }
-          ],
+          ]
+        },
+        {
+          "name": "Scene processing status",
           "request": {
-            "method": "POST",
-            "body": {
-              "mode": "formdata",
-              "formdata": [
-                { "key": "tour_version", "value": "{{version_id}}", "type": "text" },
-                { "key": "scene_key", "value": "{{scene_key}}", "type": "text" },
-                { "key": "max_zoom_level", "value": "3", "type": "text" },
-                { "key": "tile_size", "value": "512", "type": "text" },
-                { "key": "original_file", "type": "file", "src": "" }
-              ]
-            },
-            "url": "{{base_url}}/api/media/scenes/upload/"
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/api/media/scenes/{{scene_asset_id}}/status/",
+            "description": ""
           }
         },
         {
-          "name": "Scene Processing Status",
-          "request": { "method": "GET", "url": "{{base_url}}/api/media/scenes/{{scene_asset_id}}/status/" }
+          "name": "Serve admin tile",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/api/media/tiles/{{location_id}}/{{version_number}}/{{scene_key}}/0/0/0.jpg",
+            "description": ""
+          }
         },
         {
-          "name": "Admin Tile Serve",
-          "request": { "method": "GET", "url": "{{base_url}}/api/media/tiles/{{location_id}}/{{version_number}}/{{scene_key}}/0/0/0.jpg" }
-        },
-        {
-          "name": "Delete Scene Asset",
-          "request": { "method": "DELETE", "url": "{{base_url}}/api/media/scenes/{{scene_asset_id}}/" }
+          "name": "Soft delete scene asset",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": "{{base_url}}/api/media/scenes/{{scene_asset_id}}/",
+            "description": ""
+          }
         }
       ]
     },
     {
       "name": "Publishing",
+      "description": "",
       "item": [
         {
-          "name": "Get Publish Config",
-          "request": { "method": "GET", "url": "{{base_url}}/api/locations/{{location_id}}/publish/" }
+          "name": "List published tours for Home",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/api/published-tours/",
+            "description": ""
+          }
         },
         {
-          "name": "Publish Location",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "const json = pm.response.json();",
-                  "if (json.public_token) pm.collectionVariables.set('public_token', json.public_token);"
-                ]
-              }
-            }
-          ],
+          "name": "Get publish config",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/api/locations/{{location_id}}/publish/",
+            "description": ""
+          }
+        },
+        {
+          "name": "Publish location",
           "request": {
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "body": { "mode": "raw", "raw": "{\n  \"published_version\": {{version_id}},\n  \"is_active\": true\n}" },
-            "url": "{{base_url}}/api/locations/{{location_id}}/publish/"
-          }
-        },
-        {
-          "name": "Update Publish Config",
-          "request": {
-            "method": "PATCH",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "body": { "mode": "raw", "raw": "{\n  \"is_active\": true\n}" },
-            "url": "{{base_url}}/api/locations/{{location_id}}/publish/"
-          }
-        },
-        {
-          "name": "Regenerate Public Token",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/locations/{{location_id}}/publish/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"published_version\": \"{{version_id}}\",\n  \"is_active\": true\n}"
+            }
+          },
           "event": [
             {
               "listen": "test",
@@ -420,15 +813,91 @@
                 ]
               }
             }
-          ],
-          "request": { "method": "POST", "url": "{{base_url}}/api/locations/{{location_id}}/publish/regenerate-token/" }
+          ]
         },
         {
-          "name": "List Whitelist Domains",
-          "request": { "method": "GET", "url": "{{base_url}}/api/locations/{{location_id}}/publish/domains/" }
+          "name": "Patch publish config",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/locations/{{location_id}}/publish/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"published_version\": \"{{version_id}}\",\n  \"is_active\": true\n}"
+            }
+          }
         },
         {
-          "name": "Create Whitelist Domain",
+          "name": "Regenerate public token",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/locations/{{location_id}}/publish/regenerate-token/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json.public_token) pm.collectionVariables.set('public_token', json.public_token);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Cancel publish",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": "{{base_url}}/api/locations/{{location_id}}/publish/",
+            "description": ""
+          }
+        },
+        {
+          "name": "List whitelist domains",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/api/locations/{{location_id}}/publish/domains/",
+            "description": ""
+          }
+        },
+        {
+          "name": "Add whitelist domain",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/locations/{{location_id}}/publish/domains/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"domain\": \"{{allowed_domain}}\",\n  \"label\": \"Local frontend\",\n  \"is_active\": true\n}"
+            }
+          },
           "event": [
             {
               "listen": "test",
@@ -440,123 +909,222 @@
                 ]
               }
             }
-          ],
-          "request": {
-            "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "body": { "mode": "raw", "raw": "{\n  \"domain\": \"localhost:5173\",\n  \"label\": \"Local frontend\",\n  \"is_active\": true\n}" },
-            "url": "{{base_url}}/api/locations/{{location_id}}/publish/domains/"
-          }
+          ]
         },
         {
-          "name": "Update Whitelist Domain",
+          "name": "Toggle whitelist domain",
           "request": {
             "method": "PATCH",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "body": { "mode": "raw", "raw": "{\n  \"is_active\": true\n}" },
-            "url": "{{base_url}}/api/locations/{{location_id}}/publish/domains/{{domain_id}}/"
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/locations/{{location_id}}/publish/domains/{{domain_id}}/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"is_active\": false\n}"
+            }
           }
         },
         {
-          "name": "Delete Whitelist Domain",
-          "request": { "method": "DELETE", "url": "{{base_url}}/api/locations/{{location_id}}/publish/domains/{{domain_id}}/" }
-        },
-        {
-          "name": "Unpublish Location",
-          "request": { "method": "DELETE", "url": "{{base_url}}/api/locations/{{location_id}}/publish/" }
+          "name": "Delete whitelist domain",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": "{{base_url}}/api/locations/{{location_id}}/publish/domains/{{domain_id}}/",
+            "description": ""
+          }
         }
       ]
     },
     {
       "name": "Public Viewer",
-      "auth": { "type": "noauth" },
+      "description": "Public APIs kh?ng d?ng Bearer token nh?ng c?n domain trong whitelist.",
       "item": [
         {
-          "name": "Get Public Tour",
+          "name": "Get public tour - with Origin",
           "request": {
-            "auth": { "type": "noauth" },
             "method": "GET",
-            "header": [{ "key": "Origin", "value": "{{viewer_origin}}" }],
-            "url": "{{base_url}}/api/public/tour/{{public_token}}/"
+            "header": [
+              {
+                "key": "Origin",
+                "value": "{{viewer_origin}}"
+              }
+            ],
+            "url": "{{base_url}}/api/public/tour/{{public_token}}/",
+            "description": "C?n Origin/Referer thu?c whitelist domain, n?u kh?ng s? 403.",
+            "auth": {
+              "type": "noauth"
+            }
           }
         },
         {
-          "name": "Public Tile Serve",
+          "name": "Get public tile - with Origin",
           "request": {
-            "auth": { "type": "noauth" },
             "method": "GET",
-            "header": [{ "key": "Origin", "value": "{{viewer_origin}}" }],
-            "url": "{{base_url}}/api/public/tour/{{public_token}}/tiles/{{scene_key}}/0/0/0.jpg"
+            "header": [
+              {
+                "key": "Origin",
+                "value": "{{viewer_origin}}"
+              }
+            ],
+            "url": "{{base_url}}/api/public/tour/{{public_token}}/tiles/{{scene_key}}/0/0/0.jpg",
+            "description": "",
+            "auth": {
+              "type": "noauth"
+            }
           }
         },
         {
-          "name": "Track Visit",
+          "name": "Track public visit",
           "request": {
-            "auth": { "type": "noauth" },
             "method": "POST",
             "header": [
-              { "key": "Content-Type", "value": "application/json" },
-              { "key": "Origin", "value": "{{viewer_origin}}" }
+              {
+                "key": "Origin",
+                "value": "{{viewer_origin}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
-            "body": { "mode": "raw", "raw": "{\n  \"city\": \"Ha Noi\",\n  \"country_code\": \"VN\"\n}" },
-            "url": "{{base_url}}/api/public/tour/{{public_token}}/track-visit/"
+            "url": "{{base_url}}/api/public/tour/{{public_token}}/track-visit/",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"country_code\": \"VN\",\n  \"city\": \"Ha Noi\",\n  \"device_type\": \"desktop\"\n}"
+            },
+            "auth": {
+              "type": "noauth"
+            }
           }
         }
       ]
     },
     {
-      "name": "Analytics",
+      "name": "Analytics / Stats",
+      "description": "",
       "item": [
         {
-          "name": "Stats Summary",
-          "request": { "method": "GET", "url": "{{base_url}}/api/locations/{{location_id}}/stats/summary/?from=2026-01-01&to=2026-12-31" }
+          "name": "Stats summary",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/api/locations/{{location_id}}/stats/summary/?from={{from_date}}&to={{to_date}}",
+            "description": ""
+          }
         },
         {
-          "name": "Stats Timeseries",
-          "request": { "method": "GET", "url": "{{base_url}}/api/locations/{{location_id}}/stats/timeseries/?from=2026-01-01&to=2026-12-31&granularity=day" }
+          "name": "Stats timeseries day",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/api/locations/{{location_id}}/stats/timeseries/?from={{from_date}}&to={{to_date}}&granularity=day",
+            "description": ""
+          }
         },
         {
-          "name": "Stats By Country",
-          "request": { "method": "GET", "url": "{{base_url}}/api/locations/{{location_id}}/stats/by-country/?from=2026-01-01&to=2026-12-31" }
+          "name": "Stats timeseries month",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/api/locations/{{location_id}}/stats/timeseries/?from={{from_date}}&to={{to_date}}&granularity=month",
+            "description": ""
+          }
         },
         {
-          "name": "Stats By Device",
-          "request": { "method": "GET", "url": "{{base_url}}/api/locations/{{location_id}}/stats/by-device/?from=2026-01-01&to=2026-12-31" }
+          "name": "Stats by country",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/api/locations/{{location_id}}/stats/by-country/?from={{from_date}}&to={{to_date}}",
+            "description": ""
+          }
         },
         {
-          "name": "Stats By Referrer",
-          "request": { "method": "GET", "url": "{{base_url}}/api/locations/{{location_id}}/stats/by-referrer/?from=2026-01-01&to=2026-12-31" }
+          "name": "Stats by device",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/api/locations/{{location_id}}/stats/by-device/?from={{from_date}}&to={{to_date}}",
+            "description": ""
+          }
+        },
+        {
+          "name": "Stats by referrer",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/api/locations/{{location_id}}/stats/by-referrer/?from={{from_date}}&to={{to_date}}",
+            "description": ""
+          }
         }
       ]
     },
     {
       "name": "Dashboard",
+      "description": "",
       "item": [
         {
-          "name": "Overview",
-          "request": { "method": "GET", "url": "{{base_url}}/api/dashboard/overview/" }
+          "name": "Dashboard overview",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/api/dashboard/overview/",
+            "description": ""
+          }
         },
         {
-          "name": "Top Locations",
-          "request": { "method": "GET", "url": "{{base_url}}/api/dashboard/top-locations/?from=2026-01-01&to=2026-12-31&limit=10" }
+          "name": "Dashboard top locations",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/api/dashboard/top-locations/?from={{from_date}}&to={{to_date}}&limit=10",
+            "description": ""
+          }
         },
         {
-          "name": "Recent Activity",
-          "request": { "method": "GET", "url": "{{base_url}}/api/dashboard/recent-activity/?limit=20" }
+          "name": "Dashboard recent activity",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/api/dashboard/recent-activity/?limit=5",
+            "description": ""
+          }
         }
       ]
     },
     {
-      "name": "OpenAPI Docs",
-      "auth": { "type": "noauth" },
+      "name": "Schema / Docs",
+      "description": "",
       "item": [
         {
-          "name": "Schema",
-          "request": { "auth": { "type": "noauth" }, "method": "GET", "url": "{{base_url}}/api/schema/" }
+          "name": "OpenAPI schema",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/api/schema/",
+            "description": "",
+            "auth": {
+              "type": "noauth"
+            }
+          }
         },
         {
           "name": "Swagger UI",
-          "request": { "auth": { "type": "noauth" }, "method": "GET", "url": "{{base_url}}/api/docs/" }
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/api/docs/",
+            "description": "",
+            "auth": {
+              "type": "noauth"
+            }
+          }
         }
       ]
     }

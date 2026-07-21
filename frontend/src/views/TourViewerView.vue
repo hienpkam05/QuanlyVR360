@@ -9,12 +9,15 @@ import { listPublishedTours } from '../api/publishedToursApi';
 import { listProjects } from '../api/projectsApi';
 import { getPublicTour } from '../api/publicApi';
 import { getVersion, listVersions } from '../api/toursApi';
+import { useAuthStore } from '../stores/authStore';
 
 const route = useRoute();
 const router = useRouter();
+const auth = useAuthStore();
 const projects = ref([]);
 const locations = ref([]);
 const versions = ref([]);
+const publishedTours = ref([]);
 const selectedProjectId = ref('');
 const selectedLocationId = ref('');
 const selectedVersionId = ref('');
@@ -37,6 +40,7 @@ let backgroundAudioPlayer = null;
 let sceneAudioPlayer = null;
 
 const activeScene = computed(() => scenes.value.find((scene) => scene.id === activeSceneId.value) || null);
+const isPublicViewerMode = computed(() => !auth.isAuthenticated || auth.isGuest);
 const activeSceneIndex = computed(() => scenes.value.findIndex((scene) => scene.id === activeSceneId.value));
 const activeInitialView = computed(() => activeScene.value?.view || activeScene.value?.initialView || { lon: 0, lat: 0, fov: 75 });
 const sceneImage = computed(() => resolveSceneImage(activeScene.value));
@@ -227,6 +231,76 @@ function uniqueBy(items, keyGetter) {
   return Array.from(map.values());
 }
 
+async function loadPublishedCatalog() {
+  if (publishedTours.value.length) return publishedTours.value;
+  const response = await listPublishedTours();
+  publishedTours.value = normalizeResults(response.data);
+  return publishedTours.value;
+}
+
+function syncPublishedDropdowns(matchedTour = null) {
+  const tours = publishedTours.value;
+  projects.value = uniqueBy(
+    tours.map((tour) => ({
+      id: tour.project_id,
+      name: tour.project_name,
+    })),
+    (item) => item.id,
+  );
+
+  if (matchedTour) selectedProjectId.value = matchedTour.project_id;
+  if (!selectedProjectId.value && projects.value.length) selectedProjectId.value = projects.value[0].id;
+
+  locations.value = uniqueBy(
+    tours
+      .filter((tour) => Number(tour.project_id) === Number(selectedProjectId.value))
+      .map((tour) => ({
+        id: tour.location_id,
+        name: tour.location_name,
+      })),
+    (item) => item.id,
+  );
+
+  if (matchedTour) selectedLocationId.value = matchedTour.location_id;
+  if (!locations.value.some((location) => Number(location.id) === Number(selectedLocationId.value))) {
+    selectedLocationId.value = locations.value[0]?.id || '';
+  }
+
+  versions.value = tours
+    .filter((tour) => Number(tour.location_id) === Number(selectedLocationId.value))
+    .map((tour) => ({
+      id: tour.version_id,
+      version_number: tour.version_number,
+      label: tour.version_label,
+      status: 'published',
+      public_token: tour.public_token,
+    }));
+
+  if (matchedTour) selectedVersionId.value = matchedTour.version_id;
+  if (!versions.value.some((item) => Number(item.id) === Number(selectedVersionId.value))) {
+    selectedVersionId.value = versions.value[0]?.id || '';
+  }
+}
+
+async function loadSelectedPublishedTour() {
+  await loadPublishedCatalog();
+  syncPublishedDropdowns();
+  const matchedTour = publishedTours.value.find((tour) => (
+    Number(tour.project_id) === Number(selectedProjectId.value)
+    && Number(tour.location_id) === Number(selectedLocationId.value)
+    && Number(tour.version_id) === Number(selectedVersionId.value)
+  )) || publishedTours.value.find((tour) => Number(tour.version_id) === Number(selectedVersionId.value));
+
+  if (!matchedTour) {
+    errorMessage.value = 'No published tour selected.';
+    scenes.value = [];
+    return;
+  }
+
+  syncPublishedDropdowns(matchedTour);
+  await loadPublishedTourByToken(matchedTour.public_token);
+}
+
 async function loadProject() {
   const response = await listProjects();
   projects.value = normalizeResults(response.data);
@@ -263,6 +337,10 @@ async function loadVersionsForLocation() {
 
 async function loadVersionDetail() {
   if (!selectedLocationId.value || !selectedVersionId.value) return;
+  if (isPublicViewerMode.value) {
+    await loadSelectedPublishedTour();
+    return;
+  }
   errorMessage.value = '';
   stopTourAudio();
   try {
@@ -286,8 +364,7 @@ async function loadPublishedTourByToken(publicToken) {
 }
 
 async function loadPublishedFallback() {
-  const response = await listPublishedTours();
-  const tours = normalizeResults(response.data);
+  const tours = await loadPublishedCatalog();
   const queryProject = Number(route.query.project || 0);
   const queryLocation = Number(route.query.location || 0);
   const queryVersion = Number(route.query.version || 0);
@@ -305,33 +382,7 @@ async function loadPublishedFallback() {
     throw new Error('No published tour matches this URL.');
   }
 
-  projects.value = uniqueBy(tours.map((tour) => ({
-    id: tour.project_id,
-    name: tour.project_name,
-  })), (item) => item.id);
-  selectedProjectId.value = matchedTour.project_id;
-
-  locations.value = uniqueBy(
-    tours
-      .filter((tour) => Number(tour.project_id) === Number(selectedProjectId.value))
-      .map((tour) => ({
-        id: tour.location_id,
-        name: tour.location_name,
-      })),
-    (item) => item.id,
-  );
-  selectedLocationId.value = matchedTour.location_id;
-
-  versions.value = tours
-    .filter((tour) => Number(tour.location_id) === Number(selectedLocationId.value))
-    .map((tour) => ({
-      id: tour.version_id,
-      version_number: tour.version_number,
-      label: tour.version_label,
-      status: 'published',
-      public_token: tour.public_token,
-    }));
-  selectedVersionId.value = matchedTour.version_id;
+  syncPublishedDropdowns(matchedTour);
 
   await loadPublishedTourByToken(matchedTour.public_token);
 }
@@ -339,6 +390,14 @@ async function loadPublishedFallback() {
 async function changeProject() {
   stopTourAudio();
   selectedPointHotspot.value = null;
+  if (isPublicViewerMode.value) {
+    selectedLocationId.value = '';
+    selectedVersionId.value = '';
+    scenes.value = [];
+    syncPublishedDropdowns();
+    await loadSelectedPublishedTour();
+    return;
+  }
   selectedLocationId.value = '';
   selectedVersionId.value = '';
   locations.value = [];
@@ -352,6 +411,13 @@ async function changeProject() {
 async function changeLocation() {
   stopTourAudio();
   selectedPointHotspot.value = null;
+  if (isPublicViewerMode.value) {
+    selectedVersionId.value = '';
+    scenes.value = [];
+    syncPublishedDropdowns();
+    await loadSelectedPublishedTour();
+    return;
+  }
   selectedVersionId.value = '';
   versions.value = [];
   scenes.value = [];
@@ -466,6 +532,18 @@ async function boot() {
   errorMessage.value = '';
   const hasPublicToken = Boolean(route.query.token || route.query.public_token);
   const hasPrivateSelection = Boolean(route.query.project || route.query.location || route.query.version);
+
+  if (isPublicViewerMode.value) {
+    try {
+      await loadPublishedFallback();
+      errorMessage.value = '';
+    } catch (error) {
+      errorMessage.value = error.response?.data?.detail
+        || error.message
+        || 'Could not load published tour data.';
+    }
+    return;
+  }
 
   if (hasPublicToken) {
     try {

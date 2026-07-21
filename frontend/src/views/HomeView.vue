@@ -1,10 +1,12 @@
 <script setup>
 import { computed, onMounted, ref } from "vue";
-import { useRouter } from "vue-router";
+import { RouterLink, useRouter } from "vue-router";
 
 import { listPublishedTours } from "../api/publishedToursApi";
+import { useAuthStore } from "../stores/authStore";
 
 const router = useRouter();
+const auth = useAuthStore();
 const tours = ref([]);
 const search = ref("");
 const loading = ref(false);
@@ -24,6 +26,7 @@ const filteredTours = computed(() => {
       .some((value) => String(value).toLowerCase().includes(keyword)),
   );
 });
+
 const totalScenes = computed(() =>
   tours.value.reduce((sum, tour) => sum + Number(tour.scene_count || 0), 0),
 );
@@ -55,6 +58,10 @@ function openViewer(tour) {
   });
 }
 
+function goLogin() {
+  router.push("/login");
+}
+
 async function loadTours() {
   loading.value = true;
   errorMessage.value = "";
@@ -74,13 +81,25 @@ onMounted(loadTours);
 
 <template>
   <section class="page home-page">
+    <nav v-if="!auth.isAuthenticated" class="home-topbar">
+      <RouterLink class="home-logo" to="/">VR360</RouterLink>
+      <div class="home-topbar-actions">
+        <button class="ghost-button compact-button" type="button" @click="loadTours">
+          {{ loading ? "Loading..." : "Refresh" }}
+        </button>
+        <button class="primary-button compact-button" type="button" @click="goLogin">
+          Dang nhap
+        </button>
+      </div>
+    </nav>
+
     <header class="home-hero">
-      <div>
-        <p class="eyebrow">Thư viện VR360</p>
-        <h1>Khám phá tour VR360</h1>
-        <p>Chọn một tour đã publish để xem nhanh trong VR360 Viewer.</p>
+      <div class="home-hero-copy">
+        <p class="eyebrow">Thu vien VR360</p>
+        <h1>Kham pha cac tour 360 da publish</h1>
+        <p>Chon tour cong khai de xem nhanh tren VR360 Viewer, hoac dang nhap de quan ly du an.</p>
         <div class="home-hero-actions">
-          <input v-model="search" placeholder="Tìm theo project, location..." />
+          <input v-model="search" placeholder="Tim theo project, location..." />
           <button
             class="secondary-button"
             type="button"
@@ -92,9 +111,9 @@ onMounted(loadTours);
         </div>
       </div>
       <div class="home-summary-card">
-        <span>Đã publish</span>
+        <span>Da publish</span>
         <strong>{{ tours.length }}</strong>
-        <small>{{ totalScenes }} scene sẵn sàng</small>
+        <small>{{ totalScenes }} scene san sang</small>
       </div>
     </header>
 
@@ -116,19 +135,14 @@ onMounted(loadTours);
               : {}
           "
         >
-          <span>Đã xuất bản</span>
+          <span>Da xuat ban</span>
         </div>
         <div class="published-tour-body">
           <small>{{ tour.project_name }}</small>
           <h2>{{ tour.location_name }}</h2>
-          <p>
-            {{ tour.location_description || "Tour VR360 đã sẵn sàng để xem." }}
-          </p>
+          <p>{{ tour.location_description || "Tour VR360 da san sang de xem." }}</p>
           <div class="published-tour-meta">
-            <span
-              >v{{ tour.version_number }}
-              {{ tour.version_label ? `· ${tour.version_label}` : "" }}</span
-            >
+            <span>v{{ tour.version_number }}{{ tour.version_label ? ` · ${tour.version_label}` : "" }}</span>
             <span>{{ tour.scene_count }} scenes</span>
           </div>
           <div class="published-tour-footer">
@@ -138,7 +152,7 @@ onMounted(loadTours);
               type="button"
               @click="openViewer(tour)"
             >
-              View tour
+              Xem tour
             </button>
           </div>
         </div>

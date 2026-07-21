@@ -47,6 +47,17 @@ def request_origin(request):
     return f"{parsed.scheme}://{parsed.netloc}"
 
 
+def local_domain_aliases(domain):
+    if not domain:
+        return set()
+    parsed = urlsplit(f"//{domain}")
+    host = (parsed.hostname or "").lower()
+    if host not in {"localhost", "127.0.0.1"}:
+        return {domain}
+    port = f":{parsed.port}" if parsed.port else ""
+    return {f"localhost{port}", f"127.0.0.1{port}"}
+
+
 def client_ip(request):
     forwarded_for = request.META.get("HTTP_X_FORWARDED_FOR", "")
     if forwarded_for:
@@ -125,7 +136,13 @@ class PublicAccessMixin:
     def check_public_access(self, request, config):
         domains = self.allowed_domains(config)
         domain = request_domain(request)
-        return bool(domain and domain in domains)
+        if not domain:
+            return False
+        if domain in domains:
+            return True
+        if settings.DEBUG and local_domain_aliases(domain).intersection(domains):
+            return True
+        return False
 
     def add_public_headers(self, response, request, config):
         domains = sorted(self.allowed_domains(config))
@@ -135,7 +152,11 @@ class PublicAccessMixin:
         frame_ancestors = " ".join(domains) if domains else "'none'"
         response["Content-Security-Policy"] = f"frame-ancestors {frame_ancestors}"
 
-        if origin and origin_domain in domains:
+        origin_allowed = origin_domain in domains
+        if settings.DEBUG and not origin_allowed:
+            origin_allowed = bool(local_domain_aliases(origin_domain).intersection(domains))
+
+        if origin and origin_allowed:
             response["Access-Control-Allow-Origin"] = origin
             response["Access-Control-Allow-Credentials"] = "false"
             response["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
