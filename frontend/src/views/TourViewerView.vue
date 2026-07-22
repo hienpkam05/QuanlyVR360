@@ -63,6 +63,8 @@ const displayHotspots = computed(() => {
         title: hotspot.info?.title || hotspot.info_title || hotspot.label || '',
         description: hotspot.info?.description || hotspot.info_description || hotspot.description || '',
         image_url: resolveUrl(hotspot.info?.image_url || hotspot.info_image_url || hotspot.image_url || ''),
+        video_url: resolveUrl(hotspot.info?.video_url || hotspot.info_video_url || hotspot.video_url || ''),
+        youtube_url: hotspot.info?.youtube_url || hotspot.info_youtube_url || hotspot.youtube_url || '',
       },
     };
   });
@@ -85,6 +87,19 @@ function resolveUrl(url) {
 function resolveSceneImage(scene) {
   if (!scene) return '';
   return resolveUrl(scene.image_url || scene.original_file || scene.thumbnail || scene.thumb || scene.panorama || '');
+}
+
+function youtubeEmbedUrl(url) {
+  if (!url) return '';
+  const value = String(url).trim();
+  const patterns = [
+    /youtube\.com\/watch\?v=([^&]+)/i,
+    /youtu\.be\/([^?&]+)/i,
+    /youtube\.com\/embed\/([^?&/]+)/i,
+    /youtube\.com\/shorts\/([^?&/]+)/i,
+  ];
+  const match = patterns.map((pattern) => value.match(pattern)).find(Boolean);
+  return match?.[1] ? `https://www.youtube.com/embed/${match[1]}` : '';
 }
 
 function sleep(ms) {
@@ -176,6 +191,8 @@ function normalizeScene(scene, index = 0) {
         title: hotspot.info?.title || hotspot.info_title || '',
         description: hotspot.info?.description || hotspot.info_description || hotspot.description || '',
         image_url: hotspot.info?.image_url || hotspot.info_image_url || hotspot.image_url || '',
+        video_url: hotspot.info?.video_url || hotspot.info_video_url || hotspot.video_url || '',
+        youtube_url: hotspot.info?.youtube_url || hotspot.info_youtube_url || hotspot.youtube_url || '',
       },
       glow: hotspot.glow ?? hotspot.style?.glow ?? true,
     })),
@@ -709,8 +726,23 @@ onBeforeUnmount(stopTourAudio);
     >
       <article class="viewer-info-modal">
         <button class="viewer-info-close" type="button" @click="selectedInfoHotspot = null">×</button>
+        <div v-if="youtubeEmbedUrl(selectedInfoHotspot.info?.youtube_url)" class="viewer-info-media">
+          <iframe
+            :src="youtubeEmbedUrl(selectedInfoHotspot.info.youtube_url)"
+            title="YouTube video"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+            allowfullscreen
+          ></iframe>
+        </div>
+        <video
+          v-else-if="selectedInfoHotspot.info?.video_url"
+          class="viewer-info-video"
+          :src="selectedInfoHotspot.info.video_url"
+          controls
+          playsinline
+        ></video>
         <span
-          v-if="selectedInfoHotspot.info?.image_url"
+          v-else-if="selectedInfoHotspot.info?.image_url"
           class="viewer-info-image"
           :style="{ backgroundImage: `url(${selectedInfoHotspot.info.image_url})` }"
         ></span>

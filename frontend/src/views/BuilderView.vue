@@ -11,7 +11,11 @@ import { useRoute, useRouter } from "vue-router";
 
 import PanoramaViewer from "../components/PanoramaViewer.vue";
 import { apiBaseURL } from "../api/http";
-import { createLocation, listProjectLocations } from "../api/locationsApi";
+import {
+  createLocation,
+  listProjectLocations,
+  uploadLocationThumbnail,
+} from "../api/locationsApi";
 import { deleteSceneAsset, uploadSceneAsset } from "../api/mediaApi";
 import { createProject, listProjects } from "../api/projectsApi";
 import {
@@ -21,6 +25,7 @@ import {
   updateVersion,
   uploadHotspotAudio,
   uploadHotspotInfoImage,
+  uploadHotspotInfoVideo,
 } from "../api/toursApi";
 
 const router = useRouter();
@@ -70,6 +75,8 @@ const hotspotForm = reactive({
   info_title: "",
   info_description: "",
   info_image_url: "",
+  info_video_url: "",
+  info_youtube_url: "",
   glow: true,
 });
 const viewState = reactive({ lon: 0, lat: 0, fov: 75 });
@@ -85,6 +92,8 @@ const quickCreateForm = reactive({
   project_description: "",
   location_name: "",
   location_description: "",
+  location_thumbnail_file: null,
+  location_thumbnail_preview: "",
   latitude: "",
   longitude: "",
   version_label: "",
@@ -147,6 +156,8 @@ const tourData = computed(() => ({
           local_audio_file,
           local_info_image_file,
           local_info_image_preview,
+          local_info_video_file,
+          local_info_video_preview,
           ...hotspotPayload
         } = hotspot;
         return hotspotPayload;
@@ -186,7 +197,7 @@ function scheduleMessageAutoDismiss() {
   messageTimer = setTimeout(() => {
     if (errorMessage.value === currentError) errorMessage.value = "";
     if (successMessage.value === currentSuccess) successMessage.value = "";
-  }, 5000);
+  }, 2000);
 }
 
 function uid(prefix) {
@@ -270,6 +281,8 @@ function normalizeScene(scene, index = 0) {
       local_audio_file: hotspot.local_audio_file || null,
       local_info_image_file: hotspot.local_info_image_file || null,
       local_info_image_preview: hotspot.local_info_image_preview || "",
+      local_info_video_file: hotspot.local_info_video_file || null,
+      local_info_video_preview: hotspot.local_info_video_preview || "",
       area_points: Array.isArray(hotspot.area_points)
         ? hotspot.area_points.map((point) => ({
             lon: Number(point.lon ?? 0),
@@ -292,6 +305,16 @@ function normalizeScene(scene, index = 0) {
           hotspot.info?.image_url ||
           hotspot.info_image_url ||
           hotspot.image_url ||
+          "",
+        video_url:
+          hotspot.info?.video_url ||
+          hotspot.info_video_url ||
+          hotspot.video_url ||
+          "",
+        youtube_url:
+          hotspot.info?.youtube_url ||
+          hotspot.info_youtube_url ||
+          hotspot.youtube_url ||
           "",
       },
       glow: hotspot.glow ?? hotspot.style?.glow ?? true,
@@ -428,6 +451,8 @@ function hydrateHotspotForm(hotspot) {
   hotspotForm.info_title = hotspot?.info?.title || "";
   hotspotForm.info_description = hotspot?.info?.description || "";
   hotspotForm.info_image_url = hotspot?.info?.image_url || "";
+  hotspotForm.info_video_url = hotspot?.info?.video_url || "";
+  hotspotForm.info_youtube_url = hotspot?.info?.youtube_url || "";
   hotspotForm.glow = hotspot?.glow ?? true;
 }
 
@@ -619,6 +644,48 @@ async function uploadPendingHotspotInfoImages() {
   return uploadedCount;
 }
 
+async function uploadHotspotInfoVideoToBackend(hotspot) {
+  if (
+    !selectedLocationId.value ||
+    !selectedVersionId.value ||
+    !hotspot.local_info_video_file
+  )
+    return false;
+  const response = await uploadHotspotInfoVideo(
+    selectedLocationId.value,
+    selectedVersionId.value,
+    {
+      hotspotId: hotspot.id,
+      videoFile: hotspot.local_info_video_file,
+    },
+  );
+  hotspot.info = {
+    ...(hotspot.info || {}),
+    video_url: response.data.video_url || response.data.video_path || "",
+  };
+  if (hotspot.local_info_video_preview) {
+    URL.revokeObjectURL(hotspot.local_info_video_preview);
+  }
+  hotspot.local_info_video_file = null;
+  hotspot.local_info_video_preview = "";
+  hotspotForm.info_video_url = hotspot.info.video_url;
+  return true;
+}
+
+async function uploadPendingHotspotInfoVideos() {
+  if (!selectedVersionId.value) return 0;
+  let uploadedCount = 0;
+  for (const scene of scenes.value) {
+    for (const hotspot of scene.hotspots || []) {
+      if (hotspot.local_info_video_file) {
+        const uploaded = await uploadHotspotInfoVideoToBackend(hotspot);
+        if (uploaded) uploadedCount += 1;
+      }
+    }
+  }
+  return uploadedCount;
+}
+
 async function handleFiles(fileList) {
   const files = Array.from(fileList || []).filter((file) =>
     file.type.startsWith("image/"),
@@ -718,8 +785,10 @@ function addHotspotFromCanvas(point) {
     local_audio_file: null,
     local_info_image_file: null,
     local_info_image_preview: "",
+    local_info_video_file: null,
+    local_info_video_preview: "",
     area_points: [],
-    info: { title: "", description: "", image_url: "" },
+    info: { title: "", description: "", image_url: "", video_url: "", youtube_url: "" },
     glow: true,
   };
   activeScene.value.hotspots = [...(activeScene.value.hotspots || []), hotspot];
@@ -757,8 +826,10 @@ function finishInfoArea() {
     local_audio_file: null,
     local_info_image_file: null,
     local_info_image_preview: "",
+    local_info_video_file: null,
+    local_info_video_preview: "",
     area_points: points,
-    info: { title: "", description: "", image_url: "" },
+    info: { title: "", description: "", image_url: "", video_url: "", youtube_url: "" },
     glow: true,
   };
   activeScene.value.hotspots = [...(activeScene.value.hotspots || []), hotspot];
@@ -820,6 +891,12 @@ function saveHotspot() {
       hotspotForm.info_image_url.trim() ||
       hotspot.info?.image_url ||
       "",
+    video_url:
+      hotspot.local_info_video_preview ||
+      hotspotForm.info_video_url.trim() ||
+      hotspot.info?.video_url ||
+      "",
+    youtube_url: hotspotForm.info_youtube_url.trim(),
   };
   hotspot.glow = Boolean(hotspotForm.glow);
   hotspotForm.target_scene_id = hotspot.target_scene_id;
@@ -856,6 +933,29 @@ function onHotspotInfoImageChange(event) {
   };
   hotspotForm.info_image_url = "";
   successMessage.value = "Selected info image. Click Save Tour to upload it.";
+  event.target.value = "";
+}
+
+function onHotspotInfoVideoChange(event) {
+  const file = event.target.files?.[0] || null;
+  const hotspot = selectedHotspot.value;
+  if (!hotspot || !file) return;
+  if (!file.type.startsWith("video/")) {
+    errorMessage.value = "Only video files are allowed.";
+    event.target.value = "";
+    return;
+  }
+  if (hotspot.local_info_video_preview) {
+    URL.revokeObjectURL(hotspot.local_info_video_preview);
+  }
+  hotspot.local_info_video_file = file;
+  hotspot.local_info_video_preview = URL.createObjectURL(file);
+  hotspot.info = {
+    ...(hotspot.info || {}),
+    video_url: hotspot.local_info_video_preview,
+  };
+  hotspotForm.info_video_url = "";
+  successMessage.value = "Selected info video. Click Save Tour to upload it.";
   event.target.value = "";
 }
 
@@ -913,6 +1013,7 @@ async function openQuickCreateModal() {
   quickCreateForm.project_description = "";
   quickCreateForm.location_name = "";
   quickCreateForm.location_description = "";
+  clearQuickLocationThumbnailPreview();
   quickCreateForm.latitude = "";
   quickCreateForm.longitude = "";
   quickCreateForm.version_label = "";
@@ -972,14 +1073,33 @@ function enableCreateLocation() {
   quickCreateForm.create_version = true;
   quickCreateForm.location_id = "";
   quickCreateForm.version_id = "";
+  clearQuickLocationThumbnailPreview();
   quickVersions.value = [];
 }
 
 function useExistingLocation() {
   quickCreateForm.create_location = false;
+  clearQuickLocationThumbnailPreview();
   quickCreateForm.location_id =
     selectedLocationId.value || quickLocation.value[0]?.id || "";
   loadQuickVersions();
+}
+
+function clearQuickLocationThumbnailPreview() {
+  if (quickCreateForm.location_thumbnail_preview) {
+    URL.revokeObjectURL(quickCreateForm.location_thumbnail_preview);
+  }
+  quickCreateForm.location_thumbnail_file = null;
+  quickCreateForm.location_thumbnail_preview = "";
+}
+
+function onQuickLocationThumbnailChange(event) {
+  const file = event.target.files?.[0] || null;
+  if (quickCreateForm.location_thumbnail_preview) {
+    URL.revokeObjectURL(quickCreateForm.location_thumbnail_preview);
+  }
+  quickCreateForm.location_thumbnail_file = file;
+  quickCreateForm.location_thumbnail_preview = file ? URL.createObjectURL(file) : "";
 }
 
 function onQuickVersionAudioChange(event) {
@@ -1046,12 +1166,19 @@ async function quickCreateTour() {
       if (quickCreateForm.longitude !== "")
         locationPayload.longitude = Number(quickCreateForm.longitude);
 
-      const locationResponse = await createLocation(
-        project.id,
-        locationPayload,
-      );
-      location = locationResponse.data;
-    }
+        const locationResponse = await createLocation(
+          project.id,
+          locationPayload,
+        );
+        location = locationResponse.data;
+        if (quickCreateForm.location_thumbnail_file) {
+          const thumbnailResponse = await uploadLocationThumbnail(
+            location.id,
+            quickCreateForm.location_thumbnail_file,
+          );
+          location = thumbnailResponse.data;
+        }
+      }
 
     let nextVersion = quickVersions.value.find(
       (item) => item.id === quickCreateForm.version_id,
@@ -1150,10 +1277,19 @@ async function saveBuilder() {
     const hasPendingHotspotInfoImages = scenes.value.some((scene) =>
       (scene.hotspots || []).some((hotspot) => hotspot.local_info_image_file),
     );
+    const hasPendingHotspotInfoVideos = scenes.value.some((scene) =>
+      (scene.hotspots || []).some((hotspot) => hotspot.local_info_video_file),
+    );
     let uploadedCount = 0;
     let uploadedHotspotAudioCount = 0;
     let uploadedHotspotInfoImageCount = 0;
-    if (hasPendingUploads || hasPendingHotspotAudio || hasPendingHotspotInfoImages) {
+    let uploadedHotspotInfoVideoCount = 0;
+    if (
+      hasPendingUploads ||
+      hasPendingHotspotAudio ||
+      hasPendingHotspotInfoImages ||
+      hasPendingHotspotInfoVideos
+    ) {
       version.value = (
         await updateVersion(selectedLocationId.value, selectedVersionId.value, {
           label: version.value.label,
@@ -1164,6 +1300,7 @@ async function saveBuilder() {
       uploadedCount = await uploadPendingSceneFiles();
       uploadedHotspotAudioCount = await uploadPendingHotspotAudioFiles();
       uploadedHotspotInfoImageCount = await uploadPendingHotspotInfoImages();
+      uploadedHotspotInfoVideoCount = await uploadPendingHotspotInfoVideos();
     }
 
     const response = await updateVersion(
@@ -1177,8 +1314,11 @@ async function saveBuilder() {
     );
     version.value = response.data;
     successMessage.value =
-      hasPendingUploads || hasPendingHotspotAudio || hasPendingHotspotInfoImages
-        ? `Saved tour and uploaded ${uploadedCount} panorama image(s), ${uploadedHotspotAudioCount} hotspot audio file(s), ${uploadedHotspotInfoImageCount} info image(s).`
+      hasPendingUploads ||
+      hasPendingHotspotAudio ||
+      hasPendingHotspotInfoImages ||
+      hasPendingHotspotInfoVideos
+        ? `Saved tour and uploaded ${uploadedCount} panorama image(s), ${uploadedHotspotAudioCount} hotspot audio file(s), ${uploadedHotspotInfoImageCount} info image(s), ${uploadedHotspotInfoVideoCount} info video(s).`
         : "Saved draft tour version successfully.";
   } catch (error) {
     errorMessage.value = extractApiError(
@@ -1214,6 +1354,7 @@ onMounted(boot);
 
 onBeforeUnmount(() => {
   clearTimeout(messageTimer);
+  clearQuickLocationThumbnailPreview();
   scenes.value.forEach((scene) => {
     if (scene.preview_object_url) URL.revokeObjectURL(scene.preview_object_url);
   });
@@ -1643,6 +1784,41 @@ onBeforeUnmount(() => {
                   </small>
                 </div>
               </div>
+              <div class="info-media-uploader">
+                <div class="info-media-card">
+                  <strong>Video</strong>
+                  <small>Upload MP4/WebM or paste a hosted video URL.</small>
+                  <label class="info-upload-button">
+                    Upload video
+                    <input
+                      type="file"
+                      accept="video/*"
+                      @change="onHotspotInfoVideoChange"
+                    />
+                  </label>
+                  <input
+                    v-model="hotspotForm.info_video_url"
+                    placeholder="Video URL /media/... or https://..."
+                  />
+                  <small>
+                    {{
+                      selectedHotspot.local_info_video_file
+                        ? `Selected: ${selectedHotspot.local_info_video_file.name}`
+                        : selectedHotspot.info?.video_url
+                          ? "Video will be shown in the popup."
+                          : "No uploaded video selected."
+                    }}
+                  </small>
+                </div>
+                <div class="info-media-card">
+                  <strong>YouTube</strong>
+                  <small>Paste a YouTube watch/share/embed link.</small>
+                  <input
+                    v-model="hotspotForm.info_youtube_url"
+                    placeholder="https://www.youtube.com/watch?v=..."
+                  />
+                </div>
+              </div>
               <label>
                 Description
                 <textarea
@@ -1906,6 +2082,37 @@ onBeforeUnmount(() => {
                   rows="2"
                 ></textarea>
               </label>
+              <div class="thumbnail-edit-block">
+                <span class="form-label">Location thumbnail</span>
+                <div class="thumbnail-edit-grid">
+                  <div
+                    class="thumbnail-preview"
+                    :style="
+                      quickCreateForm.location_thumbnail_preview
+                        ? {
+                            backgroundImage: `url(${quickCreateForm.location_thumbnail_preview})`,
+                          }
+                        : {}
+                    "
+                  >
+                    <span v-if="!quickCreateForm.location_thumbnail_preview">
+                      No thumbnail
+                    </span>
+                  </div>
+                  <label class="thumbnail-upload-button">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      @change="onQuickLocationThumbnailChange"
+                    />
+                    <strong>Upload thumbnail</strong>
+                    <small>
+                      Anh nay dung cho card publish tren Home, dep hon anh
+                      panorama.
+                    </small>
+                  </label>
+                </div>
+              </div>
               <div class="two-inputs">
                 <label
                   >Latitude<input

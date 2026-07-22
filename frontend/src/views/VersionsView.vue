@@ -12,6 +12,7 @@ const preview = ref(null);
 const selectedProjectId = ref('');
 const selectedLocationId = ref('');
 const errorMessage = ref('');
+const successMessage = ref('');
 const form = reactive({
   id: null,
   label: '',
@@ -62,6 +63,7 @@ function resetForm() {
 
 async function submitVersion() {
   errorMessage.value = '';
+  successMessage.value = '';
   try {
     const payload = {
       label: form.label,
@@ -75,6 +77,7 @@ async function submitVersion() {
     }
     resetForm();
     await loadVersions();
+    successMessage.value = 'Version saved.';
   } catch (error) {
     errorMessage.value = error.response?.data?.detail || error.message || 'Could not save version.';
   }
@@ -88,7 +91,7 @@ async function showPreview(version) {
 async function copyExport(version) {
   const response = await exportVersion(selectedLocationId.value, version.id);
   await navigator.clipboard.writeText(JSON.stringify(response.data, null, 2));
-  window.alert('Da copy JSON export vao clipboard.');
+  successMessage.value = 'Copied JSON export to clipboard.';
 }
 
 async function removeVersion(version) {
@@ -123,6 +126,7 @@ onMounted(boot);
     </header>
 
     <p v-if="errorMessage" class="error-message">{{ errorMessage }}</p>
+    <p v-if="successMessage" class="success-message">{{ successMessage }}</p>
 
     <section class="panel selector-grid">
       <label>

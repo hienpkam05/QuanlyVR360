@@ -117,6 +117,32 @@ function vectorToLonLat(vector) {
   };
 }
 
+function youtubeEmbedUrl(url) {
+  if (!url) return '';
+  const value = String(url).trim();
+  const patterns = [
+    /youtube\.com\/watch\?v=([^&]+)/i,
+    /youtu\.be\/([^?&]+)/i,
+    /youtube\.com\/embed\/([^?&/]+)/i,
+    /youtube\.com\/shorts\/([^?&/]+)/i,
+  ];
+  const match = patterns.map((pattern) => value.match(pattern)).find(Boolean);
+    if (!match?.[1]) return '';
+    const params = new URLSearchParams({
+      controls: '0',
+      disablekb: '1',
+      fs: '0',
+      modestbranding: '1',
+      playsinline: '1',
+      rel: '0',
+    });
+    return `https://www.youtube.com/embed/${match[1]}?${params.toString()}`;
+  }
+
+function hasAreaInlineMedia(area) {
+  return Boolean(youtubeEmbedUrl(area.info?.youtube_url) || area.info?.video_url);
+}
+
 function updateProjectedHotspots() {
   if (!container.value || !camera || isTextureLoading.value) {
     projectedHotspots.value = [];
@@ -170,17 +196,40 @@ function updateProjectedHotspots() {
       const allPointsVisible = projectedPoints.length > 0 && visiblePoints.length === projectedPoints.length;
       const xs = projectedPoints.map((point) => point.screenX);
       const ys = projectedPoints.map((point) => point.screenY);
+      const minX = Math.min(...xs);
+      const maxX = Math.max(...xs);
+      const minY = Math.min(...ys);
+      const maxY = Math.max(...ys);
       const boxWidth = Math.max(...xs) - Math.min(...xs);
       const boxHeight = Math.max(...ys) - Math.min(...ys);
       const crossesScreenEdge = boxWidth > width * 0.72 || boxHeight > height * 0.72;
       const canRenderDraft = hotspot.isDraft && projectedPoints.length >= minimumPoints && visiblePoints.length >= minimumPoints;
       const canRenderArea = !hotspot.isDraft && projectedPoints.length >= minimumPoints && allPointsVisible && !crossesScreenEdge;
-      const drawablePoints = hotspot.isDraft ? visiblePoints : projectedPoints;
-      return {
-        ...hotspot,
-        index,
-        visible: canRenderDraft || canRenderArea,
-        polygonPoints: drawablePoints.map((point) => `${point.screenX},${point.screenY}`).join(' '),
+        const drawablePoints = hotspot.isDraft ? visiblePoints : projectedPoints;
+        const clipPoints = drawablePoints.map((point) => {
+          const x = boxWidth ? ((point.screenX - minX) / boxWidth) * 100 : 0;
+          const y = boxHeight ? ((point.screenY - minY) / boxHeight) * 100 : 0;
+          return `${Math.min(100, Math.max(0, x)).toFixed(2)}% ${Math.min(100, Math.max(0, y)).toFixed(2)}%`;
+        });
+        return {
+          ...hotspot,
+          index,
+          visible: canRenderDraft || canRenderArea,
+          polygonPoints: drawablePoints.map((point) => `${point.screenX},${point.screenY}`).join(' '),
+          mediaClipPath: clipPoints.length >= 3 ? `polygon(${clipPoints.join(', ')})` : '',
+          box: {
+            left: minX,
+            top: minY,
+            width: boxWidth,
+          height: boxHeight,
+          },
+          mediaBox: {
+            left: minX,
+            top: minY,
+            width: boxWidth,
+            height: boxHeight,
+          },
+        youtube_embed_url: youtubeEmbedUrl(hotspot.info?.youtube_url),
       };
     })
     .filter((area) => area.visible);
@@ -508,6 +557,36 @@ defineExpose({
         />
       </template>
     </svg>
+    <div
+      v-for="area in projectedInfoAreas.filter(hasAreaInlineMedia)"
+      :key="`${area.id}-media`"
+      class="panorama-info-area-media"
+        :style="{
+          left: `${area.mediaBox.left}px`,
+          top: `${area.mediaBox.top}px`,
+          width: `${area.mediaBox.width}px`,
+          height: `${area.mediaBox.height}px`,
+          clipPath: area.mediaClipPath,
+          WebkitClipPath: area.mediaClipPath,
+        }"
+      @click.stop="markInteraction(); emit('hotspot-click', area, $event)"
+    >
+      <iframe
+          v-if="area.youtube_embed_url"
+          :src="area.youtube_embed_url"
+          title="YouTube video"
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+        ></iframe>
+      <video
+        v-else
+        :src="area.info.video_url"
+        autoplay
+        muted
+        loop
+        playsinline
+        controls
+      ></video>
+    </div>
     <button
       v-for="hotspot in projectedHotspots"
       :key="hotspot.id"

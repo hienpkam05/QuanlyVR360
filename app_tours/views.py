@@ -250,6 +250,43 @@ class HotspotInfoImageUploadView(APIView):
         )
 
 
+class HotspotInfoVideoUploadView(APIView):
+    parser_classes = (MultiPartParser, FormParser)
+
+    def post(self, request, location_id, pk):
+        version = get_object_or_404(TourVersion.objects.select_related("location"), pk=pk, location_id=location_id)
+        if version.status == TourVersion.Status.PUBLISHED:
+            return Response(
+                {"detail": "Published tour versions cannot be edited. Archive or create a new draft first."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        video_file = request.FILES.get("video")
+        hotspot_id = request.data.get("hotspot_id") or "hotspot"
+        if not video_file:
+            return Response({"video": "Video file is required."}, status=status.HTTP_400_BAD_REQUEST)
+
+        content_type = video_file.content_type or ""
+        if content_type and not content_type.startswith("video/"):
+            return Response({"video": "Only video files are allowed."}, status=status.HTTP_400_BAD_REQUEST)
+
+        safe_hotspot = slugify(str(hotspot_id)) or "hotspot"
+        safe_name = slugify(str(video_file.name).rsplit(".", 1)[0]) or "video"
+        extension = str(video_file.name).rsplit(".", 1)[-1].lower() if "." in str(video_file.name) else "mp4"
+        path = default_storage.save(
+            f"tours/hotspot_info_video/v{version.pk}/{safe_hotspot}/{safe_name}-{uuid4().hex[:8]}.{extension}",
+            video_file,
+        )
+        url = default_storage.url(path)
+        return Response(
+            {
+                "video_url": request.build_absolute_uri(url),
+                "video_path": url,
+            },
+            status=status.HTTP_201_CREATED,
+        )
+
+
 class TourVersionCompareView(APIView):
     def get(self, request, location_id):
         location = get_object_or_404(Location.objects.select_related("project"), pk=location_id)

@@ -128,11 +128,11 @@ onMounted(loadTours);
         <div
           class="published-tour-cover"
           :style="
-            tour.tour_thumbnail || tour.location_thumbnail
-              ? {
-                  backgroundImage: `url(${tour.tour_thumbnail || tour.location_thumbnail})`,
-                }
-              : {}
+              tour.location_thumbnail || tour.tour_thumbnail
+                ? {
+                   backgroundImage: `url(${tour.location_thumbnail || tour.tour_thumbnail})`,
+                  }
+                : {}
           "
         >
           <span>Da xuat ban</span>

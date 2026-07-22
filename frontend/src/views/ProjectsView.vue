@@ -2,7 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 
-import { createLocation, deleteLocation, listProjectLocations, updateLocation } from '../api/locationsApi';
+import { createLocation, deleteLocation, listProjectLocations, updateLocation, uploadLocationThumbnail } from '../api/locationsApi';
 import { createProject, deleteProject, listProjects, updateProject } from '../api/projectsApi';
 import { createVersion, deleteVersion, listVersions } from '../api/toursApi';
 
@@ -27,11 +27,6 @@ const projectForm = reactive({
   description: '',
 });
 
-const locationForm = reactive({
-  name: '',
-  description: '',
-});
-
 const versionForm = reactive({
   label: '',
   background_audio_file: null,
@@ -44,6 +39,11 @@ const editForm = reactive({
   name: '',
   description: '',
   is_active: true,
+  thumbnail: '',
+  thumbnail_file: null,
+  thumbnail_preview: '',
+  latitude: '',
+  longitude: '',
 });
 
 const selectedProject = computed(() => projects.value.find((project) => project.id === selectedProjectId.value) || null);
@@ -83,7 +83,7 @@ function scheduleMessageAutoDismiss() {
   messageTimer = setTimeout(() => {
     if (errorMessage.value === currentError) errorMessage.value = '';
     if (successMessage.value === currentSuccess) successMessage.value = '';
-  }, 5000);
+  }, 2000);
 }
 
 async function loadProjects() {
@@ -166,50 +166,104 @@ async function submitLocation() {
     errorMessage.value = 'Select a project first.';
     return;
   }
-  if (!locationForm.name.trim()) {
+  if (!editForm.name.trim()) {
     errorMessage.value = 'Location name is required.';
     return;
   }
   errorMessage.value = '';
   successMessage.value = '';
-  const response = await createLocation(selectedProjectId.value, {
-    name: locationForm.name.trim(),
-    description: locationForm.description.trim(),
-    is_active: true,
-  });
-  locationForm.name = '';
-  locationForm.description = '';
-  successMessage.value = 'Location created.';
-  await loadLocations();
-  const location = locations.value.find((item) => item.id === response.data.id);
-  if (location) await selectLocation(location);
+  const payload = {
+    name: editForm.name.trim(),
+    description: editForm.description.trim(),
+    is_active: editForm.is_active,
+  };
+  if (editForm.latitude !== '') payload.latitude = Number(editForm.latitude);
+  if (editForm.longitude !== '') payload.longitude = Number(editForm.longitude);
+
+  try {
+    const response = await createLocation(selectedProjectId.value, payload);
+    if (editForm.thumbnail_file) {
+      await uploadLocationThumbnail(response.data.id, editForm.thumbnail_file);
+    }
+    successMessage.value = 'Location created.';
+    await loadLocations();
+    const location = locations.value.find((item) => item.id === response.data.id);
+    if (location) await selectLocation(location);
+    closeEditModal();
+  } catch (error) {
+    errorMessage.value = extractApiError(error, 'Could not create location.');
+  }
 }
 
 function openProjectEdit(project) {
+  clearEditThumbnailPreview();
   editModal.value = 'project';
   editForm.id = project.id;
   editForm.type = 'project';
   editForm.name = project.name || '';
   editForm.description = project.description || '';
   editForm.is_active = Boolean(project.is_active);
+  editForm.thumbnail = project.thumbnail || '';
+  editForm.latitude = '';
+  editForm.longitude = '';
 }
 
 function openLocationEdit(location) {
+  clearEditThumbnailPreview();
   editModal.value = 'location';
   editForm.id = location.id;
   editForm.type = 'location';
   editForm.name = location.name || '';
   editForm.description = location.description || '';
   editForm.is_active = Boolean(location.is_active);
+  editForm.thumbnail = location.thumbnail || '';
+  editForm.latitude = location.latitude ?? '';
+  editForm.longitude = location.longitude ?? '';
+}
+
+function openLocationCreate() {
+  if (!selectedProjectId.value) {
+    errorMessage.value = 'Select a project first.';
+    return;
+  }
+  clearEditThumbnailPreview();
+  editModal.value = 'create_location';
+  editForm.id = '';
+  editForm.type = 'create_location';
+  editForm.name = '';
+  editForm.description = '';
+  editForm.is_active = true;
+  editForm.thumbnail = '';
+  editForm.latitude = '';
+  editForm.longitude = '';
 }
 
 function closeEditModal() {
+  clearEditThumbnailPreview();
   editModal.value = null;
   editForm.id = '';
   editForm.type = '';
   editForm.name = '';
   editForm.description = '';
   editForm.is_active = true;
+  editForm.thumbnail = '';
+  editForm.thumbnail_file = null;
+  editForm.thumbnail_preview = '';
+  editForm.latitude = '';
+  editForm.longitude = '';
+}
+
+function clearEditThumbnailPreview() {
+  if (editForm.thumbnail_preview) URL.revokeObjectURL(editForm.thumbnail_preview);
+  editForm.thumbnail_preview = '';
+  editForm.thumbnail_file = null;
+}
+
+function onEditThumbnailChange(event) {
+  const file = event.target.files?.[0] || null;
+  if (editForm.thumbnail_preview) URL.revokeObjectURL(editForm.thumbnail_preview);
+  editForm.thumbnail_file = file;
+  editForm.thumbnail_preview = file ? URL.createObjectURL(file) : '';
 }
 
 async function submitEdit() {
@@ -231,10 +285,18 @@ async function submitEdit() {
       await loadProjects();
       if (selectedProjectId.value === editForm.id) await loadLocations();
     } else if (editForm.type === 'location') {
+      payload.latitude = editForm.latitude === '' ? null : Number(editForm.latitude);
+      payload.longitude = editForm.longitude === '' ? null : Number(editForm.longitude);
       await updateLocation(editForm.id, payload);
+      if (editForm.thumbnail_file) {
+        await uploadLocationThumbnail(editForm.id, editForm.thumbnail_file);
+      }
       successMessage.value = 'Location updated.';
       await loadLocations();
       if (selectedLocationId.value === editForm.id) await loadVersionsForLocation();
+    } else if (editForm.type === 'create_location') {
+      await submitLocation();
+      return;
     }
     closeEditModal();
   } catch (error) {
@@ -379,6 +441,7 @@ onMounted(loadProjects);
 
 onBeforeUnmount(() => {
   clearTimeout(messageTimer);
+  clearEditThumbnailPreview();
 });
 </script>
 
@@ -439,10 +502,14 @@ onBeforeUnmount(() => {
           <span class="muted">{{ locations.length }}</span>
         </div>
 
-        <form v-if="selectedProject" class="mini-create-form" @submit.prevent="submitLocation">
-          <input v-model="locationForm.name" placeholder="New location name" />
-          <button class="secondary-button" type="submit">Create</button>
-        </form>
+        <button
+          v-if="selectedProject"
+          class="secondary-button"
+          type="button"
+          @click="openLocationCreate"
+        >
+          + Create location
+        </button>
 
         <p v-if="!selectedProject" class="muted">Select a project to see its locations.</p>
         <p v-else-if="loadingLocations" class="muted">Loading locations...</p>
@@ -536,7 +603,7 @@ onBeforeUnmount(() => {
     <div v-if="editModal" class="builder-modal-backdrop">
       <div class="builder-modal builder-modal-small">
         <div class="builder-modal-header">
-          <h2>Edit {{ editModal }}</h2>
+          <h2>{{ editForm.type === 'create_location' ? 'Create location' : `Edit ${editModal}` }}</h2>
           <button type="button" @click="closeEditModal">×</button>
         </div>
         <form class="form" @submit.prevent="submitEdit">
@@ -548,6 +615,46 @@ onBeforeUnmount(() => {
             Description
             <textarea v-model="editForm.description" rows="4"></textarea>
           </label>
+          <div v-if="editForm.type === 'location' || editForm.type === 'create_location'" class="thumbnail-edit-block">
+            <span class="form-label">Thumbnail</span>
+            <div class="thumbnail-edit-grid">
+              <div
+                class="thumbnail-preview"
+                :style="
+                  editForm.thumbnail_preview || editForm.thumbnail
+                    ? { backgroundImage: `url(${editForm.thumbnail_preview || editForm.thumbnail})` }
+                    : {}
+                "
+              >
+                <span v-if="!editForm.thumbnail_preview && !editForm.thumbnail">No thumbnail</span>
+              </div>
+              <label class="thumbnail-upload-button">
+                <input type="file" accept="image/*" @change="onEditThumbnailChange" />
+                <strong>Upload thumbnail</strong>
+                <small>JPG/PNG/WebP, dùng làm ảnh card khi publish.</small>
+              </label>
+            </div>
+          </div>
+          <div v-if="editForm.type === 'location' || editForm.type === 'create_location'" class="two-inputs">
+            <label>
+              Latitude
+              <input
+                v-model="editForm.latitude"
+                type="number"
+                step="0.000001"
+                placeholder="VD: 21.402514"
+              />
+            </label>
+            <label>
+              Longitude
+              <input
+                v-model="editForm.longitude"
+                type="number"
+                step="0.000001"
+                placeholder="VD: 105.807476"
+              />
+            </label>
+          </div>
           <label class="checkbox-row">
             <input v-model="editForm.is_active" type="checkbox" />
             Active
