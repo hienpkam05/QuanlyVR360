@@ -3144,9 +3144,14 @@ th {
   color: #ffffff;
   display: inline-flex;
   font-weight: 900;
-  height: 42px;
+  height: 36px;
   justify-content: center;
+  position: relative;
+  transition:
+    box-shadow 0.2s ease,
+    transform 0.2s ease;
   width: 42px;
+  width: 36px;
 }
 
 .viewer-point-logo {
@@ -3155,8 +3160,69 @@ th {
   border-radius: 999px;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
   display: inline-flex;
-  height: 46px;
-  width: 46px;
+  height: 38px;
+  position: relative;
+  transition:
+    box-shadow 0.2s ease,
+    transform 0.2s ease;
+  width: 38px;
+}
+
+.viewer-point-dot::before,
+.viewer-point-logo::before {
+  animation: point-orbit-spin 2.6s linear infinite;
+  border: 2px dashed rgba(255, 216, 77, 0.88);
+  border-left-color: rgba(80, 231, 255, 0.95);
+  border-radius: 999px;
+  content: "";
+  inset: -9px;
+  opacity: 0.88;
+  pointer-events: none;
+  position: absolute;
+}
+
+.viewer-point-dot::after,
+.viewer-point-logo::after {
+  animation: point-soft-pulse 1.8s ease-in-out infinite;
+  border: 1px solid rgba(255, 216, 77, 0.38);
+  border-radius: 999px;
+  content: "";
+  inset: -15px;
+  opacity: 0.5;
+  pointer-events: none;
+  position: absolute;
+}
+
+.viewer-hotspot-point:hover .viewer-point-dot,
+.viewer-hotspot-point:hover .viewer-point-logo {
+  box-shadow:
+    0 12px 32px rgba(0, 0, 0, 0.48),
+    0 0 18px rgba(255, 216, 77, 0.42);
+  transform: scale(1.14);
+}
+
+.viewer-hotspot-point:hover .viewer-point-dot::before,
+.viewer-hotspot-point:hover .viewer-point-logo::before {
+  animation-duration: 1.25s;
+  opacity: 1;
+}
+
+@keyframes point-orbit-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes point-soft-pulse {
+  0%,
+  100% {
+    opacity: 0.22;
+    transform: scale(0.92);
+  }
+  50% {
+    opacity: 0.55;
+    transform: scale(1.08);
+  }
 }
 
 .viewer-info-dot {
