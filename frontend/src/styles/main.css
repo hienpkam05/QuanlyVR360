@@ -2077,12 +2077,24 @@ th {
   gap: 10px;
   grid-template-columns: 28px 64px minmax(0, 1fr) 34px;
   margin-top: 12px;
+  user-select: none;
 }
 
 .content-immersive .scene-list-item.active {
   background: #241f45;
   border-color: #7658f4;
   box-shadow: none;
+}
+
+.content-immersive .scene-list-item.dragging {
+  cursor: grabbing;
+  opacity: 0.42;
+  transform: scale(0.98);
+}
+
+.content-immersive .scene-list-item.drag-over-scene {
+  border-color: #17e9f0;
+  box-shadow: 0 0 0 1px rgba(23, 233, 240, 0.45);
 }
 
 .scene-index {

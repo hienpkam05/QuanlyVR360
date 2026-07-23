@@ -41,7 +41,7 @@ const props = defineProps({
   },
 });
 
-const emit = defineEmits(['panorama-click', 'hotspot-click', 'view-change']);
+const emit = defineEmits(['panorama-click', 'hotspot-click', 'hotspot-dblclick', 'view-change']);
 
 const container = ref(null);
 const projectedHotspots = ref([]);
@@ -604,6 +604,7 @@ defineExpose({
       :style="{ left: `${hotspot.screenX}px`, top: `${hotspot.screenY}px` }"
       type="button"
       @click.stop="markInteraction(); emit('hotspot-click', hotspot, $event)"
+      @dblclick.stop="markInteraction(); emit('hotspot-dblclick', hotspot, $event)"
     >
       <template v-if="hotspotDisplayMode === 'viewer' && hotspot.type === 'nav'">
         <span class="viewer-nav-arrow"><i class="ti-angle-double-up" aria-hidden="true"></i></span>

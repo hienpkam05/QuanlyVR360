@@ -45,6 +45,8 @@ const successMessage = ref("");
 let messageTimer = null;
 const uploading = ref(false);
 const isDraggingFile = ref(false);
+const draggedSceneId = ref("");
+const dragOverSceneId = ref("");
 const showImportModal = ref(false);
 const showExportModal = ref(false);
 const showQuickCreateModal = ref(false);
@@ -800,6 +802,48 @@ function removeScene(sceneId) {
   hydrateHotspotForm(null);
 }
 
+function onSceneDragStart(event, sceneId) {
+  draggedSceneId.value = sceneId;
+  dragOverSceneId.value = sceneId;
+  event.dataTransfer.effectAllowed = "move";
+  event.dataTransfer.setData("text/plain", sceneId);
+}
+
+function onSceneDragOver(event, sceneId) {
+  event.preventDefault();
+  if (!draggedSceneId.value || draggedSceneId.value === sceneId) return;
+  dragOverSceneId.value = sceneId;
+}
+
+function onSceneDrop(event, targetSceneId) {
+  event.preventDefault();
+  const sourceSceneId =
+    draggedSceneId.value || event.dataTransfer.getData("text/plain");
+  if (!sourceSceneId || sourceSceneId === targetSceneId) {
+    onSceneDragEnd();
+    return;
+  }
+
+  const nextScenes = [...scenes.value];
+  const fromIndex = nextScenes.findIndex((scene) => scene.id === sourceSceneId);
+  const toIndex = nextScenes.findIndex((scene) => scene.id === targetSceneId);
+  if (fromIndex < 0 || toIndex < 0) {
+    onSceneDragEnd();
+    return;
+  }
+
+  const [movedScene] = nextScenes.splice(fromIndex, 1);
+  nextScenes.splice(toIndex, 0, movedScene);
+  scenes.value = nextScenes;
+  activeSceneId.value = movedScene.id;
+  onSceneDragEnd();
+}
+
+function onSceneDragEnd() {
+  draggedSceneId.value = "";
+  dragOverSceneId.value = "";
+}
+
 function addHotspotFromCanvas(point) {
   if (!activeScene.value) return;
   if (isDrawingInfoArea.value) {
@@ -895,6 +939,25 @@ function cancelInfoArea() {
 function selectHotspot(hotspot) {
   selectedHotspotId.value = hotspot.id;
   hydrateHotspotForm(hotspot);
+}
+
+function openHotspotTargetScene(hotspot) {
+  if (!hotspot) return;
+  selectHotspot(hotspot);
+  const targetSceneId = hotspot.target_scene_id;
+  if (!targetSceneId) {
+    errorMessage.value = "Hotspot nay chua co target scene.";
+    return;
+  }
+  const targetScene = scenes.value.find(
+    (scene) => String(scene.id) === String(targetSceneId),
+  );
+  if (!targetScene) {
+    errorMessage.value = "Khong tim thay scene duoc lien ket.";
+    return;
+  }
+  selectScene(targetScene.id);
+  successMessage.value = `Da chuyen den scene: ${targetScene.name || targetScene.id}.`;
 }
 
 function getDefaultTargetSceneId() {
@@ -1522,9 +1585,18 @@ onBeforeUnmount(() => {
           v-for="(scene, index) in scenes"
           :key="scene.id"
           class="scene-list-item"
-          :class="{ active: scene.id === activeSceneId }"
+          :class="{
+            active: scene.id === activeSceneId,
+            dragging: scene.id === draggedSceneId,
+            'drag-over-scene': scene.id === dragOverSceneId && scene.id !== draggedSceneId,
+          }"
+          draggable="true"
           role="button"
           tabindex="0"
+          @dragstart="onSceneDragStart($event, scene.id)"
+          @dragover="onSceneDragOver($event, scene.id)"
+          @drop="onSceneDrop($event, scene.id)"
+          @dragend="onSceneDragEnd"
           @click="selectScene(scene.id)"
           @keydown.enter.prevent="selectScene(scene.id)"
           @keydown.space.prevent="selectScene(scene.id)"
@@ -1570,6 +1642,7 @@ onBeforeUnmount(() => {
             :initial-view="activeInitialView"
             @panorama-click="addHotspotFromCanvas"
             @hotspot-click="selectHotspot"
+            @hotspot-dblclick="openHotspotTargetScene"
             @view-change="updateViewState"
           />
           <div class="viewer-help">
