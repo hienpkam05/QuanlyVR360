@@ -125,7 +125,13 @@ const activeInitialView = computed(
   () => activeScene.value?.view || { lon: 0, lat: 0, fov: 75 },
 );
 const targetSceneOptions = computed(() =>
-  scenes.value.filter((scene) => scene.id !== activeScene.value?.id),
+  scenes.value.map((scene, index) => ({
+    id: scene.id,
+    name: scene.name || scene.id,
+    index: index + 1,
+    isCurrent: scene.id === activeScene.value?.id,
+    hasImage: Boolean(resolveSceneImage(scene)),
+  })),
 );
 const activeSceneHotspots = computed(() => {
   const baseHotspots = activeScene.value?.hotspots || [];
@@ -228,9 +234,11 @@ function resolveUrl(url) {
 function resolveSceneImage(scene) {
   if (!scene) return "";
   return resolveUrl(
-    scene.preview_url ||
-      scene.image_url ||
+      scene.optimized_file ||
       scene.original_file ||
+      scene.image_url ||
+      scene.preview_url ||
+      scene.preview_file ||
       scene.thumbnail ||
       "",
   );
@@ -239,7 +247,14 @@ function resolveSceneImage(scene) {
 function normalizeScene(scene, index = 0) {
   const id = String(scene.id || scene.key || scene.scene_key || uid("scene"));
   const imageUrl =
-    scene.image_url || scene.url || scene.original_file || scene.panorama || "";
+    scene.optimized_file ||
+    scene.original_file ||
+    scene.image_url ||
+    scene.url ||
+    scene.preview_url ||
+    scene.preview_file ||
+    scene.panorama ||
+    "";
   return {
     id,
     name: scene.name || scene.title || `Scene ${index + 1}`,
@@ -250,8 +265,11 @@ function normalizeScene(scene, index = 0) {
     preview_object_url: scene.preview_object_url || "",
     local_file: scene.local_file || null,
     image_file_name: scene.image_file_name || "",
+    optimized_file: scene.optimized_file || "",
+    preview_file: scene.preview_file || "",
     original_file: scene.original_file || "",
-    thumbnail: scene.thumbnail || "",
+    thumbnail: scene.thumbnail || scene.thumbnail_file || scene.preview_file || "",
+    thumbnail_file: scene.thumbnail_file || "",
     scene_asset_id: scene.scene_asset_id || scene.asset_id || "",
     tile_base_path: scene.tile_base_path || "",
     processing_status: scene.processing_status || "",
@@ -520,7 +538,10 @@ async function uploadSceneToBackend(scene, file) {
     if (scene.scene_asset_id) {
       await deleteSceneAsset(scene.scene_asset_id);
       scene.scene_asset_id = "";
+      scene.optimized_file = "";
+      scene.preview_file = "";
       scene.original_file = "";
+      scene.thumbnail_file = "";
       scene.tile_base_path = "";
       scene.processing_status = "";
     }
@@ -531,7 +552,18 @@ async function uploadSceneToBackend(scene, file) {
     });
     const asset = response.data.asset || response.data;
     scene.scene_asset_id = asset.id;
+    scene.optimized_file = asset.optimized_file || "";
+    scene.preview_file = asset.preview_file || "";
     scene.original_file = asset.original_file;
+    scene.thumbnail_file = asset.thumbnail_file || "";
+    scene.image_url =
+      asset.optimized_file ||
+      asset.original_file ||
+      asset.preview_file ||
+      scene.image_url ||
+      "";
+    scene.preview_url = asset.preview_file || scene.preview_url || "";
+    scene.thumbnail = asset.thumbnail_file || asset.preview_file || scene.thumbnail || "";
     scene.tile_base_path = asset.tile_base_path;
     scene.processing_status = asset.processing_status;
     scene.local_file = null;
@@ -540,7 +572,18 @@ async function uploadSceneToBackend(scene, file) {
     const asset = error.response?.data?.asset;
     if (asset) {
       scene.scene_asset_id = asset.id;
+      scene.optimized_file = asset.optimized_file || "";
+      scene.preview_file = asset.preview_file || "";
       scene.original_file = asset.original_file;
+      scene.thumbnail_file = asset.thumbnail_file || "";
+      scene.image_url =
+        asset.optimized_file ||
+        asset.original_file ||
+        asset.preview_file ||
+        scene.image_url ||
+        "";
+      scene.preview_url = asset.preview_file || scene.preview_url || "";
+      scene.thumbnail = asset.thumbnail_file || asset.preview_file || scene.thumbnail || "";
       scene.tile_base_path = asset.tile_base_path;
       scene.processing_status = asset.processing_status;
       scene.local_file = null;
@@ -1270,7 +1313,8 @@ async function saveBuilder() {
       selectedVersionId.value = createResponse.data.id;
     }
 
-    const hasPendingUploads = scenes.value.some((scene) => scene.local_file);
+    const pendingSceneUploadCount = scenes.value.filter((scene) => scene.local_file).length;
+    const hasPendingUploads = pendingSceneUploadCount > 0;
     const hasPendingHotspotAudio = scenes.value.some((scene) =>
       (scene.hotspots || []).some((hotspot) => hotspot.local_audio_file),
     );
@@ -1298,6 +1342,12 @@ async function saveBuilder() {
         })
       ).data;
       uploadedCount = await uploadPendingSceneFiles();
+      if (uploadedCount !== pendingSceneUploadCount) {
+        throw new Error(
+          errorMessage.value ||
+            "Some panorama images could not be uploaded. Please try Save Tour again.",
+        );
+      }
       uploadedHotspotAudioCount = await uploadPendingHotspotAudioFiles();
       uploadedHotspotInfoImageCount = await uploadPendingHotspotInfoImages();
       uploadedHotspotInfoVideoCount = await uploadPendingHotspotInfoVideos();
@@ -1725,8 +1775,11 @@ onBeforeUnmount(() => {
                   v-for="scene in targetSceneOptions"
                   :key="scene.id"
                   :value="scene.id"
+                  :disabled="scene.isCurrent"
                 >
-                  {{ scene.name || scene.id }}
+                  {{ scene.index }}. {{ scene.name }}
+                  {{ scene.isCurrent ? "(current scene)" : "" }}
+                  {{ !scene.hasImage ? "(no image)" : "" }}
                 </option>
               </select>
             </label>

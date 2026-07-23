@@ -160,6 +160,9 @@ class PublishedTourCardSerializer(serializers.ModelSerializer):
             return self.get_location_thumbnail(obj)
         thumbnail = (
             first_scene.get("thumbnail")
+            or first_scene.get("thumbnail_file")
+            or first_scene.get("preview_file")
+            or first_scene.get("optimized_file")
             or first_scene.get("original_file")
             or first_scene.get("image_url")
             or self.get_location_thumbnail(obj)

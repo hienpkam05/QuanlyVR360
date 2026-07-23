@@ -18,6 +18,9 @@ class SceneAsset(SoftDeleteModel):
     tour_version = models.ForeignKey(TourVersion, on_delete=models.CASCADE, related_name="scene_assets")
     scene_key = models.CharField(max_length=100)
     original_file = models.ImageField(upload_to="scenes/originals/")
+    optimized_file = models.ImageField(upload_to="scenes/optimized/", blank=True, null=True)
+    preview_file = models.ImageField(upload_to="scenes/previews/", blank=True, null=True)
+    thumbnail_file = models.ImageField(upload_to="scenes/thumbnails/", blank=True, null=True)
     original_width = models.PositiveIntegerField(null=True, blank=True)
     original_height = models.PositiveIntegerField(null=True, blank=True)
     file_size = models.PositiveBigIntegerField(null=True, blank=True)
@@ -48,12 +51,21 @@ class SceneAsset(SoftDeleteModel):
 
     def delete(self, using=None, keep_parents=False):
         original_file_name = self.original_file.name if self.original_file else ""
+        optimized_file_name = self.optimized_file.name if self.optimized_file else ""
+        preview_file_name = self.preview_file.name if self.preview_file else ""
+        thumbnail_file_name = self.thumbnail_file.name if self.thumbnail_file else ""
         tile_base_path = self.tile_base_path
 
         deleted = super().delete(using=using, keep_parents=keep_parents)
 
         if original_file_name:
             self.original_file.storage.delete(original_file_name)
+        if optimized_file_name:
+            self.optimized_file.storage.delete(optimized_file_name)
+        if preview_file_name:
+            self.preview_file.storage.delete(preview_file_name)
+        if thumbnail_file_name:
+            self.thumbnail_file.storage.delete(thumbnail_file_name)
 
         if tile_base_path:
             media_root = Path(settings.MEDIA_ROOT).resolve()

@@ -70,9 +70,15 @@ let cameraTween = null;
 let lon = 0;
 let lat = 0;
 let fov = 75;
+const MIN_LAT = -70;
+const MAX_LAT = 82;
 
 function clamp(value, min, max) {
   return Math.min(max, Math.max(min, value));
+}
+
+function clampLat(value) {
+  return clamp(Number(value || 0), MIN_LAT, MAX_LAT);
 }
 
 function emitViewChange() {
@@ -236,7 +242,7 @@ function updateProjectedHotspots() {
 }
 
 function updateCamera() {
-  lat = clamp(lat, -85, 85);
+  lat = clampLat(lat);
   const phi = THREE.MathUtils.degToRad(90 - lat);
   const theta = THREE.MathUtils.degToRad(lon);
   const target = new THREE.Vector3(
@@ -290,7 +296,7 @@ function animateToView(targetView = {}, duration = 520) {
   cameraTween?.resolve?.();
   return new Promise((resolve) => {
     const targetLon = Number(targetView.lon ?? lon);
-    const targetLat = clamp(Number(targetView.lat ?? lat), -85, 85);
+    const targetLat = clampLat(targetView.lat ?? lat);
     const targetFov = clamp(Number(targetView.fov ?? fov), 35, 100);
     cameraTween = {
       startedAt: performance.now(),
@@ -438,7 +444,7 @@ function onPointerMove(event) {
   if (!isDragging || !pointerDown) return;
   markInteraction();
   lon = pointerDown.lon - (event.clientX - pointerDown.x) * 0.12;
-  lat = pointerDown.lat + (event.clientY - pointerDown.y) * 0.12;
+  lat = clampLat(pointerDown.lat + (event.clientY - pointerDown.y) * 0.12);
   emitViewChange();
 }
 
@@ -492,7 +498,7 @@ watch(
   () => props.initialView,
   (value) => {
     lon = Number(value?.lon ?? 0);
-    lat = Number(value?.lat ?? 0);
+    lat = clampLat(value?.lat ?? 0);
       fov = Number(value?.fov ?? 75);
     markInteraction();
     emitViewChange();

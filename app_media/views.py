@@ -1,11 +1,13 @@
 import hashlib
 import shutil
+from io import BytesIO
 from pathlib import Path
 
 from django.conf import settings
+from django.core.files.base import ContentFile
 from django.http import FileResponse, Http404
 from django.shortcuts import get_object_or_404
-from PIL import Image
+from PIL import Image, ImageOps
 from rest_framework import status
 from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.response import Response
@@ -16,6 +18,39 @@ from app_dashboard.models import ActivityLog
 from .models import SceneAsset
 from .serializers import SceneAssetSerializer, SceneAssetUploadSerializer, SceneProcessingStatusSerializer
 from .tasks import generate_scene_tiles
+
+
+def resized_webp_content(source_image, max_width, quality=90):
+    image = ImageOps.exif_transpose(source_image).convert("RGB")
+    if image.width > max_width:
+        ratio = max_width / image.width
+        target_size = (max_width, max(1, round(image.height * ratio)))
+        image = image.resize(target_size, Image.Resampling.LANCZOS)
+    output = BytesIO()
+    image.save(output, "WEBP", quality=quality, method=6)
+    return ContentFile(output.getvalue())
+
+
+def create_optimized_scene_images(asset):
+    stem = Path(asset.original_file.name).stem
+    with Image.open(asset.original_file) as source:
+        asset.optimized_file.save(
+            f"{stem}_optimized.webp",
+            resized_webp_content(source, max_width=8192, quality=90),
+            save=False,
+        )
+        source.seek(0)
+        asset.preview_file.save(
+            f"{stem}_preview.webp",
+            resized_webp_content(source, max_width=2560, quality=82),
+            save=False,
+        )
+        source.seek(0)
+        asset.thumbnail_file.save(
+            f"{stem}_thumb.webp",
+            resized_webp_content(source, max_width=640, quality=70),
+            save=False,
+        )
 
 
 def log_scene_activity(request, action, asset, description):
@@ -41,6 +76,13 @@ class SceneUploadView(APIView):
     def post(self, request):
         serializer = SceneAssetUploadSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
+        validated = serializer.validated_data
+        existing_asset = SceneAsset.objects.filter(
+            tour_version=validated["tour_version"],
+            scene_key=validated["scene_key"],
+        ).first()
+        if existing_asset:
+            existing_asset.delete()
         asset = serializer.save()
         uploaded_file = request.FILES["original_file"]
         checksum = hashlib.sha256()
@@ -49,6 +91,7 @@ class SceneUploadView(APIView):
         uploaded_file.seek(0)
         with Image.open(asset.original_file) as image:
             width, height = image.size
+        create_optimized_scene_images(asset)
 
         asset.original_width = width
         asset.original_height = height
@@ -56,6 +99,7 @@ class SceneUploadView(APIView):
         asset.checksum_sha256 = checksum.hexdigest()
         asset.mime_type = uploaded_file.content_type or ""
         asset.save(update_fields=[
+            "optimized_file", "preview_file", "thumbnail_file",
             "original_width", "original_height", "file_size", "checksum_sha256", "mime_type", "updated_at"
         ])
 

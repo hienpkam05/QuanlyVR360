@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, ref } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { RouterLink, useRouter } from "vue-router";
 
 import { listPublishedTours } from "../api/publishedToursApi";
@@ -11,6 +11,8 @@ const tours = ref([]);
 const search = ref("");
 const loading = ref(false);
 const errorMessage = ref("");
+const successMessage = ref("");
+let messageTimer = null;
 
 const filteredTours = computed(() => {
   const keyword = search.value.trim().toLowerCase();
@@ -58,6 +60,48 @@ function openViewer(tour) {
   });
 }
 
+function viewerEmbedUrl(tour) {
+  const url = new URL("/viewer", window.location.origin);
+  url.searchParams.set("token", tour.public_token);
+  return url.toString();
+}
+
+function iframeCode(tour) {
+  const src = viewerEmbedUrl(tour);
+  const title = `${tour.project_name || "VR360"} - ${tour.location_name || "Tour"}`;
+  return `<iframe src="${src}" title="${title}" width="100%" height="640" style="border:0;border-radius:12px;" allow="fullscreen; autoplay; clipboard-write; encrypted-media; gyroscope; accelerometer" allowfullscreen loading="lazy"></iframe>`;
+}
+
+function showToast(message) {
+  clearTimeout(messageTimer);
+  successMessage.value = "";
+  window.requestAnimationFrame(() => {
+    successMessage.value = message;
+    messageTimer = setTimeout(() => {
+      successMessage.value = "";
+    }, 2000);
+  });
+}
+
+async function copyEmbedLink(tour) {
+  const code = iframeCode(tour);
+  try {
+    await navigator.clipboard.writeText(code);
+    showToast("Da copy iframe VR. Web khac chi dung duoc neu domain da whitelist.");
+  } catch {
+    const textArea = document.createElement("textarea");
+    textArea.value = code;
+    textArea.setAttribute("readonly", "");
+    textArea.style.position = "fixed";
+    textArea.style.left = "-9999px";
+    document.body.appendChild(textArea);
+    textArea.select();
+    document.execCommand("copy");
+    document.body.removeChild(textArea);
+    showToast("Da copy iframe VR.");
+  }
+}
+
 function goLogin() {
   router.push("/login");
 }
@@ -77,6 +121,10 @@ async function loadTours() {
 }
 
 onMounted(loadTours);
+
+onBeforeUnmount(() => {
+  clearTimeout(messageTimer);
+});
 </script>
 
 <template>
@@ -118,6 +166,7 @@ onMounted(loadTours);
     </header>
 
     <p v-if="errorMessage" class="builder-alert error">{{ errorMessage }}</p>
+    <p v-if="successMessage" class="builder-alert success">{{ successMessage }}</p>
 
     <section v-if="filteredTours.length" class="published-tour-grid">
       <article
@@ -146,14 +195,24 @@ onMounted(loadTours);
             <span>{{ tour.scene_count }} scenes</span>
           </div>
           <div class="published-tour-footer">
-            <em>{{ formatDate(tour.published_at) }}</em>
-            <button
-              class="primary-button compact-button"
-              type="button"
-              @click="openViewer(tour)"
-            >
-              Xem tour
-            </button>
+            <em>Published {{ formatDate(tour.published_at) }}</em>
+            <div class="published-tour-actions">
+              <button
+                class="secondary-button compact-button"
+                type="button"
+                title="Copy iframe de nhung vao website khac"
+                @click="copyEmbedLink(tour)"
+              >
+                Lay link VR
+              </button>
+              <button
+                class="primary-button compact-button"
+                type="button"
+                @click="openViewer(tour)"
+              >
+                Xem tour
+              </button>
+            </div>
           </div>
         </div>
       </article>

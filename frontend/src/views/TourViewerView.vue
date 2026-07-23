@@ -86,7 +86,7 @@ function resolveUrl(url) {
 
 function resolveSceneImage(scene) {
   if (!scene) return '';
-  return resolveUrl(scene.image_url || scene.original_file || scene.thumbnail || scene.thumb || scene.panorama || '');
+  return resolveUrl(scene.optimized_file || scene.original_file || scene.image_url || scene.preview_file || scene.thumbnail || scene.thumb || scene.panorama || '');
 }
 
 function youtubeEmbedUrl(url) {
@@ -162,8 +162,11 @@ function normalizeScene(scene, index = 0) {
     description: scene.description || scene.info || '',
     audio_url: scene.audio_url || scene.audio || scene.entry_audio_url || scene.narration_audio || '',
     image_url: scene.image_url || '',
+    optimized_file: scene.optimized_file || '',
+    preview_file: scene.preview_file || '',
     original_file: scene.original_file || '',
-    thumbnail: scene.thumbnail || scene.thumb || scene.original_file || scene.image_url || '',
+    thumbnail: scene.thumbnail || scene.thumb || scene.thumbnail_file || scene.preview_file || scene.optimized_file || scene.original_file || scene.image_url || '',
+    thumbnail_file: scene.thumbnail_file || '',
     view: {
       lon: Number(scene.view?.lon ?? scene.initialView?.lon ?? scene.lon ?? 0),
       lat: Number(scene.view?.lat ?? scene.initialView?.lat ?? scene.lat ?? 0),
