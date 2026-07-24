@@ -87,6 +87,7 @@ const quickCreateForm = reactive({
   project_id: "",
   location_id: "",
   version_id: "",
+  source_version_id: "",
   create_project: false,
   create_location: false,
   create_version: true,
@@ -1112,6 +1113,7 @@ async function openQuickCreateModal() {
     selectedProjectId.value || projects.value[0]?.id || "";
   quickCreateForm.location_id = "";
   quickCreateForm.version_id = "";
+  quickCreateForm.source_version_id = "";
   quickCreateForm.create_project = !quickCreateForm.project_id;
   quickCreateForm.create_location = false;
   quickCreateForm.create_version = true;
@@ -1136,6 +1138,7 @@ async function loadQuickLocation() {
   quickVersions.value = [];
   quickCreateForm.location_id = "";
   quickCreateForm.version_id = "";
+  quickCreateForm.source_version_id = "";
   if (!quickCreateForm.project_id || quickCreateForm.create_project) return;
   const response = await listProjectLocations(quickCreateForm.project_id);
   quickLocation.value = normalizeResults(response.data);
@@ -1147,12 +1150,15 @@ async function loadQuickLocation() {
 async function loadQuickVersions() {
   quickVersions.value = [];
   quickCreateForm.version_id = "";
+  quickCreateForm.source_version_id = "";
   if (!quickCreateForm.location_id || quickCreateForm.create_location) return;
   const response = await listVersions(quickCreateForm.location_id);
   quickVersions.value = normalizeResults(response.data);
   const draft = quickVersions.value.find((item) => item.status === "draft");
   quickCreateForm.version_id =
     selectedVersionId.value || draft?.id || quickVersions.value[0]?.id || "";
+  quickCreateForm.source_version_id =
+    selectedVersionId.value || quickVersions.value[0]?.id || "";
 }
 
 function enableCreateProject() {
@@ -1162,6 +1168,7 @@ function enableCreateProject() {
   quickCreateForm.project_id = "";
   quickCreateForm.location_id = "";
   quickCreateForm.version_id = "";
+  quickCreateForm.source_version_id = "";
   quickLocation.value = [];
   quickVersions.value = [];
 }
@@ -1179,6 +1186,7 @@ function enableCreateLocation() {
   quickCreateForm.create_version = true;
   quickCreateForm.location_id = "";
   quickCreateForm.version_id = "";
+  quickCreateForm.source_version_id = "";
   clearQuickLocationThumbnailPreview();
   quickVersions.value = [];
 }
@@ -1290,16 +1298,19 @@ async function quickCreateTour() {
       (item) => item.id === quickCreateForm.version_id,
     );
     if (quickCreateForm.create_version) {
-      const emptyData = makeEmptyTourData(
-        quickCreateForm.version_label.trim() || `${location.name} draft`,
-      );
-      const versionResponse = await createVersion(location.id, {
+      const label = quickCreateForm.version_label.trim() || `${location.name} draft`;
+      const versionPayload = {
         label: quickCreateForm.version_label.trim() || `${location.name} draft`,
         changelog: "Created from VR360 Builder.",
-        data: emptyData,
         background_audio_file: quickCreateForm.background_audio_file,
         hotspot_point_logo_file: quickCreateForm.hotspot_point_logo_file,
-      });
+      };
+      if (quickCreateForm.source_version_id && !quickCreateForm.create_location) {
+        versionPayload.source_version_id = quickCreateForm.source_version_id;
+      } else {
+        versionPayload.data = makeEmptyTourData(label);
+      }
+      const versionResponse = await createVersion(location.id, versionPayload);
       nextVersion = versionResponse.data;
     } else {
       const response = await getVersion(location.id, nextVersion.id);
@@ -2329,6 +2340,29 @@ onBeforeUnmount(() => {
                 quickCreateForm.create_location
               "
             >
+              <label v-if="quickCreateForm.create_version && !quickCreateForm.create_location">
+                Inherit from version
+                <select
+                  v-model="quickCreateForm.source_version_id"
+                  :disabled="!quickVersions.length"
+                >
+                  <option value="">Create empty version</option>
+                  <option
+                    v-for="item in quickVersions"
+                    :key="item.id"
+                    :value="item.id"
+                  >
+                    v{{ item.version_number }} - {{ item.status }} -
+                    {{ item.label || "No label" }}
+                  </option>
+                </select>
+              </label>
+              <p
+                v-if="quickCreateForm.create_version && !quickCreateForm.create_location"
+                class="builder-muted"
+              >
+                New draft will copy scenes, hotspots, audio, logo and media from selected version.
+              </p>
               <label>
                 Background audio
                 <input

@@ -1,4 +1,5 @@
 import json
+from copy import deepcopy
 
 from django.http import QueryDict
 from rest_framework import serializers
@@ -23,6 +24,7 @@ class TourVersionListSerializer(serializers.ModelSerializer):
 
 class TourVersionSerializer(serializers.ModelSerializer):
     created_by_name = serializers.CharField(source="created_by.username", read_only=True)
+    source_version_id = serializers.IntegerField(write_only=True, required=False, allow_null=True, min_value=1)
 
     class Meta:
         model = TourVersion
@@ -30,8 +32,10 @@ class TourVersionSerializer(serializers.ModelSerializer):
             "id", "location", "version_number", "label", "data", "thumbnail",
             "background_audio", "hotspot_point_logo", "status", "changelog",
             "created_by", "created_by_name", "created_at", "updated_at",
+            "source_version_id",
         )
         read_only_fields = ("location", "version_number", "status", "created_by", "created_at", "updated_at")
+        extra_kwargs = {"data": {"required": False}}
 
     def to_internal_value(self, data):
         if isinstance(data, QueryDict):
@@ -62,7 +66,30 @@ class TourVersionSerializer(serializers.ModelSerializer):
     def validate(self, attrs):
         if self.instance and self.instance.status == TourVersion.Status.PUBLISHED:
             raise serializers.ValidationError("Published tour versions cannot be edited. Archive or create a new draft first.")
+        source_version_id = attrs.get("source_version_id")
+        if source_version_id:
+            location = self.context.get("location") or getattr(self.instance, "location", None)
+            queryset = TourVersion.objects.all()
+            if location:
+                queryset = queryset.filter(location=location)
+            try:
+                attrs["source_version_obj"] = queryset.get(pk=source_version_id)
+            except TourVersion.DoesNotExist as exc:
+                raise serializers.ValidationError(
+                    {"source_version_id": "Source version does not exist or does not belong to this location."}
+                ) from exc
+        if not self.instance and "data" not in attrs and not attrs.get("source_version_obj"):
+            raise serializers.ValidationError({"data": "Tour data is required unless source_version_id is provided."})
         return attrs
+
+    def create(self, validated_data):
+        source_version = validated_data.pop("source_version_obj", None)
+        validated_data.pop("source_version_id", None)
+        if source_version and "data" not in validated_data:
+            validated_data["data"] = deepcopy(source_version.data)
+        instance = super().create(validated_data)
+        instance._source_version_obj = source_version
+        return instance
 
 
 class TourVersionImportSerializer(serializers.Serializer):

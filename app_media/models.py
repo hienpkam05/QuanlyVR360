@@ -49,6 +49,26 @@ class SceneAsset(SoftDeleteModel):
     def __str__(self):
         return f"{self.tour_version} / scene:{self.scene_key}"
 
+    def _file_is_still_used(self, field_name, file_name):
+        if not file_name:
+            return False
+        return SceneAsset.objects.filter(**{field_name: file_name}).exclude(pk=self.pk).exists()
+
+    def _delete_file_if_unused(self, field_name, file_field, file_name):
+        if not file_name or self._file_is_still_used(field_name, file_name):
+            return
+        try:
+            file_field.storage.delete(file_name)
+        except OSError:
+            # On Windows/dev, browser or image tooling can lock the file for a moment.
+            # Keep the DB delete successful; orphan cleanup can remove the file later.
+            pass
+
+    def _tile_path_is_still_used(self, tile_base_path):
+        if not tile_base_path:
+            return False
+        return SceneAsset.objects.filter(tile_base_path=tile_base_path).exclude(pk=self.pk).exists()
+
     def delete(self, using=None, keep_parents=False):
         original_file_name = self.original_file.name if self.original_file else ""
         optimized_file_name = self.optimized_file.name if self.optimized_file else ""
@@ -58,16 +78,12 @@ class SceneAsset(SoftDeleteModel):
 
         deleted = super().delete(using=using, keep_parents=keep_parents)
 
-        if original_file_name:
-            self.original_file.storage.delete(original_file_name)
-        if optimized_file_name:
-            self.optimized_file.storage.delete(optimized_file_name)
-        if preview_file_name:
-            self.preview_file.storage.delete(preview_file_name)
-        if thumbnail_file_name:
-            self.thumbnail_file.storage.delete(thumbnail_file_name)
+        self._delete_file_if_unused("original_file", self.original_file, original_file_name)
+        self._delete_file_if_unused("optimized_file", self.optimized_file, optimized_file_name)
+        self._delete_file_if_unused("preview_file", self.preview_file, preview_file_name)
+        self._delete_file_if_unused("thumbnail_file", self.thumbnail_file, thumbnail_file_name)
 
-        if tile_base_path:
+        if tile_base_path and not self._tile_path_is_still_used(tile_base_path):
             media_root = Path(settings.MEDIA_ROOT).resolve()
             tile_path = (media_root / tile_base_path).resolve()
             if tile_path.is_dir() and media_root in tile_path.parents:

@@ -25,6 +25,63 @@ from .serializers import (
 )
 
 
+def inherit_version_files_and_assets(source_version, target_version):
+    if not source_version:
+        return
+
+    update_fields = []
+    if source_version.thumbnail and not target_version.thumbnail:
+        target_version.thumbnail = source_version.thumbnail.name
+        update_fields.append("thumbnail")
+    if source_version.background_audio and not target_version.background_audio:
+        target_version.background_audio = source_version.background_audio.name
+        update_fields.append("background_audio")
+    if source_version.hotspot_point_logo and not target_version.hotspot_point_logo:
+        target_version.hotspot_point_logo = source_version.hotspot_point_logo.name
+        update_fields.append("hotspot_point_logo")
+    if update_fields:
+        target_version.save(update_fields=[*update_fields, "updated_at"])
+
+    from app_media.models import SceneAsset
+
+    scene_asset_id_map = {}
+    source_assets = SceneAsset.objects.filter(tour_version=source_version)
+    for source_asset in source_assets:
+        target_asset = SceneAsset.objects.create(
+            tour_version=target_version,
+            scene_key=source_asset.scene_key,
+            original_file=source_asset.original_file.name,
+            optimized_file=source_asset.optimized_file.name if source_asset.optimized_file else "",
+            preview_file=source_asset.preview_file.name if source_asset.preview_file else "",
+            thumbnail_file=source_asset.thumbnail_file.name if source_asset.thumbnail_file else "",
+            original_width=source_asset.original_width,
+            original_height=source_asset.original_height,
+            file_size=source_asset.file_size,
+            checksum_sha256=source_asset.checksum_sha256,
+            mime_type=source_asset.mime_type,
+            tile_base_path=source_asset.tile_base_path,
+            max_zoom_level=source_asset.max_zoom_level,
+            tile_size=source_asset.tile_size,
+            processing_status=source_asset.processing_status,
+            error_message=source_asset.error_message,
+            processed_at=source_asset.processed_at,
+        )
+        scene_asset_id_map[source_asset.pk] = target_asset.pk
+
+    if scene_asset_id_map:
+        data = deepcopy(target_version.data)
+        for scene in data.get("scenes", []):
+            old_asset_id = scene.get("scene_asset_id")
+            try:
+                old_asset_id = int(old_asset_id)
+            except (TypeError, ValueError):
+                old_asset_id = None
+            if old_asset_id in scene_asset_id_map:
+                scene["scene_asset_id"] = scene_asset_id_map[old_asset_id]
+        target_version.data = data
+        target_version.save(update_fields=["data", "updated_at"])
+
+
 def log_version_activity(request, action, version, description):
     ActivityLog.objects.create(
         actor=request.user,
@@ -61,8 +118,14 @@ class LocationTourVersionViewSet(mixins.ListModelMixin, mixins.CreateModelMixin,
     def get_serializer_class(self):
         return TourVersionListSerializer if self.action == "list" else TourVersionSerializer
 
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        context["location"] = self.get_location()
+        return context
+
     def perform_create(self, serializer):
         version = serializer.save(location=self.get_location(), created_by=self.request.user)
+        inherit_version_files_and_assets(getattr(version, "_source_version_obj", None), version)
         log_version_activity(
             self.request,
             "tour_version_created",

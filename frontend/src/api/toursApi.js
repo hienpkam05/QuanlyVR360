@@ -17,6 +17,9 @@ function buildVersionPayload(payload) {
   if (payload.label !== undefined) formData.append('label', payload.label);
   if (payload.changelog !== undefined) formData.append('changelog', payload.changelog);
   if (payload.data !== undefined) formData.append('data', JSON.stringify(payload.data));
+  if (payload.source_version_id !== undefined && payload.source_version_id !== '') {
+    formData.append('source_version_id', payload.source_version_id);
+  }
   if (payload.thumbnail) formData.append('thumbnail', payload.thumbnail);
   if (hasAudioFile) formData.append('background_audio', payload.background_audio_file);
   if (hasLogoFile) formData.append('hotspot_point_logo', payload.hotspot_point_logo_file);

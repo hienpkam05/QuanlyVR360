@@ -29,6 +29,7 @@ const projectForm = reactive({
 
 const versionForm = reactive({
   label: '',
+  source_version_id: '',
   background_audio_file: null,
   hotspot_point_logo_file: null,
 });
@@ -362,6 +363,7 @@ function openVersionModal() {
     return;
   }
   versionForm.label = '';
+  versionForm.source_version_id = versions.value[0]?.id || '';
   versionForm.background_audio_file = null;
   versionForm.hotspot_point_logo_file = null;
   versionModal.value = true;
@@ -370,6 +372,7 @@ function openVersionModal() {
 function closeVersionModal() {
   versionModal.value = false;
   versionForm.label = '';
+  versionForm.source_version_id = '';
   versionForm.background_audio_file = null;
   versionForm.hotspot_point_logo_file = null;
 }
@@ -391,16 +394,21 @@ async function submitVersion() {
   successMessage.value = '';
   try {
     const label = versionForm.label.trim() || `${selectedLocation.value?.name || 'Tour'} draft`;
-    await createVersion(selectedLocationId.value, {
+    const payload = {
       label,
       changelog: 'Created from Projects flow.',
-      data: {
-        title: label,
-        scenes: [],
-      },
       background_audio_file: versionForm.background_audio_file,
       hotspot_point_logo_file: versionForm.hotspot_point_logo_file,
-    });
+    };
+    if (versionForm.source_version_id) {
+      payload.source_version_id = versionForm.source_version_id;
+    } else {
+      payload.data = {
+        title: label,
+        scenes: [],
+      };
+    }
+    await createVersion(selectedLocationId.value, payload);
     closeVersionModal();
     successMessage.value = 'Version created.';
     await loadVersionsForLocation();
@@ -583,6 +591,18 @@ onBeforeUnmount(() => {
             Version label
             <input v-model="versionForm.label" placeholder="Leave empty to auto-name" />
           </label>
+          <label>
+            Inherit from version
+            <select v-model="versionForm.source_version_id">
+              <option value="">Create empty version</option>
+              <option v-for="item in versions" :key="item.id" :value="item.id">
+                {{ versionLabel(item) }} - {{ item.status }}
+              </option>
+            </select>
+          </label>
+          <p class="muted">
+            If selected, the new draft will copy scenes, hotspots, audio, logo and media assets from that version.
+          </p>
           <label>
             Background audio
             <input type="file" accept="audio/*" @change="onVersionAudioChange" />

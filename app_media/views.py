@@ -1,5 +1,4 @@
 import hashlib
-import shutil
 from io import BytesIO
 from pathlib import Path
 
@@ -53,6 +52,52 @@ def create_optimized_scene_images(asset):
         )
 
 
+def calculate_file_checksum(uploaded_file):
+    checksum = hashlib.sha256()
+    for chunk in uploaded_file.chunks():
+        checksum.update(chunk)
+    uploaded_file.seek(0)
+    return checksum.hexdigest()
+
+
+def find_reusable_scene_asset(checksum, excluded_asset=None):
+    if not checksum:
+        return None
+    queryset = (
+        SceneAsset.objects.filter(
+            checksum_sha256=checksum,
+        )
+        .exclude(original_file="")
+        .order_by("-updated_at")
+    )
+    if excluded_asset:
+        queryset = queryset.exclude(pk=excluded_asset.pk)
+    return queryset.first()
+
+
+def create_reusable_scene_asset(validated, source_asset, uploaded_file):
+    return SceneAsset.objects.create(
+        tour_version=validated["tour_version"],
+        scene_key=validated["scene_key"],
+        original_file=source_asset.original_file.name,
+        optimized_file=source_asset.optimized_file.name if source_asset.optimized_file else "",
+        preview_file=source_asset.preview_file.name if source_asset.preview_file else "",
+        thumbnail_file=source_asset.thumbnail_file.name if source_asset.thumbnail_file else "",
+        original_width=source_asset.original_width,
+        original_height=source_asset.original_height,
+        file_size=source_asset.file_size or uploaded_file.size,
+        checksum_sha256=source_asset.checksum_sha256,
+        mime_type=source_asset.mime_type or uploaded_file.content_type or "",
+        tile_base_path=source_asset.tile_base_path,
+        max_zoom_level=source_asset.max_zoom_level,
+        tile_size=source_asset.tile_size,
+        processing_status=source_asset.processing_status,
+        error_message=source_asset.error_message,
+        processing_started_at=source_asset.processing_started_at,
+        processed_at=source_asset.processed_at,
+    )
+
+
 def log_scene_activity(request, action, asset, description):
     ActivityLog.objects.create(
         actor=request.user,
@@ -77,26 +122,53 @@ class SceneUploadView(APIView):
         serializer = SceneAssetUploadSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         validated = serializer.validated_data
+        uploaded_file = request.FILES["original_file"]
+        checksum = calculate_file_checksum(uploaded_file)
+        with Image.open(uploaded_file) as image:
+            width, height = image.size
+        uploaded_file.seek(0)
+
         existing_asset = SceneAsset.objects.filter(
             tour_version=validated["tour_version"],
             scene_key=validated["scene_key"],
         ).first()
+
+        if existing_asset and existing_asset.checksum_sha256 == checksum and existing_asset.original_file:
+            log_scene_activity(
+                request,
+                "scene_asset_reused",
+                existing_asset,
+                f"Kept existing source image for scene '{existing_asset.scene_key}'.",
+            )
+            return Response(
+                SceneAssetSerializer(existing_asset, context={"request": request}).data,
+                status=status.HTTP_200_OK,
+            )
+
+        reusable_asset = find_reusable_scene_asset(checksum, existing_asset)
+        if reusable_asset:
+            if existing_asset:
+                existing_asset.delete()
+            asset = create_reusable_scene_asset(validated, reusable_asset, uploaded_file)
+            asset = SceneAsset.objects.select_related("tour_version__location__project").get(pk=asset.pk)
+            log_scene_activity(
+                request,
+                "scene_asset_reused",
+                asset,
+                f"Reused existing source image for scene '{asset.scene_key}'.",
+            )
+            return Response(SceneAssetSerializer(asset, context={"request": request}).data, status=status.HTTP_201_CREATED)
+
         if existing_asset:
             existing_asset.delete()
         asset = serializer.save()
-        uploaded_file = request.FILES["original_file"]
-        checksum = hashlib.sha256()
-        for chunk in uploaded_file.chunks():
-            checksum.update(chunk)
-        uploaded_file.seek(0)
-        with Image.open(asset.original_file) as image:
-            width, height = image.size
+
         create_optimized_scene_images(asset)
 
         asset.original_width = width
         asset.original_height = height
         asset.file_size = uploaded_file.size
-        asset.checksum_sha256 = checksum.hexdigest()
+        asset.checksum_sha256 = checksum
         asset.mime_type = uploaded_file.content_type or ""
         asset.save(update_fields=[
             "optimized_file", "preview_file", "thumbnail_file",
@@ -133,10 +205,7 @@ class SceneStatusView(APIView):
 class SceneAssetDeleteView(APIView):
     def delete(self, request, scene_asset_id):
         asset = get_object_or_404(SceneAsset.objects.select_related("tour_version__location__project"), pk=scene_asset_id)
-        tile_path = asset.tile_base_path
         asset.delete()
-        if tile_path:
-            shutil.rmtree(Path(settings.MEDIA_ROOT) / tile_path, ignore_errors=True)
         log_scene_activity(request, "scene_asset_deleted", asset, f"Soft-deleted scene asset '{asset.scene_key}'.")
         return Response(status=status.HTTP_204_NO_CONTENT)
 
