@@ -1,7 +1,3 @@
-import shutil
-from pathlib import Path
-
-from django.conf import settings
 from django.db import models
 
 from app_tours.models import TourVersion
@@ -64,17 +60,11 @@ class SceneAsset(SoftDeleteModel):
             # Keep the DB delete successful; orphan cleanup can remove the file later.
             pass
 
-    def _tile_path_is_still_used(self, tile_base_path):
-        if not tile_base_path:
-            return False
-        return SceneAsset.objects.filter(tile_base_path=tile_base_path).exclude(pk=self.pk).exists()
-
     def delete(self, using=None, keep_parents=False):
         original_file_name = self.original_file.name if self.original_file else ""
         optimized_file_name = self.optimized_file.name if self.optimized_file else ""
         preview_file_name = self.preview_file.name if self.preview_file else ""
         thumbnail_file_name = self.thumbnail_file.name if self.thumbnail_file else ""
-        tile_base_path = self.tile_base_path
 
         deleted = super().delete(using=using, keep_parents=keep_parents)
 
@@ -82,11 +72,5 @@ class SceneAsset(SoftDeleteModel):
         self._delete_file_if_unused("optimized_file", self.optimized_file, optimized_file_name)
         self._delete_file_if_unused("preview_file", self.preview_file, preview_file_name)
         self._delete_file_if_unused("thumbnail_file", self.thumbnail_file, thumbnail_file_name)
-
-        if tile_base_path and not self._tile_path_is_still_used(tile_base_path):
-            media_root = Path(settings.MEDIA_ROOT).resolve()
-            tile_path = (media_root / tile_base_path).resolve()
-            if tile_path.is_dir() and media_root in tile_path.parents:
-                shutil.rmtree(tile_path, ignore_errors=True)
 
         return deleted

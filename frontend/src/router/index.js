@@ -63,6 +63,12 @@ const routes = [
     meta: { immersive: true, public: true },
   },
   {
+    path: '/vr360/:token',
+    name: 'PublicTourViewer',
+    component: TourViewerView,
+    meta: { immersive: true, public: true },
+  },
+  {
     path: '/publishing',
     name: 'Publishing',
     component: PublishingView,

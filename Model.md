@@ -44,7 +44,7 @@ Project -> Location -> TourVersion -> SceneAsset
                   └-> PublishConfig -> WhitelistDomain, TourVisit, DailyStat
 ```
 
-Luu y: soft delete giu ban ghi trong database, nhung rieng `SceneAsset.delete()` hien dang xoa ca file anh goc va thu muc tile tren storage/media de tranh rac file.
+Luu y: soft delete giu ban ghi trong database, nhung rieng `SceneAsset.delete()` hien dang xoa cac file anh source/optimized/preview/thumbnail tren storage/media neu file do khong con duoc asset khac dung chung.
 
 ## 3. `app_projects.Project`
 
@@ -185,11 +185,11 @@ Quy tac:
 - Index `location + status`.
 - Mac dinh sap xep `-version_number`.
 - Khi tao moi, `version_number` duoc lay theo so lon nhat hien co cua location + 1 trong transaction.
-- Khi xoa version, cac `scene_assets` cua version cung bi xoa; file anh goc/tile cua `SceneAsset` cung duoc don.
+- Khi xoa version, cac `scene_assets` cua version cung bi xoa mem; file anh cua `SceneAsset` cung duoc don neu khong con asset khac dung chung.
 
 ## 6. `app_media.SceneAsset`
 
-Dai dien cho file panorama that cua mot scene va trang thai xu ly tile.
+Dai dien cho file panorama that cua mot scene va cac bien the anh nhe dung cho viewer/preview/thumbnail.
 
 Bang mac dinh: `app_media_sceneasset`
 
@@ -204,9 +204,9 @@ Bang mac dinh: `app_media_sceneasset`
 | `file_size` | PositiveBigIntegerField | Khong | Dung luong file theo byte. |
 | `checksum_sha256` | CharField(64) | Khong | Ma hash SHA-256, co index. |
 | `mime_type` | CharField(100) | Khong | MIME type, vi du `image/jpeg`. |
-| `tile_base_path` | CharField(500) | Khong | Thu muc tile da sinh. |
-| `max_zoom_level` | PositiveSmallIntegerField | Co | Zoom toi da. Mac dinh `3`. |
-| `tile_size` | PositiveSmallIntegerField | Co | Kich thuoc tile. Mac dinh `512`. |
+| `tile_base_path` | CharField(500) | Khong | Cot cu, hien khong con duoc runtime su dung. |
+| `max_zoom_level` | PositiveSmallIntegerField | Co | Cot cu, hien khong con duoc runtime su dung. |
+| `tile_size` | PositiveSmallIntegerField | Co | Cot cu, hien khong con duoc runtime su dung. |
 | `processing_status` | CharField(20) | Co | `pending`, `processing`, `done`, `failed`. |
 | `celery_task_id` | CharField(255) | Khong | ID Celery task, co index. |
 | `retry_count` | PositiveSmallIntegerField | Co | So lan retry. Mac dinh `0`. |
@@ -222,8 +222,8 @@ Constraint:
 
 Luu y quan trong:
 
-- Khi `SceneAsset.delete()` duoc goi, ban ghi van xoa mem nhung file `original_file` va thu muc tile se bi xoa tren storage/local media.
-- Vi vay neu xoa version thi anh trong `media/scenes/originals/` cua version do cung duoc don theo.
+- Khi `SceneAsset.delete()` duoc goi, ban ghi van xoa mem nhung cac file anh source/optimized/preview/thumbnail se bi xoa tren storage/local media neu khong con asset khac dung chung.
+- Vi vay neu xoa version thi cac file anh khong dung chung cua version do cung duoc don theo.
 
 ## 7. `app_publishing.PublishConfig`
 

@@ -274,7 +274,6 @@ function normalizeScene(scene, index = 0) {
     thumbnail: scene.thumbnail || scene.thumbnail_file || scene.preview_file || "",
     thumbnail_file: scene.thumbnail_file || "",
     scene_asset_id: scene.scene_asset_id || scene.asset_id || "",
-    tile_base_path: scene.tile_base_path || "",
     processing_status: scene.processing_status || "",
     view: {
       lon: Number(scene.view?.lon ?? scene.lon ?? 0),
@@ -545,7 +544,6 @@ async function uploadSceneToBackend(scene, file) {
       scene.preview_file = "";
       scene.original_file = "";
       scene.thumbnail_file = "";
-      scene.tile_base_path = "";
       scene.processing_status = "";
     }
     const response = await uploadSceneAsset({
@@ -567,7 +565,6 @@ async function uploadSceneToBackend(scene, file) {
       "";
     scene.preview_url = asset.preview_file || scene.preview_url || "";
     scene.thumbnail = asset.thumbnail_file || asset.preview_file || scene.thumbnail || "";
-    scene.tile_base_path = asset.tile_base_path;
     scene.processing_status = asset.processing_status;
     scene.local_file = null;
     return true;
@@ -587,17 +584,16 @@ async function uploadSceneToBackend(scene, file) {
         "";
       scene.preview_url = asset.preview_file || scene.preview_url || "";
       scene.thumbnail = asset.thumbnail_file || asset.preview_file || scene.thumbnail || "";
-      scene.tile_base_path = asset.tile_base_path;
       scene.processing_status = asset.processing_status;
       scene.local_file = null;
       errorMessage.value =
         error.response?.data?.detail ||
-        "Image was saved, but tiles are not processed yet.";
+        "Image was saved, but backend returned a processing warning.";
       return true;
     }
     errorMessage.value =
       error.response?.data?.detail ||
-      "Image is previewed locally, but backend upload is not finished. Click Save Tour and upload again if tiles are needed.";
+      "Image is previewed locally, but backend upload is not finished. Click Save Tour and upload again.";
     return false;
   }
 }

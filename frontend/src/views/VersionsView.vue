@@ -191,7 +191,7 @@ onMounted(boot);
 
       <div class="panel">
         <h2>Preview data</h2>
-        <pre class="json-preview">{{ preview || 'Choose Preview to view resolved tile data.' }}</pre>
+        <pre class="json-preview">{{ preview || 'Choose Preview to view resolved tour data.' }}</pre>
       </div>
     </section>
   </section>

@@ -6,7 +6,7 @@ from .models import SceneAsset
 @admin.register(SceneAsset)
 class SceneAssetAdmin(admin.ModelAdmin):
     list_display = (
-        "scene_key", "tour_version", "processing_status", "tile_size",
+        "scene_key", "tour_version", "processing_status",
         "retry_count", "created_at",
     )
     list_filter = ("processing_status", "created_at")

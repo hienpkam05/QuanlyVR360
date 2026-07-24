@@ -59,9 +59,6 @@ def inherit_version_files_and_assets(source_version, target_version):
             file_size=source_asset.file_size,
             checksum_sha256=source_asset.checksum_sha256,
             mime_type=source_asset.mime_type,
-            tile_base_path=source_asset.tile_base_path,
-            max_zoom_level=source_asset.max_zoom_level,
-            tile_size=source_asset.tile_size,
             processing_status=source_asset.processing_status,
             error_message=source_asset.error_message,
             processed_at=source_asset.processed_at,
@@ -205,9 +202,6 @@ class TourVersionViewSet(ModelViewSet):
         for scene in resolved_data.get("scenes", []):
             asset = assets.get(str(scene.get("id")))
             if asset:
-                scene["tile_base_path"] = asset.tile_base_path
-                scene["max_zoom_level"] = asset.max_zoom_level
-                scene["tile_size"] = asset.tile_size
                 scene["processing_status"] = asset.processing_status
 
         return Response(

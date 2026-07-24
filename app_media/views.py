@@ -2,10 +2,9 @@ import hashlib
 from io import BytesIO
 from pathlib import Path
 
-from django.conf import settings
 from django.core.files.base import ContentFile
-from django.http import FileResponse, Http404
 from django.shortcuts import get_object_or_404
+from django.utils import timezone
 from PIL import Image, ImageOps
 from rest_framework import status
 from rest_framework.parsers import FormParser, MultiPartParser
@@ -16,7 +15,6 @@ from app_dashboard.models import ActivityLog
 
 from .models import SceneAsset
 from .serializers import SceneAssetSerializer, SceneAssetUploadSerializer, SceneProcessingStatusSerializer
-from .tasks import generate_scene_tiles
 
 
 def resized_webp_content(source_image, max_width, quality=90):
@@ -88,13 +86,10 @@ def create_reusable_scene_asset(validated, source_asset, uploaded_file):
         file_size=source_asset.file_size or uploaded_file.size,
         checksum_sha256=source_asset.checksum_sha256,
         mime_type=source_asset.mime_type or uploaded_file.content_type or "",
-        tile_base_path=source_asset.tile_base_path,
-        max_zoom_level=source_asset.max_zoom_level,
-        tile_size=source_asset.tile_size,
-        processing_status=source_asset.processing_status,
-        error_message=source_asset.error_message,
+        processing_status=SceneAsset.ProcessingStatus.DONE,
+        error_message="",
         processing_started_at=source_asset.processing_started_at,
-        processed_at=source_asset.processed_at,
+        processed_at=source_asset.processed_at or timezone.now(),
     )
 
 
@@ -170,27 +165,15 @@ class SceneUploadView(APIView):
         asset.file_size = uploaded_file.size
         asset.checksum_sha256 = checksum
         asset.mime_type = uploaded_file.content_type or ""
+        asset.processing_status = SceneAsset.ProcessingStatus.DONE
+        asset.error_message = ""
+        asset.processed_at = timezone.now()
         asset.save(update_fields=[
             "optimized_file", "preview_file", "thumbnail_file",
-            "original_width", "original_height", "file_size", "checksum_sha256", "mime_type", "updated_at"
+            "original_width", "original_height", "file_size", "checksum_sha256", "mime_type",
+            "processing_status", "error_message", "processed_at", "updated_at"
         ])
 
-        try:
-            task = generate_scene_tiles.delay(asset.pk)
-        except Exception as exc:
-            asset.processing_status = SceneAsset.ProcessingStatus.FAILED
-            asset.error_message = f"Could not queue tile generation: {exc}"[:2000]
-            asset.save(update_fields=["processing_status", "error_message", "updated_at"])
-            return Response(
-                {
-                    "detail": "Scene uploaded but tile processing could not be queued.",
-                    "asset": SceneAssetSerializer(asset, context={"request": request}).data,
-                },
-                status=status.HTTP_201_CREATED,
-            )
-
-        asset.celery_task_id = task.id
-        asset.save(update_fields=["celery_task_id", "updated_at"])
         asset = SceneAsset.objects.select_related("tour_version__location__project").get(pk=asset.pk)
         log_scene_activity(request, "scene_asset_uploaded", asset, f"Uploaded source image for scene '{asset.scene_key}'.")
         return Response(SceneAssetSerializer(asset, context={"request": request}).data, status=status.HTTP_201_CREATED)
@@ -208,18 +191,3 @@ class SceneAssetDeleteView(APIView):
         asset.delete()
         log_scene_activity(request, "scene_asset_deleted", asset, f"Soft-deleted scene asset '{asset.scene_key}'.")
         return Response(status=status.HTTP_204_NO_CONTENT)
-
-
-class TileServeView(APIView):
-    def get(self, request, location_id, version, scene_key, z, x, y):
-        asset = get_object_or_404(
-            SceneAsset.objects.select_related("tour_version"),
-            tour_version__location_id=location_id,
-            tour_version__version_number=version,
-            scene_key=scene_key,
-            processing_status=SceneAsset.ProcessingStatus.DONE,
-        )
-        tile_file = Path(settings.MEDIA_ROOT) / asset.tile_base_path / str(z) / str(x) / f"{y}.jpg"
-        if not tile_file.is_file():
-            raise Http404("Tile not found.")
-        return FileResponse(tile_file.open("rb"), content_type="image/jpeg")

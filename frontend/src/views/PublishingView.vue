@@ -64,6 +64,10 @@ async function loadPublish() {
   if (!selectedLocationId.value) return;
   const response = await getPublishConfig(selectedLocationId.value);
   publishState.value = response.data;
+  const publishedVersion = response.data?.publish_config?.published_version;
+  if (publishedVersion) {
+    selectedVersionId.value = publishedVersion;
+  }
   const domainsResponse = await listDomains(selectedLocationId.value);
   domains.value = normalizeResults(domainsResponse.data);
 }

@@ -7,6 +7,10 @@ const props = defineProps({
     type: String,
     default: '',
   },
+  fallbackImageUrls: {
+    type: Array,
+    default: () => [],
+  },
   hotspots: {
     type: Array,
     default: () => [],
@@ -47,6 +51,7 @@ const container = ref(null);
 const projectedHotspots = ref([]);
 const projectedInfoAreas = ref([]);
 const isTextureLoading = ref(false);
+const textureError = ref('');
 const hasImage = computed(() => Boolean(props.imageUrl));
 
 let renderer;
@@ -365,24 +370,34 @@ function updateTransitionFade() {
   if (progress >= 1) clearTransition();
 }
 
-function loadTexture() {
+function textureCandidates() {
+  return [props.imageUrl, ...props.fallbackImageUrls]
+    .filter(Boolean)
+    .filter((url, index, items) => items.indexOf(url) === index);
+}
+
+function loadTexture(candidateIndex = 0) {
   if (!mesh) return;
   isTextureLoading.value = true;
   projectedHotspots.value = [];
   projectedInfoAreas.value = [];
-  if (!props.imageUrl) {
+  textureError.value = '';
+  const candidates = textureCandidates();
+  const imageUrl = candidates[candidateIndex];
+  if (!imageUrl) {
     disposeTexture();
     clearTransition();
     mesh.material.map = null;
     mesh.material.color.set(0x111827);
     mesh.material.needsUpdate = true;
     isTextureLoading.value = false;
+    textureError.value = props.imageUrl ? 'Could not load panorama image.' : '';
     return;
   }
   const loader = new THREE.TextureLoader();
   loader.setCrossOrigin('anonymous');
   loader.load(
-    props.imageUrl,
+    imageUrl,
     (loadedTexture) => {
       const oldTexture = texture;
       texture = loadedTexture;
@@ -395,11 +410,17 @@ function loadTexture() {
       resize();
     },
     undefined,
-    () => {
+    (error) => {
+      if (candidateIndex + 1 < candidates.length) {
+        loadTexture(candidateIndex + 1);
+        return;
+      }
+      console.warn('Panorama texture could not be loaded.', imageUrl, error);
       mesh.material.map = null;
       mesh.material.color.set(0x111827);
       mesh.material.needsUpdate = true;
       isTextureLoading.value = false;
+      textureError.value = 'Could not load panorama image.';
     },
   );
 }
@@ -481,11 +502,12 @@ function onWheel(event) {
 }
 
 watch(
-  () => props.imageUrl,
+  () => [props.imageUrl, props.fallbackImageUrls],
   async () => {
     await nextTick();
     loadTexture();
   },
+  { deep: true },
 );
 
 watch(
@@ -547,6 +569,9 @@ defineExpose({
   >
     <span v-if="!hasImage" class="canvas-empty-text">
       Upload panorama JPG 360 de xem preview, keo chuot de xoay ngang/doc.
+    </span>
+    <span v-else-if="textureError" class="canvas-empty-text panorama-error-text">
+      {{ textureError }}
     </span>
     <svg v-if="projectedInfoAreas.length" class="panorama-info-area-layer" aria-hidden="true">
       <template v-for="area in projectedInfoAreas" :key="area.id">

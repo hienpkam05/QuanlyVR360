@@ -1,12 +1,10 @@
 import { http } from './http';
 
-export function uploadSceneAsset({ tourVersion, sceneKey, originalFile, maxZoomLevel = 3, tileSize = 512 }) {
+export function uploadSceneAsset({ tourVersion, sceneKey, originalFile }) {
   const formData = new FormData();
   formData.append('tour_version', tourVersion);
   formData.append('scene_key', sceneKey);
   formData.append('original_file', originalFile);
-  formData.append('max_zoom_level', maxZoomLevel);
-  formData.append('tile_size', tileSize);
   return http.post('/api/media/scenes/upload/', formData, {
     headers: { 'Content-Type': 'multipart/form-data' },
   });

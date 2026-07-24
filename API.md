@@ -14,6 +14,73 @@ Frontend local thuong chay tai:
 http://127.0.0.1:5174
 ```
 
+## Doc nhanh cho nguoi moi doc API
+
+Neu muon test nhanh tren Postman, hay di theo thu tu nay:
+
+1. `Auth / Login - get JWT` de lay `access_token` va `refresh_token`.
+2. Goi cac API noi bo bang header:
+
+```http
+Authorization: Bearer {{access_token}}
+```
+
+3. Tao/chon du an o `Projects`.
+4. Tao/chon dia diem o `Locations`.
+5. Tao/chon version o `Tour Versions`.
+6. Upload anh panorama bang `Media / Scene Assets / Upload scene panorama`.
+7. Luu tour data vao version bang `Tour Versions / Patch version data`.
+8. Publish dia diem bang `Publishing / Publish location`.
+9. Them domain duoc phep bang `Publishing / Add whitelist domain`.
+10. Web ngoai xem tour bang `Public Viewer / Get public tour - with Origin`.
+
+### Cac bien quan trong trong Postman
+
+| Bien | Vi du | Y nghia |
+|---|---|---|
+| `base_url` | `http://127.0.0.1:8000` | URL backend Django |
+| `frontend_origin` | `http://127.0.0.1:5173` | Origin web admin/frontend chinh |
+| `viewer_origin` | `http://127.0.0.1:5500` | Origin web ngoai dang nhung iframe |
+| `access_token` | JWT access | Token dung cho API noi bo |
+| `refresh_token` | JWT refresh | Token refresh/logout |
+| `project_id` | `1` | ID du an |
+| `location_id` | `1` | ID dia diem |
+| `version_id` | `1` | ID tour version |
+| `public_token` | `abc...` | Token public sau khi publish |
+| `allowed_domain` | `127.0.0.1:5500` | Domain duoc phep nhung/xem public tour |
+
+### Luu y ve publish va whitelist domain
+
+- `public_token` la token public cua mot location da publish.
+- Link public nen dung dang frontend:
+
+```text
+http://127.0.0.1:5173/vr360/{public_token}
+```
+
+- Neu web khac muon nhung iframe, domain cua web do phai duoc them vao whitelist, vi du:
+
+```text
+127.0.0.1:5500
+example.com
+vr.example.com
+```
+
+- Khong nhap protocol/path khi them domain whitelist. Dung `127.0.0.1:5500`, khong dung `http://127.0.0.1:5500/index.html`.
+- API public se check `Origin`/`Referer`/`embed_origin`. Neu khong dung domain se tra `403`.
+
+### Luu y ve anh panorama
+
+- He thong hien dang dung file anh panorama truc tiep, khong dung tile.
+- Anh trong public viewer nen lay qua public image proxy:
+
+```text
+/api/public/tour/{public_token}/images/{scene_key}/{variant}/
+```
+
+- `variant` co the la `original`, `optimized`, `preview`, hoac `thumbnail`.
+- Endpoint proxy nay giup anh co CORS header dung domain khi render bang Three.js/WebGL.
+
 ## 1. Quy tac chung
 
 ### Authentication
@@ -562,7 +629,7 @@ Response:
 
 ## GET `/api/locations/{location_id}/versions/{version_id}/preview/`
 
-Lay data day du de preview/editor, co resolve thong tin tile/processing status.
+Lay data day du de preview/editor, co resolve processing status cua anh scene.
 
 Response:
 
@@ -659,8 +726,6 @@ Body:
 tour_version=3
 scene_key=scene-1
 original_file=<jpg/png panorama file>
-max_zoom_level=3
-tile_size=512
 ```
 
 Response item `SceneAsset`:
@@ -671,15 +736,15 @@ Response item `SceneAsset`:
   "tour_version": 3,
   "scene_key": "scene-1",
   "original_file": "/media/scenes/originals/a.jpg",
+  "optimized_file": "/media/scenes/optimized/a_optimized.webp",
+  "preview_file": "/media/scenes/previews/a_preview.webp",
+  "thumbnail_file": "/media/scenes/thumbnails/a_thumb.webp",
   "original_width": 4096,
   "original_height": 2048,
   "file_size": 1234567,
   "checksum_sha256": "...",
   "mime_type": "image/jpeg",
-  "tile_base_path": "",
-  "max_zoom_level": 3,
-  "tile_size": 512,
-  "processing_status": "pending",
+  "processing_status": "done",
   "celery_task_id": "...",
   "retry_count": 0,
   "error_message": "",
@@ -698,7 +763,7 @@ Luu y:
 
 ## GET `/api/media/scenes/{scene_asset_id}/status/`
 
-Lay trang thai xu ly tile.
+Lay trang thai xu ly anh scene.
 
 Response:
 
@@ -721,17 +786,7 @@ Xoa scene asset.
 Luu y:
 
 - Xoa mem ban ghi.
-- Xoa file anh goc va thu muc tile tren media/storage.
-
-## GET `/api/media/tiles/{location_id}/{version_number}/{scene_key}/{z}/{x}/{y}.jpg`
-
-Serve tile anh cho editor/admin.
-
-Vi du:
-
-```text
-/api/media/tiles/2/1/scene-1/0/0/0.jpg
-```
+- Xoa file anh goc/optimized/preview/thumbnail tren media/storage neu file khong con duoc asset khac dung chung.
 
 ---
 
@@ -968,9 +1023,47 @@ Response:
 }
 ```
 
-## GET `/api/public/tour/{public_token}/tiles/{scene_key}/{z}/{x}/{y}.jpg`
+## GET `/api/public/tour/{public_token}/images/{scene_key}/{variant}/`
 
-Serve tile cho viewer public.
+Lay anh cua mot scene trong tour public qua proxy cua backend.
+
+Endpoint nay dung cho viewer/iframe khi render panorama bang Three.js/WebGL. Ly do khong nen lay truc tiep `/media/...` trong public viewer la vi WebGL can CORS header dung domain dang xem/nhung.
+
+Path params:
+
+| Param | Y nghia |
+|---|---|
+| `public_token` | Token public cua location da publish |
+| `scene_key` | ID/key cua scene trong `tour_data.scenes[]` |
+| `variant` | `original`, `optimized`, `preview`, hoac `thumbnail` |
+
+Header:
+
+```http
+Origin: http://127.0.0.1:5500
+```
+
+Hoac khi nhung iframe co the gui:
+
+```text
+?embed_origin=http://127.0.0.1:5500
+```
+
+Response thanh cong:
+
+```text
+200 image/jpeg | image/webp | image/png
+```
+
+Response bi chan domain:
+
+```json
+{
+  "detail": "Domain is not allowed to access this published tour."
+}
+```
+
+Status: `403`.
 
 ## POST `/api/public/tour/{public_token}/track-visit/`
 
@@ -1330,5 +1423,6 @@ POST /api/locations/{location_id}/publish/domains/
 
 ```text
 GET /api/public/tour/{public_token}/
+GET /api/public/tour/{public_token}/images/{scene_key}/{variant}/
 POST /api/public/tour/{public_token}/track-visit/
 ```

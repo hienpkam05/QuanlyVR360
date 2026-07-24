@@ -1,6 +1,6 @@
 import hashlib
+import mimetypes
 from copy import deepcopy
-from pathlib import Path
 from urllib.parse import urlsplit
 
 from django.conf import settings
@@ -29,9 +29,12 @@ def normalize_domain(value):
 
 
 def request_domain(request):
+    embed_origin = request.headers.get("X-Embed-Origin") or request.query_params.get("embed_origin")
+    if not embed_origin and isinstance(request.data, dict):
+        embed_origin = request.data.get("embed_origin")
     origin = request.headers.get("Origin")
     referer = request.headers.get("Referer")
-    return normalize_domain(origin or referer)
+    return normalize_domain(embed_origin or origin or referer)
 
 
 def request_origin(request):
@@ -56,6 +59,16 @@ def local_domain_aliases(domain):
         return {domain}
     port = f":{parsed.port}" if parsed.port else ""
     return {f"localhost{port}", f"127.0.0.1{port}"}
+
+
+def configured_frontend_domains():
+    domains = set()
+    for origin in getattr(settings, "CORS_ALLOWED_ORIGINS", []):
+        domain = normalize_domain(origin)
+        if domain:
+            domains.add(domain)
+            domains.update(local_domain_aliases(domain))
+    return domains
 
 
 def client_ip(request):
@@ -138,6 +151,8 @@ class PublicAccessMixin:
         domain = request_domain(request)
         if not domain:
             return False
+        if domain in configured_frontend_domains():
+            return True
         if domain in domains:
             return True
         if settings.DEBUG and local_domain_aliases(domain).intersection(domains):
@@ -148,19 +163,26 @@ class PublicAccessMixin:
         domains = sorted(self.allowed_domains(config))
         origin = request_origin(request)
         origin_domain = normalize_domain(origin)
+        access_domain = request_domain(request)
 
         frame_ancestors = " ".join(domains) if domains else "'none'"
         response["Content-Security-Policy"] = f"frame-ancestors {frame_ancestors}"
 
         origin_allowed = origin_domain in domains
+        access_allowed = access_domain in domains
+        frontend_domains = configured_frontend_domains()
+        origin_allowed = origin_allowed or origin_domain in frontend_domains
+        access_allowed = access_allowed or access_domain in frontend_domains
         if settings.DEBUG and not origin_allowed:
             origin_allowed = bool(local_domain_aliases(origin_domain).intersection(domains))
+        if settings.DEBUG and not access_allowed:
+            access_allowed = bool(local_domain_aliases(access_domain).intersection(domains))
 
-        if origin and origin_allowed:
+        if origin and (origin_allowed or access_allowed):
             response["Access-Control-Allow-Origin"] = origin
             response["Access-Control-Allow-Credentials"] = "false"
             response["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
-            response["Access-Control-Allow-Headers"] = "Content-Type"
+            response["Access-Control-Allow-Headers"] = "Content-Type, X-Embed-Origin"
             response["Vary"] = "Origin"
         return response
 
@@ -172,6 +194,17 @@ class PublicAccessMixin:
 
 
 class PublicTourView(PublicAccessMixin, APIView):
+    def scene_image_url(self, request, public_token, scene_key, variant):
+        url = request.build_absolute_uri(
+            f"/api/public/tour/{public_token}/images/{scene_key}/{variant}/"
+        )
+        embed_origin = request.query_params.get("embed_origin")
+        if embed_origin:
+            from urllib.parse import urlencode
+
+            return f"{url}?{urlencode({'embed_origin': embed_origin})}"
+        return url
+
     def get(self, request, public_token):
         config = self.get_publish_config(public_token)
         if not self.check_public_access(request, config):
@@ -183,19 +216,25 @@ class PublicTourView(PublicAccessMixin, APIView):
             asset.scene_key: asset
             for asset in SceneAsset.objects.filter(
                 tour_version=version,
-                processing_status=SceneAsset.ProcessingStatus.DONE,
-            )
+            ).exclude(original_file="")
         }
         for scene in resolved_data.get("scenes", []):
             scene_key = str(scene.get("id"))
             asset = assets.get(scene_key)
             if asset:
-                scene["tile_url"] = request.build_absolute_uri(
-                    f"/api/public/tour/{public_token}/tiles/{scene_key}/"
-                    f"{{z}}/{{x}}/{{y}}.jpg"
+                scene["original_file"] = (
+                    self.scene_image_url(request, public_token, scene_key, "original") if asset.original_file else ""
                 )
-                scene["max_zoom_level"] = asset.max_zoom_level
-                scene["tile_size"] = asset.tile_size
+                scene["optimized_file"] = (
+                    self.scene_image_url(request, public_token, scene_key, "optimized") if asset.optimized_file else ""
+                )
+                scene["preview_file"] = (
+                    self.scene_image_url(request, public_token, scene_key, "preview") if asset.preview_file else ""
+                )
+                scene["thumbnail_file"] = (
+                    self.scene_image_url(request, public_token, scene_key, "thumbnail") if asset.thumbnail_file else ""
+                )
+                scene["thumbnail"] = scene.get("thumbnail") or scene["thumbnail_file"] or scene["preview_file"]
 
         response = Response(
             {
@@ -224,25 +263,45 @@ class PublicTourView(PublicAccessMixin, APIView):
         return self.add_public_headers(response, request, config)
 
 
-class PublicTileView(PublicAccessMixin, APIView):
-    def get(self, request, public_token, scene_key, z, x, y):
+class PublicSceneImageView(PublicAccessMixin, APIView):
+    variants = {
+        "original": "original_file",
+        "optimized": "optimized_file",
+        "preview": "preview_file",
+        "thumbnail": "thumbnail_file",
+    }
+
+    def get(self, request, public_token, scene_key, variant):
         config = self.get_publish_config(public_token)
         if not self.check_public_access(request, config):
             return self.forbidden_response()
+
+        field_name = self.variants.get(variant)
+        if not field_name:
+            raise Http404("Image variant not found.")
 
         asset = get_object_or_404(
             SceneAsset.objects.select_related("tour_version"),
             tour_version=config.published_version,
             scene_key=scene_key,
-            processing_status=SceneAsset.ProcessingStatus.DONE,
         )
-        tile_file = Path(settings.MEDIA_ROOT) / asset.tile_base_path / str(z) / str(x) / f"{y}.jpg"
-        if not tile_file.is_file():
-            raise Http404("Tile not found.")
-        response = FileResponse(tile_file.open("rb"), content_type="image/jpeg")
+        file_field = getattr(asset, field_name, None)
+        if not file_field:
+            if variant == "optimized" and asset.original_file:
+                file_field = asset.original_file
+            elif variant == "preview" and asset.optimized_file:
+                file_field = asset.optimized_file
+            elif variant == "thumbnail" and asset.preview_file:
+                file_field = asset.preview_file
+            else:
+                raise Http404("Image not found.")
+
+        content_type = mimetypes.guess_type(file_field.name)[0] or "application/octet-stream"
+        response = FileResponse(file_field.open("rb"), content_type=content_type)
+        response["Cache-Control"] = "public, max-age=86400"
         return self.add_public_headers(response, request, config)
 
-    def options(self, request, public_token, scene_key, z, x, y):
+    def options(self, request, public_token, scene_key, variant):
         config = self.get_publish_config(public_token)
         response = Response(status=status.HTTP_204_NO_CONTENT)
         return self.add_public_headers(response, request, config)

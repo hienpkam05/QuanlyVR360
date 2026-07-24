@@ -19,9 +19,6 @@ class SceneAssetSerializer(serializers.ModelSerializer):
             "file_size",
             "checksum_sha256",
             "mime_type",
-            "tile_base_path",
-            "max_zoom_level",
-            "tile_size",
             "processing_status",
             "celery_task_id",
             "retry_count",
@@ -40,7 +37,6 @@ class SceneAssetSerializer(serializers.ModelSerializer):
             "file_size",
             "checksum_sha256",
             "mime_type",
-            "tile_base_path",
             "processing_status",
             "celery_task_id",
             "retry_count",
@@ -76,7 +72,7 @@ class SceneProcessingStatusSerializer(serializers.ModelSerializer):
 class SceneAssetUploadSerializer(serializers.ModelSerializer):
     class Meta:
         model = SceneAsset
-        fields = ("tour_version", "scene_key", "original_file", "max_zoom_level", "tile_size")
+        fields = ("tour_version", "scene_key", "original_file")
 
     def validate(self, attrs):
         tour_version = attrs["tour_version"]

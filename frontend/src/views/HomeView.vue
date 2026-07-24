@@ -50,19 +50,12 @@ function formatDate(value) {
 
 function openViewer(tour) {
   router.push({
-    path: "/viewer",
-    query: {
-      token: tour.public_token,
-      project: tour.project_id,
-      location: tour.location_id,
-      version: tour.version_id,
-    },
+    path: `/vr360/${tour.public_token}`,
   });
 }
 
 function viewerEmbedUrl(tour) {
-  const url = new URL("/viewer", window.location.origin);
-  url.searchParams.set("token", tour.public_token);
+  const url = new URL(`/vr360/${tour.public_token}`, window.location.origin);
   return url.toString();
 }
 

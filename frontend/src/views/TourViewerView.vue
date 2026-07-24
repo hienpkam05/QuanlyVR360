@@ -45,6 +45,7 @@ const isPublicViewerMode = computed(() => !auth.isAuthenticated || auth.isGuest)
 const activeSceneIndex = computed(() => scenes.value.findIndex((scene) => scene.id === activeSceneId.value));
 const activeInitialView = computed(() => activeScene.value?.view || activeScene.value?.initialView || { lon: 0, lat: 0, fov: 75 });
 const sceneImage = computed(() => resolveSceneImage(activeScene.value));
+const sceneImageFallbacks = computed(() => resolveSceneImageSources(activeScene.value));
 const backgroundAudioUrl = computed(() => resolveUrl(version.value?.background_audio || ''));
 const pointHotspotLogoUrl = computed(() => resolveUrl(version.value?.hotspot_point_logo || ''));
 const displayHotspots = computed(() => {
@@ -86,7 +87,24 @@ function resolveUrl(url) {
 
 function resolveSceneImage(scene) {
   if (!scene) return '';
-  return resolveUrl(scene.optimized_file || scene.original_file || scene.image_url || scene.preview_file || scene.thumbnail || scene.thumb || scene.panorama || '');
+  return resolveSceneImageSources(scene)[0] || '';
+}
+
+function resolveSceneImageSources(scene) {
+  if (!scene) return [];
+  return [
+    scene.original_file,
+    scene.image_url,
+    scene.optimized_file,
+    scene.preview_file,
+    scene.thumbnail_file,
+    scene.thumbnail,
+    scene.thumb,
+    scene.panorama,
+  ]
+    .map(resolveUrl)
+    .filter(Boolean)
+    .filter((url, index, items) => items.indexOf(url) === index);
 }
 
 function youtubeEmbedUrl(url) {
@@ -412,7 +430,7 @@ async function loadPublishedFallback() {
   const queryProject = Number(route.query.project || 0);
   const queryLocation = Number(route.query.location || 0);
   const queryVersion = Number(route.query.version || 0);
-  const queryToken = String(route.query.token || route.query.public_token || '');
+  const queryToken = String(route.params.token || route.query.token || route.query.public_token || '');
 
   const matchedTour = queryToken
     ? tours.find((tour) => tour.public_token === queryToken)
@@ -585,7 +603,7 @@ function updateViewState(value) {
 
 async function boot() {
   errorMessage.value = '';
-  const hasPublicToken = Boolean(route.query.token || route.query.public_token);
+  const hasPublicToken = Boolean(route.params.token || route.query.token || route.query.public_token);
   const hasPrivateSelection = Boolean(route.query.project || route.query.location || route.query.version);
 
   if (isPublicViewerMode.value) {
@@ -679,6 +697,7 @@ onBeforeUnmount(stopTourAudio);
       ref="panoramaRef"
       class="tour-panorama"
       :image-url="sceneImage"
+      :fallback-image-urls="sceneImageFallbacks"
       :hotspots="displayHotspots"
       :initial-view="activeInitialView"
       :point-hotspot-logo="pointHotspotLogoUrl"
