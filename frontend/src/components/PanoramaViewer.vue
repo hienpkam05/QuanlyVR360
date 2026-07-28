@@ -75,7 +75,10 @@ let cameraTween = null;
 let lon = 0;
 let lat = 0;
 let fov = 75;
-const MIN_LAT = -70;
+// Khong cho camera nhin qua sat cuc day cua anh 360.
+// Neu nhin gan -90 do, equirectangular panorama se bi don pixel ve 1 diem
+// nen phan chan may/san se bi xoay/nhoe. -58 van xem duoc san nhung tranh lo cuc day.
+const MIN_LAT = -58;
 const MAX_LAT = 82;
 
 function clamp(value, min, max) {
@@ -347,7 +350,7 @@ function clearTransition() {
 function startTextureTransition(oldTexture) {
   if (!oldTexture || !scene) return;
   clearTransition();
-  const geometry = new THREE.SphereGeometry(499, 64, 40);
+  const geometry = new THREE.SphereGeometry(499, 128, 64);
   geometry.scale(-1, 1, 1);
   const material = new THREE.MeshBasicMaterial({
     map: oldTexture,
@@ -402,6 +405,12 @@ function loadTexture(candidateIndex = 0) {
       const oldTexture = texture;
       texture = loadedTexture;
       texture.colorSpace = THREE.SRGBColorSpace;
+      texture.minFilter = THREE.LinearFilter;
+      texture.magFilter = THREE.LinearFilter;
+      texture.generateMipmaps = false;
+      if (renderer?.capabilities) {
+        texture.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
+      }
       mesh.material.map = texture;
       mesh.material.color.set(0xffffff);
       mesh.material.needsUpdate = true;
@@ -432,7 +441,7 @@ function initThree() {
   raycaster = new THREE.Raycaster();
   pointer = new THREE.Vector2();
 
-  const geometry = new THREE.SphereGeometry(500, 64, 40);
+  const geometry = new THREE.SphereGeometry(500, 128, 64);
   geometry.scale(-1, 1, 1);
   const material = new THREE.MeshBasicMaterial({ color: 0x111827 });
   mesh = new THREE.Mesh(geometry, material);
