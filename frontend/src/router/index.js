@@ -3,7 +3,7 @@ import { createRouter, createWebHistory } from 'vue-router';
 import DashboardView from '../views/DashboardView.vue';
 import HomeView from '../views/HomeView.vue';
 import LoginView from '../views/LoginView.vue';
-import BuilderView from '../views/BuilderView.vue';
+import BuilderView from '../vr360builder/pages/Vr360Builder.vue';
 import LocationsView from '../views/LocationsView.vue';
 import PublicViewerView from '../views/PublicViewerView.vue';
 import ProjectsView from '../views/ProjectsView.vue';
