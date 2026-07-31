@@ -1,6 +1,7 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import * as THREE from 'three';
+import NavRenderer from './nav/NavRenderer.vue';
 
 const props = defineProps({
   imageUrl: {
@@ -641,8 +642,7 @@ defineExpose({
       @dblclick.stop="markInteraction(); emit('hotspot-dblclick', hotspot, $event)"
     >
       <template v-if="hotspotDisplayMode === 'viewer' && hotspot.type === 'nav'">
-        <span class="viewer-nav-arrow"><i class="ti-angle-double-up" aria-hidden="true"></i></span>
-        <span class="viewer-hotspot-preview" v-if="hotspot.preview_image" :style="{ backgroundImage: `url(${hotspot.preview_image})` }"></span>
+        <NavRenderer :hotspot="hotspot" />
       </template>
       <template v-else>
         <span

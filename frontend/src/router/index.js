@@ -6,6 +6,7 @@ import LoginView from '../views/LoginView.vue';
 import BuilderView from '../vr360builder/pages/Vr360Builder.vue';
 import LocationsView from '../views/LocationsView.vue';
 import PublicViewerView from '../views/PublicViewerView.vue';
+import { ViewerProductionPage } from '../vr360-viewer/router.js';
 import ProjectsView from '../views/ProjectsView.vue';
 import PublishingView from '../views/PublishingView.vue';
 import StatsView from '../views/StatsView.vue';
@@ -59,7 +60,7 @@ const routes = [
   {
     path: '/viewer',
     name: 'TourViewer',
-    component: TourViewerView,
+    component: ViewerProductionPage,
     meta: { immersive: true, public: true },
   },
   {

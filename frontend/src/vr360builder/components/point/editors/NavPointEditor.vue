@@ -1,6 +1,7 @@
 <script setup>
 import BaseAccordion from '../../common/BaseAccordion.vue';
 import { DEFAULT_NAV_ICON, NAV_ICONS } from '@/common/hotspotIcons.js';
+import { NAV_STYLES } from '@/common/vr360/tourDataMapper.js';
 
 defineProps({
   hotspot: { type: Object, required: true },
@@ -17,6 +18,10 @@ const emit = defineEmits([
 
 const navIconDefault = DEFAULT_NAV_ICON;
 const navIconOptions = Object.entries(NAV_ICONS).map(([key, v]) => ({ key, label: v.label }));
+const navStyleOptions = [
+  { value: NAV_STYLES.default, label: 'Arrow' },
+  { value: NAV_STYLES.previewExpand, label: 'Preview Expand' },
+];
 </script>
 
 <template>
@@ -34,6 +39,12 @@ const navIconOptions = Object.entries(NAV_ICONS).map(([key, v]) => ({ key, label
         <label class="vb-prop-label">Biểu tượng</label>
         <select class="vb-prop-input" :value="hotspot.icon || navIconDefault" @change="emit('update', 'icon', $event.target.value)">
           <option v-for="opt in navIconOptions" :key="opt.key" :value="opt.key">{{ opt.label }}</option>
+        </select>
+      </div>
+      <div class="vb-prop-row">
+        <label class="vb-prop-label">NAV Style</label>
+        <select class="vb-prop-input" :value="hotspot.navStyle || NAV_STYLES.default" @change="emit('update', 'navStyle', $event.target.value)">
+          <option v-for="option in navStyleOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
         </select>
       </div>
       <div class="vb-prop-row-inline">

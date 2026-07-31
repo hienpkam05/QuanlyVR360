@@ -17,6 +17,7 @@ import {
   defaultNarration,
   defaultTransition,
   defaultHoverState,
+  NAV_STYLES,
 } from "@/common/vr360/tourDataMapper.js";
 
 import SceneEditor from "../components/scene/SceneEditor.vue";
@@ -510,6 +511,7 @@ function confirmHotspotType(loai_poi) {
     label: isNav ? "Lối đi " + (hs.length + 1) : "Hotspot " + (hs.length + 1),
     target: "",
     type: isNav ? "nav" : "poi",
+    ...(isNav ? { navStyle: NAV_STYLES.default } : {}),
     icon: isNav ? DEFAULT_NAV_ICON : null,
     loai_poi: loai_poi || null,
     locked: false,
@@ -563,6 +565,7 @@ function quickCreateHotspot(loai_poi) {
     label: isNav ? "Lối đi " + (hs.length + 1) : "Hotspot " + (hs.length + 1),
     target: "",
     type: isNav ? "nav" : "poi",
+    ...(isNav ? { navStyle: NAV_STYLES.default } : {}),
     icon: isNav ? DEFAULT_NAV_ICON : null,
     loai_poi: loai_poi || null,
     locked: false,
@@ -1859,6 +1862,8 @@ onMounted(() => {
     onCancelPlacing: () => cancelPlacingHotspot(),
     onHotspotSelect: (index) => selectHotspot(index),
     onHotspotNav: (index) => goToHotspotTarget(index),
+    resolveNavTarget: (targetId) =>
+      scenes.find((scene) => scene.id === targetId) || null,
     onHotspotDragEnd: (index, lon, lat) => {
       if (activeSceneIndex.value >= 0) {
         const hs = scenes[activeSceneIndex.value].hotspots[index];

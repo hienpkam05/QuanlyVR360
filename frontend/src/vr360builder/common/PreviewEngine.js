@@ -254,6 +254,7 @@ export class PreviewEngine {
       onHotspotHoverEnd: () => {
         this.callbacks.onHotspotHoverEnd?.();
       },
+      resolveNavTarget: (targetId) => this.callbacks.resolveNavTarget?.(targetId),
     });
   }
 

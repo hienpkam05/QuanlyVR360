@@ -55,6 +55,7 @@ const displayHotspots = computed(() => {
     const targetScene = scenes.value.find((item) => item.id === hotspot.target_scene_id);
     return {
       ...hotspot,
+      target_scene_name: targetScene?.name || '',
       preview_image:
         ['info', 'info_area'].includes(hotspot.type)
           ? resolveUrl(hotspot.info?.image_url || hotspot.image_url || '') || resolveSceneImage(targetScene || scene)
@@ -194,6 +195,7 @@ function normalizeScene(scene, index = 0) {
       id: String(hotspot.id || `hotspot-${index + 1}-${hotspotIndex + 1}`),
       label: hotspot.label || hotspot.title || `Hotspot ${hotspotIndex + 1}`,
       type: ['nav', 'point', 'info', 'info_area'].includes(hotspot.type) ? hotspot.type : hotspot.type === 'navigate' ? 'nav' : 'point',
+      navStyle: hotspot.navStyle || 'default',
       target_scene_id: String(hotspot.target_scene_id || hotspot.target || hotspot.scene_id || ''),
       lon: Number(hotspot.lon ?? 0),
       lat: Number(hotspot.lat ?? 0),

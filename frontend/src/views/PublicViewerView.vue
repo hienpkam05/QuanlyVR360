@@ -37,6 +37,7 @@ const displayHotspots = computed(() => {
     );
     return {
       ...hotspot,
+      target_scene_name: targetScene?.name || "",
       preview_image: ["info", "info_area"].includes(hotspot.type)
         ? resolveUrl(hotspot.info?.image_url || hotspot.image_url || "") ||
           resolveSceneImage(targetScene || scene)
@@ -131,6 +132,7 @@ function normalizeScene(scene, index = 0) {
         : hotspot.type === "navigate"
           ? "nav"
           : "point",
+      navStyle: hotspot.navStyle || "default",
       target_scene_id: String(
         hotspot.target_scene_id || hotspot.target || hotspot.scene_id || "",
       ),

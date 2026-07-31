@@ -10,6 +10,18 @@ export function defaultHoverState() {
   return { hien_thi_anh_thu_nho: false, duong_dan_thumbnail: "", van_ban_huong_dan: "" };
 }
 
+export const NAV_STYLES = {
+  default: "default",
+  previewExpand: "preview_expand",
+};
+
+export function normalizeNavStyle(navStyle) {
+  if (navStyle === "arrow") return NAV_STYLES.default;
+  return Object.values(NAV_STYLES).includes(navStyle)
+    ? navStyle
+    : NAV_STYLES.default;
+}
+
 export function normalizeHotspot(h) {
   return {
     lon: h.lon || 0,
@@ -17,6 +29,9 @@ export function normalizeHotspot(h) {
     label: h.label || "",
     target: h.target || "",
     type: h.type || "poi",
+    ...(h.type === "nav" || h.loai_poi === "chuyen_canh"
+      ? { navStyle: normalizeNavStyle(h.navStyle) }
+      : {}),
     icon: h.icon || null,
     loai_poi: h.loai_poi || null,
     ...(h.chieu_cao_duong_ghim != null ? { chieu_cao_duong_ghim: h.chieu_cao_duong_ghim } : {}),

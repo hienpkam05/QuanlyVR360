@@ -1,0 +1,28 @@
+# dependencies
+node_modules/
+
+# build
+dist/
+dist-next/
+
+# env
+.env.local
+.env.*.local
+
+# logs
+*.log
+
+# cache
+.vite/
+.cache/
+
+# coverage
+coverage/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
