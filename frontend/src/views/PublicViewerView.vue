@@ -106,6 +106,52 @@ function youtubeEmbedUrl(url) {
   return match?.[1] ? `https://www.youtube.com/embed/${match[1]}` : "";
 }
 
+function normalizeHotspotInfo(hotspot) {
+  const content = hotspot.noi_dung || {};
+  const videoUrl =
+    hotspot.info?.video_url ||
+    hotspot.info_video_url ||
+    hotspot.video_url ||
+    content.url_video ||
+    "";
+
+  return {
+    title:
+      hotspot.info?.title ||
+      hotspot.info_title ||
+      content.tieu_de ||
+      hotspot.label ||
+      "",
+    description:
+      hotspot.info?.description ||
+      hotspot.info_description ||
+      hotspot.description ||
+      content.mo_ta ||
+      "",
+    image_url:
+      hotspot.info?.image_url ||
+      hotspot.info_image_url ||
+      hotspot.image_url ||
+      content.anh_minh_hoa ||
+      "",
+    video_url: videoUrl,
+    youtube_url:
+      hotspot.info?.youtube_url ||
+      hotspot.info_youtube_url ||
+      hotspot.youtube_url ||
+      (String(videoUrl).includes("youtu") ? videoUrl : "") ||
+      "",
+    link_url:
+      hotspot.info?.link_url ||
+      hotspot.info?.lien_ket ||
+      content.lien_ket ||
+      "",
+    gallery_images: Array.isArray(content.danh_sach_anh)
+      ? content.danh_sach_anh
+      : [],
+  };
+}
+
 function normalizeScene(scene, index = 0) {
   return {
     id: String(scene.id || scene.key || scene.scene_key || `scene-${index + 1}`),
@@ -147,29 +193,9 @@ function normalizeScene(scene, index = 0) {
             y: Number(point.y ?? 50),
           }))
         : [],
-      info: {
-        title: hotspot.info?.title || hotspot.info_title || "",
-        description:
-          hotspot.info?.description ||
-          hotspot.info_description ||
-          hotspot.description ||
-          "",
-        image_url:
-          hotspot.info?.image_url ||
-          hotspot.info_image_url ||
-          hotspot.image_url ||
-          "",
-        video_url:
-          hotspot.info?.video_url ||
-          hotspot.info_video_url ||
-          hotspot.video_url ||
-          "",
-        youtube_url:
-          hotspot.info?.youtube_url ||
-          hotspot.info_youtube_url ||
-          hotspot.youtube_url ||
-          "",
-      },
+      info: normalizeHotspotInfo(hotspot),
+      noi_dung: hotspot.noi_dung || null,
+      loai_poi: hotspot.loai_poi || null,
       glow: hotspot.glow ?? hotspot.style?.glow ?? true,
     })),
   };

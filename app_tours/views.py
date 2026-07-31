@@ -95,6 +95,29 @@ def log_version_activity(request, action, version, description):
     )
 
 
+def update_hotspot_noi_dung(version, hotspot_id, updates):
+    if not hotspot_id:
+        return False
+
+    data = deepcopy(version.data or {})
+    changed = False
+    for scene in data.get("scenes", []):
+        for hotspot in scene.get("hotspots", []):
+            if str(hotspot.get("id") or "") != str(hotspot_id):
+                continue
+            noi_dung = hotspot.get("noi_dung")
+            if not isinstance(noi_dung, dict):
+                noi_dung = {}
+            noi_dung.update(updates)
+            hotspot["noi_dung"] = noi_dung
+            changed = True
+
+    if changed:
+        version.data = data
+        version.save(update_fields=["data", "updated_at"])
+    return changed
+
+
 class LocationTourVersionViewSet(mixins.ListModelMixin, mixins.CreateModelMixin, GenericViewSet):
     serializer_class = TourVersionSerializer
     parser_classes = (JSONParser, MultiPartParser, FormParser)
@@ -335,9 +358,11 @@ class HotspotInfoVideoUploadView(APIView):
             video_file,
         )
         url = default_storage.url(path)
+        absolute_url = request.build_absolute_uri(url)
+        update_hotspot_noi_dung(version, hotspot_id, {"url_video": absolute_url})
         return Response(
             {
-                "video_url": request.build_absolute_uri(url),
+                "video_url": absolute_url,
                 "video_path": url,
             },
             status=status.HTTP_201_CREATED,

@@ -855,7 +855,7 @@ function saveCurrentView() {
 }
 function replaceImage() {
   if (activeSceneIndex.value < 0) return;
-  replaceImageInputRef.value.click();
+  replaceImageInputRef.value?.click();
 }
 async function replaceSceneImage(index, file) {
   if (
@@ -871,6 +871,7 @@ async function replaceSceneImage(index, file) {
   const s = scenes[index];
   if (s.image?.startsWith("blob:")) URL.revokeObjectURL(s.image);
   s.image = url;
+  s.thumb = url;
   s._file = procFile;
   s._originalSize = originalSize;
   s._resizedSize = resizedSize;
@@ -878,6 +879,10 @@ async function replaceSceneImage(index, file) {
   s.gps = gps;
   s.exportUrl = "";
   s._serverThumb = "";
+  s.original_file = "";
+  s.optimized_file = "";
+  s.preview_file = "";
+  s.thumbnail_file = "";
   generateThumb(procFile).then((t) => {
     s.thumb = t;
   });
@@ -1475,7 +1480,7 @@ async function saveToServer() {
     }
     const infoImageUpload = await uploadHotspotInfoImages(c);
     if (!infoImageUpload.ok) {
-      showToast("error", "❌ Upload ảnh thông tin thất bại");
+      showToast("error", "❌ Upload media hotspot thất bại");
       return;
     }
     const res = await apiSaveTour(buildJson(c));
@@ -1537,8 +1542,27 @@ function cloneForExport() {
       ? { ...s.am_thanh_thuyet_minh }
       : null,
     transition: s.transition ? { ...s.transition } : null,
-    hotspots: s.hotspots.map((h) => ({ ...h })),
+    hotspots: s.hotspots.map(cloneHotspotForExport),
   }));
+}
+
+function clonePlain(value, fallback = null) {
+  if (value === undefined || value === null) return fallback;
+  return JSON.parse(JSON.stringify(value));
+}
+
+function cloneHotspotForExport(h) {
+  return {
+    ...h,
+    ...(h.noi_dung ? { noi_dung: clonePlain(h.noi_dung, {}) } : {}),
+    ...(Array.isArray(h.area_points)
+      ? { area_points: h.area_points.map((point) => ({ ...point })) }
+      : {}),
+    ...(h.khi_dua_chuot_vao
+      ? { khi_dua_chuot_vao: clonePlain(h.khi_dua_chuot_vao, {}) }
+      : {}),
+    ...(h.entryView ? { entryView: { ...h.entryView } } : {}),
+  };
 }
 function buildJson(c) {
   return {
@@ -1623,7 +1647,7 @@ async function uploadHotspotInfoImages(c) {
   });
   if (!pending.length) return { ok: true, up: 0, fail: 0 };
   if (!backendContext.locationId || !backendContext.versionId) {
-    showToast("error", "❌ Chưa chọn location/version để upload ảnh hotspot");
+    showToast("error", "❌ Chưa chọn location/version để upload media hotspot");
     return { ok: false, up: 0, fail: pending.length };
   }
   let up = 0;
@@ -1680,7 +1704,7 @@ async function uploadHotspotInfoImages(c) {
       }
       up++;
     } catch (error) {
-      console.error("uploadHotspotInfoImage error:", error);
+      console.error("uploadHotspotMedia error:", error);
       fail++;
     }
   }
@@ -1689,7 +1713,7 @@ async function uploadHotspotInfoImages(c) {
       delete hotspot._galleryImageFiles;
     });
   });
-  if (up) showToast("success", `☁️ Đã upload ${up} ảnh hotspot`);
+  if (up) showToast("success", `☁️ Đã upload ${up} media hotspot`);
   return { ok: fail === 0, up, fail };
 }
 async function uploadClone(c, prog) {
@@ -1705,6 +1729,10 @@ async function uploadClone(c, prog) {
       if (r) {
         pending[i].exportUrl = r.image_url;
         pending[i]._serverThumb = r.thumb_url;
+        pending[i].original_file = r.original_file || r.image_url || "";
+        pending[i].optimized_file = r.optimized_file || "";
+        pending[i].preview_file = r.preview_file || "";
+        pending[i].thumbnail_file = r.thumbnail_file || r.thumb_url || "";
         up++;
       } else fail++;
     } catch {
@@ -1718,13 +1746,21 @@ function syncBack(c) {
     const s = scenes[i];
     if (!s || s.id !== x.id) return;
     if (x.exportUrl) {
+      if (s.image?.startsWith("blob:")) URL.revokeObjectURL(s.image);
+      s.image = x.exportUrl;
+      s.thumb = x._serverThumb || x.exportUrl || s.thumb;
       s.exportUrl = x.exportUrl;
       s._serverThumb = x._serverThumb;
+      s.original_file = x.original_file || x.exportUrl;
+      s.optimized_file = x.optimized_file || "";
+      s.preview_file = x.preview_file || "";
+      s.thumbnail_file = x.thumbnail_file || x._serverThumb || "";
+      s._file = null;
     }
     x.hotspots.forEach((hotspot, hotspotIndex) => {
       const target = s.hotspots[hotspotIndex];
       if (!target) return;
-      if (hotspot.noi_dung) target.noi_dung = { ...hotspot.noi_dung };
+      if (hotspot.noi_dung) target.noi_dung = clonePlain(hotspot.noi_dung, {});
       if (hotspot.id) target.id = hotspot.id;
       delete target._galleryImageFiles;
       delete target._videoFile;
@@ -2162,7 +2198,16 @@ onBeforeUnmount(() => {
               multiple
               accept="image/*"
               style="display: none"
+              @click.stop
               @change="handleFileInput"
+            />
+            <input
+              ref="replaceImageInputRef"
+              type="file"
+              accept="image/*"
+              style="display: none"
+              @click.stop
+              @change.stop="handleReplaceImage"
             />
             <span v-if="resizingCount > 0"
               >Đang xử lý {{ resizingCount }}...</span

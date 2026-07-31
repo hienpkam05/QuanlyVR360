@@ -31,6 +31,7 @@ htmlcov/
 coverage.xml
 
 # Node / Vue / Vite
+node_modules/
 frontend/node_modules/
 frontend/dist/
 frontend/.vite/

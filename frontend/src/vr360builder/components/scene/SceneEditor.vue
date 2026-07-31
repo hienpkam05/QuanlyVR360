@@ -60,7 +60,14 @@ function updateTransition(key, value) {
         <div style="display:flex;gap:8px;align-items:center">
           <div class="vb-prop-thumb"><img :src="scene.thumb || scene.image" /></div>
           <div style="flex:1">
-            <button class="vb-prop-btn" style="padding:6px" @click="emit('replace-image')">Thay ảnh</button>
+            <button
+              class="vb-prop-btn"
+              style="padding:6px"
+              type="button"
+              @click.stop="emit('replace-image')"
+            >
+              Thay ảnh
+            </button>
             <span class="vb-prop-filename">{{ scene._file ? scene._file.name.substring(0,28) : scene.exportUrl ? scene.exportUrl.split('/').pop().substring(0,28) : '—' }}</span>
             <span v-if="scene._file" class="vb-prop-filesize">
               <template v-if="scene._resized">{{ formatBytes(scene._originalSize) }} → <strong>{{ formatBytes(scene._resizedSize) }}</strong></template>
