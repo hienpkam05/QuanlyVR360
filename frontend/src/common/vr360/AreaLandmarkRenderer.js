@@ -157,7 +157,8 @@ export class AreaLandmarkRenderer {
       return true;
     };
     const stopTouchPropagation = (event) => {
-      if (event.pointerType !== 'touch') return;
+      // Area Landmark owns its own interaction surface. Do not let a press
+      // start the panorama drag handler beneath the SVG/label.
       event.stopPropagation();
     };
     const handleClick = (event) => {
@@ -170,6 +171,7 @@ export class AreaLandmarkRenderer {
     };
     const bindTouchActivation = (target) => {
       target.addEventListener('pointerdown', stopTouchPropagation);
+      target.addEventListener('pointermove', stopTouchPropagation);
       target.addEventListener('pointerup', activateTouch);
       target.addEventListener('pointercancel', stopTouchPropagation);
       target.addEventListener('click', handleClick);

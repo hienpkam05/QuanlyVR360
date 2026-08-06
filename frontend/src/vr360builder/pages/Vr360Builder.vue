@@ -19,7 +19,7 @@ import {
   defaultHoverState,
   NAV_STYLES,
 } from "@/common/vr360/tourDataMapper.js";
-import { resolvePointKind } from "@/common/vr360/pointSchema.js";
+import { createPoint, resolvePointKind, clonePointValue } from "@/common/vr360/pointSchema.js";
 
 import SceneEditor from "../components/scene/SceneEditor.vue";
 import BaseAccordion from "../components/common/BaseAccordion.vue";
@@ -231,6 +231,7 @@ const draggingIndex = ref(-1);
 const dragOverIndex = ref(-1);
 const drawingInfoArea = ref(false);
 const infoAreaDraftPoints = ref([]);
+const drawingAreaType = ref('area_landmark');
 const areaOverlayTick = ref(0);
 let areaOverlayRaf = 0;
 
@@ -327,6 +328,18 @@ function generateHotspotId(prefix = "hotspot") {
 function ensureHotspotId(hotspot) {
   if (!hotspot.id) hotspot.id = generateHotspotId("hs");
   return hotspot.id;
+}
+
+function debugPoint(stage, hotspot) {
+  if (import.meta.env?.DEV) {
+    console.debug(`[POI Builder] ${stage}:`, hotspot?.id || 'new', hotspot?.type, resolvePointKind(hotspot));
+  }
+}
+
+function areaMediaDebug(stage, hotspot, details = {}) {
+  if (import.meta.env?.DEV) {
+    console.debug(`[AreaMedia] Builder ${stage}`, hotspot?.id || 'new', hotspot?.areaMedia?.type || '', hotspot?.areaMedia?.src || '', details);
+  }
 }
 
 function requestAreaOverlayUpdate() {
@@ -476,9 +489,10 @@ function placeNewHotspot(lon, lat) {
   modals.hotspotType = true;
 }
 
-function startDrawingInfoArea(seedLon = null, seedLat = null) {
+function startDrawingInfoArea(seedLon = null, seedLat = null, type = 'area_landmark') {
   if (activeSceneIndex.value < 0 || previewMode.active) return;
   infoAreaDraftPoints.value = [];
+  drawingAreaType.value = type;
   if (Number.isFinite(Number(seedLon)) && Number.isFinite(Number(seedLat))) {
     infoAreaDraftPoints.value.push({
       lon: Number(seedLon),
@@ -492,13 +506,18 @@ function startDrawingInfoArea(seedLon = null, seedLat = null) {
   requestAreaOverlayUpdate();
   showToast(
     "info",
-    "Click các đỉnh Area Landmark, tối thiểu 3 điểm rồi bấm Hoàn tất vùng.",
+    type === 'area' ? "Click các đỉnh Area, tối thiểu 3 điểm rồi bấm Hoàn tất vùng." : "Click các đỉnh Area Landmark, tối thiểu 3 điểm rồi bấm Hoàn tất vùng.",
   );
 }
 
 function startDrawingInfoAreaFromModal() {
   modals.hotspotType = false;
   startDrawingInfoArea(pendingPlacement.lon, pendingPlacement.lat);
+}
+
+function startDrawingImageAreaFromModal() {
+  modals.hotspotType = false;
+  startDrawingInfoArea(pendingPlacement.lon, pendingPlacement.lat, 'area');
 }
 
 function addInfoAreaPoint(lon, lat) {
@@ -529,17 +548,26 @@ function finishInfoAreaDrawing() {
     lon: Math.round(Number(point.lon) * 10) / 10,
     lat: Math.round(Number(point.lat) * 10) / 10,
   }));
-  const newHs = {
-    id: generateHotspotId("area_landmark"),
+  const newHs = drawingAreaType.value === 'area' ? {
+    id: generateHotspotId("area"),
+    vertices: points,
+    label: "Area Media " + (hs.length + 1),
+    type: 'area',
+    icon: null,
+    areaMedia: { type: 'image', src: '', opacity: 1, brightness: 1, borderRadius: 0, tint: '', fitMode: 'cover', loop: true, muted: true, autoplay: true, poster: '', playbackRate: 1, zIndex: 0 },
+    locked: false,
+  } : {
+    id: generateHotspotId("area"),
     vertices: points,
     label: "Khu vực " + (hs.length + 1),
     target: "",
-    type: "area_landmark",
+    type: drawingAreaType.value,
     icon: null,
-    loai_poi: "ghim_dia_danh",
+    loai_poi: drawingAreaType.value === 'area_landmark' ? 'ghim_dia_danh' : null,
     line_height: 48,
     show_polygon_on_hover: true,
-    style: { fill: "#fbbf24", hoverFill: "rgba(251, 191, 36, 0.32)", border: "#fbbf24", hoverBorder: "#fde68a", line: "#ffffff", opacity: 0.3, borderWidth: 2 },
+    overlay_image: "",
+    style: { fill: "#38bdf8", hoverFill: "rgba(56, 189, 248, 0.32)", border: "#38bdf8", hoverBorder: "#7dd3fc", line: "#ffffff", opacity: 0.45, borderWidth: 2 },
     metadata: {},
     locked: false,
     khi_dua_chuot_vao: defaultHoverState(),
@@ -553,7 +581,7 @@ function finishInfoAreaDrawing() {
   cancelPlacingHotspot();
   syncHotspotsToEngine();
   requestAreaOverlayUpdate();
-  showToast("success", "Đã tạo Area Landmark. Bạn có thể cấu hình nhãn, đích và style bên phải.");
+  showToast("success", drawingAreaType.value === 'area' ? "Đã tạo Area Media. Hãy chọn image hoặc video ở bảng bên phải." : "Đã tạo Area Landmark. Bạn có thể cấu hình nhãn, đích và style bên phải.");
 }
 
 function defaultNoiDung(loai_poi) {
@@ -576,27 +604,25 @@ function confirmHotspotType(loai_poi) {
     startDrawingInfoArea(pendingPlacement.lon, pendingPlacement.lat);
     return;
   }
+  if (loai_poi === 'area') {
+    modals.hotspotType = false;
+    startDrawingInfoArea(pendingPlacement.lon, pendingPlacement.lat, 'area');
+    return;
+  }
   const hs = scenes[activeSceneIndex.value].hotspots;
-  const isNav = loai_poi === "chuyen_canh";
-  const isAudio = loai_poi === "audio";
-  const newHs = {
-    id: generateHotspotId("hs"),
-    lon: pendingPlacement.lon,
-    lat: pendingPlacement.lat,
-    label: isNav ? "Lối đi " + (hs.length + 1) : "Hotspot " + (hs.length + 1),
-    target: "",
-    type: isNav ? "nav" : isAudio ? "audio" : "poi",
-    ...(isNav ? { navStyle: NAV_STYLES.default } : {}),
-    icon: isNav ? DEFAULT_NAV_ICON : null,
-    ...(isAudio ? {} : { loai_poi: loai_poi || null }),
-    ...(isAudio ? { radius: 0, audio: { enabled: false, url: "", title: "", description: "", volume: 1, autoplay: false, loop: false, playbackRate: 1 } } : {}),
-    locked: false,
-    khi_dua_chuot_vao: defaultHoverState(),
-    entryView: null,
+  const kindByLegacy = {
+    chuyen_canh: 'nav',
+    thong_tin_van_ban: 'info',
+    thu_vien_anh: 'gallery',
+    phat_video: 'video',
+    audio: 'audio',
   };
-  const nd = defaultNoiDung(loai_poi);
-  if (nd) newHs.noi_dung = nd;
+  const newHs = createPoint(kindByLegacy[loai_poi] || 'generic', {
+    id: generateHotspotId("hs"), lon: pendingPlacement.lon, lat: pendingPlacement.lat, index: hs.length,
+  });
+  newHs.khi_dua_chuot_vao = defaultHoverState();
   hs.push(newHs);
+  debugPoint('Created type', newHs);
   selectedHotspotIndex.value = hs.length - 1;
   modals.hotspotType = false;
   syncHotspotsToEngine();
@@ -627,36 +653,22 @@ function closeQuickMenu() {
 
 function quickCreateHotspot(loai_poi) {
   if (activeSceneIndex.value < 0) return;
-  if (loai_poi === "thong_tin_van_ban") {
-    startDrawingInfoArea(quickMenu.lon, quickMenu.lat);
-    return;
-  }
   const hs = scenes[activeSceneIndex.value].hotspots;
-  const isNav = loai_poi === "chuyen_canh";
-  const newHs = {
-    id: generateHotspotId("hs"),
-    lon: quickMenu.lon,
-    lat: quickMenu.lat,
-    label: isNav ? "Lối đi " + (hs.length + 1) : "Hotspot " + (hs.length + 1),
-    target: "",
-    type: isNav ? "nav" : "poi",
-    ...(isNav ? { navStyle: NAV_STYLES.default } : {}),
-    icon: isNav ? DEFAULT_NAV_ICON : null,
-    loai_poi: loai_poi || null,
-    locked: false,
-    khi_dua_chuot_vao: defaultHoverState(),
-    entryView: null,
-  };
-  const nd = defaultNoiDung(loai_poi);
-  if (nd) newHs.noi_dung = nd;
-  if (loai_poi === "ghim_dia_danh") { startDrawingInfoArea(quickMenu.lon, quickMenu.lat); return; }
+  if (loai_poi === "ghim_dia_danh") { startDrawingInfoArea(quickMenu.lon, quickMenu.lat, 'area_landmark'); return; }
+  if (loai_poi === 'area') { startDrawingInfoArea(quickMenu.lon, quickMenu.lat, 'area'); return; }
+  const kindByLegacy = { chuyen_canh: 'nav', thong_tin_van_ban: 'info', thu_vien_anh: 'gallery', phat_video: 'video', audio: 'audio' };
+  const newHs = createPoint(kindByLegacy[loai_poi] || 'generic', {
+    id: generateHotspotId("hs"), lon: quickMenu.lon, lat: quickMenu.lat, index: hs.length,
+  });
+  newHs.khi_dua_chuot_vao = defaultHoverState();
   hs.push(newHs);
+  debugPoint('Created type', newHs);
   selectedHotspotIndex.value = hs.length - 1;
   closeQuickMenu();
   syncHotspotsToEngine();
   showToast(
     "success",
-    isNav
+    newHs.type === 'nav'
       ? "✅ Đã đặt điểm chỉ đường — chọn scene đích bên phải"
       : "✅ Đã tạo điểm POI",
   );
@@ -668,6 +680,7 @@ function selectHotspot(i) {
     uiState.rightView = "point-list";
   } else {
     selectedHotspotIndex.value = i;
+    debugPoint('Selected type', activeScene.value?.hotspots[i]);
   }
   syncHotspotsToEngine();
   requestAreaOverlayUpdate();
@@ -727,13 +740,13 @@ function duplicateHotspot(i) {
   if (i < 0 || i >= hs.length) return;
   const src = hs[i];
   const clone = {
-    ...JSON.parse(JSON.stringify(src)),
+    ...clonePointValue(src),
     id: generateHotspotId("hs"),
-    lon: src.lon + 2,
-    lat: src.lat + 1,
+    ...(['area_landmark', 'area'].includes(resolvePointKind(src)) ? {} : { lon: Number(src.lon) + 2, lat: Number(src.lat) + 1 }),
     label: (src.label || "Hotspot") + " (copy)",
   };
   hs.splice(i + 1, 0, clone);
+  debugPoint('Duplicated type', clone);
   selectedHotspotIndex.value = i + 1;
   syncHotspotsToEngine();
   showToast("info", "✅ Đã nhân bản hotspot");
@@ -756,20 +769,22 @@ function updateHotspot(key, value) {
   hs[key] = value;
   if (key === "type" && value === "nav" && !hs.icon) hs.icon = DEFAULT_NAV_ICON;
   if (key === "loai_poi") {
-    hs.type =
-      value === "chuyen_canh"
-        ? "nav"
-        : value === "ghim_dia_danh" && hs.type === "area_landmark"
-          ? "area_landmark"
-        : (value === "thong_tin_van_ban" && Array.isArray(hs.area_points))
-          ? "info_area"
-          : "poi";
+    const typeByLegacy = {
+      chuyen_canh: 'nav',
+      thong_tin_van_ban: 'info',
+      thu_vien_anh: 'gallery',
+      phat_video: 'video',
+      audio: 'audio',
+      ghim_dia_danh: hs.type === 'area_landmark' ? 'area_landmark' : 'pin',
+    };
+    hs.type = value ? (typeByLegacy[value] || 'generic') : 'generic';
     if (hs.type === "nav" && !hs.icon) hs.icon = DEFAULT_NAV_ICON;
     const nd = defaultNoiDung(value);
     hs.noi_dung = nd || null;
-    if (value === "ghim_dia_danh" && hs.type !== "area_landmark" && !hs.chieu_cao_duong_ghim)
+  if (value === "ghim_dia_danh" && hs.type !== "area_landmark" && !hs.chieu_cao_duong_ghim)
       hs.chieu_cao_duong_ghim = 54;
   }
+  debugPoint('Updated type', hs);
   syncHotspotsToEngine();
   requestAreaOverlayUpdate();
 }
@@ -942,6 +957,43 @@ function handleHotspotVideoFile(file) {
   if (!hs.noi_dung) hs.noi_dung = defaultNoiDung("phat_video");
   hs.noi_dung.url_video = localUrl;
   showToast("info", "Video sẽ được upload khi Save Tour.");
+}
+
+function handleAreaMediaFile(file) {
+  if (activeSceneIndex.value < 0 || selectedHotspotIndex.value < 0 || !file) return;
+  const hotspot = scenes[activeSceneIndex.value].hotspots[selectedHotspotIndex.value];
+  if (resolvePointKind(hotspot) !== 'area') return;
+  const mediaType = hotspot.areaMedia?.type || 'image';
+  const accepted = mediaType === 'video' ? file.type?.startsWith('video/') : file.type?.startsWith('image/');
+  if (!accepted) {
+    showToast('error', mediaType === 'video' ? 'Vui lòng chọn file video.' : 'Vui lòng chọn file ảnh.');
+    return;
+  }
+  if (hotspot._areaMediaPreview?.startsWith('blob:')) URL.revokeObjectURL(hotspot._areaMediaPreview);
+  hotspot._areaMediaFile = file;
+  hotspot._areaMediaPreview = URL.createObjectURL(file);
+  hotspot.areaMedia = {
+    ...(hotspot.areaMedia || {}),
+    type: mediaType,
+    src: hotspot._areaMediaPreview,
+    fileName: file.name,
+    fileSize: file.size,
+    duration: null,
+    preview: hotspot._areaMediaPreview,
+  };
+  if (mediaType === 'video') {
+    const video = document.createElement('video');
+    video.preload = 'metadata';
+    video.onloadedmetadata = () => {
+      hotspot.areaMedia = { ...hotspot.areaMedia, duration: Number(video.duration) || null };
+      video.remove();
+      syncHotspotsToEngine();
+    };
+    video.src = hotspot._areaMediaPreview;
+  }
+  areaMediaDebug('Upload selected', hotspot, { name: file.name, size: file.size });
+  syncHotspotsToEngine();
+  showToast('info', 'Media Area sẽ được upload khi Save Tour.');
 }
 
 // Navigate right panel
@@ -1747,7 +1799,18 @@ function cloneForExport() {
       ? { ...s.am_thanh_thuyet_minh }
       : null,
     transition: s.transition ? { ...s.transition } : null,
-    hotspots: s.hotspots.map((h) => ({ ...h })),
+    // Keep upload File handles, but deep-copy every persisted POI field so
+    // save/export work cannot mutate the selected editor's reactive object.
+    hotspots: s.hotspots.map((h) => ({
+      ...h,
+      noi_dung: h.noi_dung ? clonePointValue(h.noi_dung) : h.noi_dung,
+      audio: h.audio ? clonePointValue(h.audio) : h.audio,
+      areaMedia: h.areaMedia ? clonePointValue(h.areaMedia) : h.areaMedia,
+      khi_dua_chuot_vao: h.khi_dua_chuot_vao ? clonePointValue(h.khi_dua_chuot_vao) : h.khi_dua_chuot_vao,
+      vertices: Array.isArray(h.vertices) ? clonePointValue(h.vertices) : h.vertices,
+      polygon: Array.isArray(h.polygon) ? clonePointValue(h.polygon) : h.polygon,
+      area_points: Array.isArray(h.area_points) ? clonePointValue(h.area_points) : h.area_points,
+    })),
   }));
 }
 function buildJson(c) {
@@ -1788,6 +1851,7 @@ function buildJson(c) {
 
 function cleanHotspotForSave(hotspot) {
   ensureHotspotId(hotspot);
+  debugPoint('Saved type', hotspot);
   const copy = JSON.parse(
     JSON.stringify(hotspot, (key, value) => {
       if (
@@ -1798,6 +1862,8 @@ function cleanHotspotForSave(hotspot) {
         key === "_videoFile" ||
         key === "_videoPreview" ||
         key === "_videoName" ||
+        key === "_areaMediaFile" ||
+        key === "_areaMediaPreview" ||
         key === "_audioFile" ||
         key === "_audioLocalUrl" ||
         key === "_audioFileName" ||
@@ -1821,7 +1887,7 @@ function cleanHotspotForSave(hotspot) {
     delete copy.audio;
   }
   delete copy.audio_url;
-  if (copy.type === "area_landmark" || copy.pointKind === "area_landmark") {
+  if (resolvePointKind(copy) === "area_landmark" || resolvePointKind(copy) === "area") {
     const vertices = Array.isArray(copy.vertices)
       ? copy.vertices
       : Array.isArray(copy.polygon)
@@ -1837,6 +1903,22 @@ function cleanHotspotForSave(hotspot) {
     delete copy.lon;
     delete copy.lat;
   }
+  if (resolvePointKind(copy) === "area") {
+    delete copy.target;
+    delete copy.entryView;
+    delete copy.khi_dua_chuot_vao;
+    delete copy.overlay_image;
+    delete copy.overlay_video;
+    delete copy.style;
+    const media = { ...(copy.areaMedia || {}) };
+    delete media.preview;
+    copy.type = 'area-media';
+    copy.mediaType = media.type || 'image';
+    copy.media = media;
+    copy.areaMedia = media;
+    if (import.meta.env?.DEV) console.debug('[AreaMedia] Export', copy.id, copy.mediaType, copy.media?.src || '');
+  }
+  debugPoint('Export type', copy);
   return copy;
 }
 
@@ -1913,6 +1995,15 @@ async function uploadHotspotInfoImages(c) {
           mode: "video",
         });
       }
+      if (hotspot?._areaMediaFile) {
+        ensureHotspotId(hotspot);
+        pending.push({
+          hotspot,
+          file: hotspot._areaMediaFile,
+          mode: hotspot.areaMedia?.type === 'video' ? 'area-video' : 'area-image',
+        });
+        areaMediaDebug('Upload queued', hotspot);
+      }
     });
   });
   if (!pending.length) return { ok: true, up: 0, fail: 0 };
@@ -1927,7 +2018,7 @@ async function uploadHotspotInfoImages(c) {
     try {
       if (!hotspot.noi_dung) hotspot.noi_dung = {};
 
-      if (item.mode === "video") {
+      if (item.mode === "video" || item.mode === 'area-video') {
         const response = await uploadHotspotInfoVideo(
           backendContext.locationId,
           backendContext.versionId,
@@ -1935,13 +2026,21 @@ async function uploadHotspotInfoImages(c) {
         );
         const videoUrl = response?.data?.video_url || response?.data?.url || "";
         if (!videoUrl) throw new Error("No video_url returned");
-        hotspot.noi_dung.url_video = apiUrl(videoUrl);
-        if (hotspot._videoPreview?.startsWith("blob:")) {
-          URL.revokeObjectURL(hotspot._videoPreview);
+        if (item.mode === 'area-video') {
+          hotspot.areaMedia = { ...(hotspot.areaMedia || {}), type: 'video', src: apiUrl(videoUrl), preview: apiUrl(videoUrl) };
+          areaMediaDebug('Upload complete', hotspot);
+          if (hotspot._areaMediaPreview?.startsWith("blob:")) URL.revokeObjectURL(hotspot._areaMediaPreview);
+          delete hotspot._areaMediaFile;
+          delete hotspot._areaMediaPreview;
+        } else {
+          hotspot.noi_dung.url_video = apiUrl(videoUrl);
+          if (hotspot._videoPreview?.startsWith("blob:")) {
+            URL.revokeObjectURL(hotspot._videoPreview);
+          }
+          delete hotspot._videoFile;
+          delete hotspot._videoPreview;
+          delete hotspot._videoName;
         }
-        delete hotspot._videoFile;
-        delete hotspot._videoPreview;
-        delete hotspot._videoName;
       } else {
         const response = await uploadHotspotInfoImage(
           backendContext.locationId,
@@ -1962,6 +2061,12 @@ async function uploadHotspotInfoImages(c) {
         if (item.localUrl?.startsWith("blob:")) {
           URL.revokeObjectURL(item.localUrl);
         }
+        } else if (item.mode === 'area-image') {
+        hotspot.areaMedia = { ...(hotspot.areaMedia || {}), type: 'image', src: uploadedUrl, preview: uploadedUrl };
+        areaMediaDebug('Upload complete', hotspot);
+        if (hotspot._areaMediaPreview?.startsWith("blob:")) URL.revokeObjectURL(hotspot._areaMediaPreview);
+        delete hotspot._areaMediaFile;
+        delete hotspot._areaMediaPreview;
         } else {
         hotspot.noi_dung.anh_minh_hoa = uploadedUrl;
         if (hotspot._infoImagePreview?.startsWith("blob:")) {
@@ -2021,17 +2126,29 @@ function syncBack(c) {
       if (hotspot.noi_dung) target.noi_dung = { ...hotspot.noi_dung };
       if (hotspot.id) target.id = hotspot.id;
       if (hotspot.audio) target.audio = { ...hotspot.audio };
+      if (hotspot.areaMedia) target.areaMedia = { ...hotspot.areaMedia };
       if (hotspot.type === 'audio' && hotspot.audio) audioDebug('Reload Builder Audio POI', hotspot.id, hotspot.audio.url || '');
+      if (resolvePointKind(hotspot) === 'area') areaMediaDebug('Save synchronized', target);
       delete target.audio_url;
       delete target._galleryImageFiles;
       delete target._videoFile;
       delete target._videoPreview;
       delete target._videoName;
+      delete target._areaMediaFile;
+      delete target._areaMediaPreview;
     });
   });
 }
 function hasPendingUploads(c) {
   return c.some((x) => x._file && !x.exportUrl);
+}
+function pendingHotspotMediaUploads(c) {
+  return c.flatMap((scene) => (scene.hotspots || []).filter((hotspot) =>
+    hotspot?._infoImageFile ||
+    hotspot?._videoFile ||
+    hotspot?._areaMediaFile ||
+    (Array.isArray(hotspot?._galleryImageFiles) && hotspot._galleryImageFiles.some((item) => item?.file)),
+  ));
 }
 async function exportJSON() {
   try {
@@ -2064,15 +2181,16 @@ async function exportJSON() {
     }
     const c = cloneForExport();
     const pending = c.filter((x) => x._file && !x.exportUrl);
-    if (pending.length && !api.connected) {
+    const pendingHotspotMedia = pendingHotspotMediaUploads(c);
+    if ((pending.length || pendingHotspotMedia.length) && !api.connected) {
       showToast(
         "error",
-        `⚠ Còn ${pending.length} ảnh chưa upload. Hãy kết nối API rồi export lại (không xuất blob).`,
+        `⚠ Còn ${pending.length + pendingHotspotMedia.length} media chưa upload. Hãy kết nối API rồi export lại (không xuất blob).`,
       );
       openApiSettings();
       return;
     }
-    if (!pending.length) {
+    if (!pending.length && !pendingHotspotMedia.length) {
       const json = buildJson(c);
       if (JSON.stringify(json).includes("blob:")) {
         showToast(
@@ -2088,17 +2206,30 @@ async function exportJSON() {
     }
     exportJsonText.value = "⏳ Đang tải lên...";
     modals.export = true;
-    const r = await uploadClone(c, (i, t, n) => {
+    const sceneUpload = await uploadClone(c, (i, t, n) => {
       exportJsonText.value = `⏳ ${i}/${t}: ${n}`;
     });
-    syncBack(c);
-    if (hasPendingUploads(c)) {
-      exportJsonText.value = `❌ Upload thất bại ${r.fail} ảnh — chưa thể export vì còn ảnh dạng blob. Vui lòng thử export lại.`;
-      showToast("error", `❌ ${r.fail} ảnh upload thất bại, chưa export`);
+    if (!sceneUpload.ok) {
+      exportJsonText.value = `❌ Upload thất bại ${sceneUpload.fail} ảnh panorama — chưa thể export.`;
+      showToast("error", `❌ ${sceneUpload.fail} ảnh upload thất bại, chưa export`);
       return;
     }
-    exportJsonText.value = JSON.stringify(buildJson(c), null, 2);
-    if (r.up) showToast("success", `☁️ ${r.up} ảnh uploaded`);
+    const hotspotUpload = await uploadHotspotInfoImages(c);
+    if (!hotspotUpload.ok) {
+      exportJsonText.value = "❌ Upload media POI thất bại — chưa thể export vì không được xuất URL blob.";
+      showToast("error", "❌ Upload media POI thất bại, chưa export");
+      return;
+    }
+    syncBack(c);
+    const json = buildJson(c);
+    if (hasPendingUploads(c) || pendingHotspotMediaUploads(c).length || JSON.stringify(json).includes("blob:")) {
+      exportJsonText.value = "❌ Vẫn còn media cục bộ chưa được host — chưa thể export JSON.";
+      showToast("error", "❌ Còn media dạng blob, chưa thể export");
+      return;
+    }
+    exportJsonText.value = JSON.stringify(json, null, 2);
+    const uploaded = sceneUpload.up + hotspotUpload.up;
+    if (uploaded) showToast("success", `☁️ Đã upload ${uploaded} media`);
   } catch (e) {
     exportJsonText.value = "❌ " + e.message;
     modals.export = true;
@@ -2128,6 +2259,7 @@ function doImportJSON() {
     const sc = d.scenes || d;
     if (!Array.isArray(sc)) throw new Error("Invalid");
     const mapped = sc.map((s) => normalizeScene(s, { generateId }));
+    mapped.flatMap((scene) => scene.hotspots).forEach((hotspot) => debugPoint('Imported/Normalize type', hotspot));
     resetTourAudio(d.audio);
     scenes.splice(0, scenes.length, ...mapped);
     activeSceneIndex.value = -1;
@@ -2199,6 +2331,18 @@ onMounted(() => {
       if (!vertices[vertexIndex]) return;
       vertices[vertexIndex] = point;
       annotation.vertices = vertices;
+      syncHotspotsToEngine();
+    },
+    onAreaMediaSelect: (area) => {
+      const index = scenes[activeSceneIndex.value]?.hotspots.findIndex((hotspot) => String(hotspot.id) === String(area.id)) ?? -1;
+      if (index >= 0) selectHotspot(index);
+    },
+    onAreaMediaVertexDragEnd: (area, vertexIndex, point) => {
+      const vertices = Array.isArray(area.vertices) ? area.vertices : [];
+      if (!vertices[vertexIndex]) return;
+      vertices[vertexIndex] = point;
+      area.vertices = vertices;
+      areaMediaDebug('Vertex updated', area, { vertexIndex });
       syncHotspotsToEngine();
     },
     resolveNavTarget: (targetId) =>
@@ -2967,6 +3111,7 @@ onBeforeUnmount(() => {
               @select-info-image="handleHotspotInfoImageFile"
               @select-gallery-images="handleGalleryImageFiles"
               @select-video="handleHotspotVideoFile"
+              @select-area-media="handleAreaMediaFile"
               @pick-audio="pickHotspotAudio"
               @clear-audio="clearHotspotAudio"
               @select-audio="pickHotspotAudio"
@@ -3095,7 +3240,7 @@ onBeforeUnmount(() => {
             </button>
             <button
               class="vb-hs-type-option vb-hs-type-info"
-              @click="startDrawingInfoAreaFromModal"
+              @click="confirmHotspotType('thong_tin_van_ban')"
             >
               <div class="vb-hs-type-option-icon">
                 <svg
@@ -3112,7 +3257,7 @@ onBeforeUnmount(() => {
                 </svg>
               </div>
               <div class="vb-hs-type-option-label">Thông tin</div>
-              <div class="vb-hs-type-option-desc">Vẽ vùng, thêm văn bản và ảnh</div>
+              <div class="vb-hs-type-option-desc">Thông tin, văn bản và ảnh</div>
             </button>
             <button
               class="vb-hs-type-option vb-hs-type-gallery"
@@ -3185,6 +3330,11 @@ onBeforeUnmount(() => {
               </div>
               <div class="vb-hs-type-option-label">Địa danh</div>
               <div class="vb-hs-type-option-desc">Vẽ khu vực, nhãn và đường dẫn</div>
+            </button>
+            <button class="vb-hs-type-option vb-hs-type-info" @click="startDrawingImageAreaFromModal">
+              <div class="vb-hs-type-option-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="24" height="24"><path d="M3 3h18v18H3z"/><path d="m5 16 4-4 3 3 3-4 4 5"/></svg></div>
+              <div class="vb-hs-type-option-label">Area Overlay</div>
+              <div class="vb-hs-type-option-desc">Vẽ vùng và gắn ảnh phủ</div>
             </button>
             <button
               class="vb-hs-type-option vb-hs-type-generic"

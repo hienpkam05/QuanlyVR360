@@ -27,6 +27,10 @@ import {
   runtimeHotspotForViewer,
 } from "../common/mapper/normalizeTour.js";
 import { youtubeEmbedUrl } from "../common/utils/media.js";
+import { dispatchPointInteraction } from '../common/registry/pointPluginRegistry.js';
+import InfoPoiPopup from '../components/popups/InfoPoiPopup.vue';
+import ImageViewerPopup from '../components/popups/ImageViewerPopup.vue';
+import VideoPoiPopup from '../components/popups/VideoPoiPopup.vue';
 import "../assets/viewer.css";
 
 const props = defineProps({
@@ -57,7 +61,7 @@ const activeSceneId = ref("");
 const activeBottomPanel = ref('scenes');
 const visitedSceneIds = ref(new Set());
 const isSceneStripDragging = ref(false);
-const selectedInfoHotspot = ref(null);
+const activePointPopup = ref(null);
 const isTransitioning = ref(false);
 const errorMessage = ref("");
 const viewState = ref({ lon: 0, lat: 0, fov: 75 });
@@ -219,7 +223,7 @@ async function applyTour(payload) {
     introState.value = { overlayOpacity: intro.config.overlayOpacity };
   }
   visitedSceneIds.value = new Set();
-  selectedInfoHotspot.value = null;
+  activePointPopup.value = null;
   await nextTick();
   preloadTourAudio();
   await playTourAudio();
@@ -241,7 +245,7 @@ async function goToScene(sceneId, options = {}) {
   const generation = ++navigationGeneration;
   const previousSceneId = activeSceneId.value;
   isTransitioning.value = true;
-  selectedInfoHotspot.value = null;
+  activePointPopup.value = null;
   if (activeBottomPanel.value === 'view') activeBottomPanel.value = null;
   try {
     emit("load-progress", { phase: "scene", sceneId: target.id });
@@ -292,25 +296,18 @@ function previousScene() {
 
 function onHotspotClick(hotspot, event) {
   if (!viewerUIReady.value) return;
-  if (import.meta.env?.DEV) console.debug('[Audio Viewer] Audio Hotspot Click', hotspot.id || 'unknown', hotspot.type);
   emit("hotspot-click", { hotspot, event });
-  if (hotspot.type === 'audio') {
-    if (import.meta.env?.DEV) console.debug('[Audio Viewer] Dispatch Controller', hotspot.id || 'unknown');
-    poiAudioController.play(hotspot);
-    if (activeBottomPanel.value === 'audio') activeBottomPanel.value = null;
-  }
-  if (["info", "gallery", "video", "info_area"].includes(hotspot.type)) {
-    selectedInfoHotspot.value = hotspot;
-    return;
-  }
-  if (
-    (hotspot.type === "nav" || hotspot.type === "area_landmark") &&
-    hotspot.target_scene_id
-  )
-    goToScene(hotspot.target_scene_id, {
-      targetView: hotspot.target_view,
-      source: "hotspot",
-    });
+  dispatchPointInteraction(hotspot, {
+    playAudio: (point) => {
+      poiAudioController.play(point);
+      if (activeBottomPanel.value === 'audio') activeBottomPanel.value = null;
+    },
+    navigate: (point) => {
+      if (!point.target_scene_id) return;
+      goToScene(point.target_scene_id, { targetView: point.target_view, source: 'hotspot' });
+    },
+    openPopup: (kind, point) => { activePointPopup.value = { kind, point }; },
+  });
 }
 
 function completeOnboarding() {
@@ -674,59 +671,9 @@ defineExpose({
             </button>
           </section>
         </div>
-        <div
-          v-if="viewerUIReady && selectedInfoHotspot"
-          class="viewer-info-modal-backdrop"
-          @click.self="selectedInfoHotspot = null"
-        >
-          <article class="viewer-info-modal">
-            <button
-              class="viewer-info-close"
-              type="button"
-              @click="selectedInfoHotspot = null"
-            >
-              ×
-            </button>
-            <div
-              v-if="youtubeEmbedUrl(selectedInfoHotspot.info?.youtube_url)"
-              class="viewer-info-media"
-            >
-              <iframe
-                :src="youtubeEmbedUrl(selectedInfoHotspot.info.youtube_url)"
-                title="YouTube video"
-                allow="
-                  accelerometer;
-                  autoplay;
-                  clipboard-write;
-                  encrypted-media;
-                  gyroscope;
-                  picture-in-picture;
-                  web-share;
-                "
-                allowfullscreen
-              ></iframe>
-            </div>
-            <video
-              v-else-if="selectedInfoHotspot.info?.video_url"
-              class="viewer-info-video"
-              :src="selectedInfoHotspot.info.video_url"
-              controls
-              playsinline
-            ></video
-            ><span
-              v-else-if="selectedInfoHotspot.info?.image_url"
-              class="viewer-info-image"
-              :style="{
-                backgroundImage: `url(${selectedInfoHotspot.info.image_url})`,
-              }"
-            ></span
-            ><small>INFO HOTSPOT</small>
-            <h2>
-              {{ selectedInfoHotspot.info?.title || selectedInfoHotspot.label }}
-            </h2>
-            <p>{{ selectedInfoHotspot.info?.description }}</p>
-          </article>
-        </div>
+        <InfoPoiPopup v-if="viewerUIReady && activePointPopup?.kind === 'info'" :point="activePointPopup.point" @close="activePointPopup = null" />
+        <ImageViewerPopup v-if="viewerUIReady && activePointPopup?.kind === 'image'" :point="activePointPopup.point" @close="activePointPopup = null" />
+        <VideoPoiPopup v-if="viewerUIReady && activePointPopup?.kind === 'video'" :point="activePointPopup.point" @close="activePointPopup = null" />
       </div>
       <div class="viewer-notification-layer" aria-live="polite">
         <p v-if="errorMessage" class="viewer-error">{{ errorMessage }}</p>

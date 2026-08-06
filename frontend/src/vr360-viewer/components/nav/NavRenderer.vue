@@ -20,7 +20,7 @@ const renderer = computed(() => navRendererMap[normalizeNavStyle(props.hotspot.n
 <template>
   <component
     :is="renderer"
-    :thumbnail="hotspot.preview_image"
+    :thumbnail="hotspot.target_scene_thumbnail"
     :scene-name="hotspot.target_scene_name"
   />
 </template>
