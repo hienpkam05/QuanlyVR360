@@ -1,544 +1,355 @@
-Bạn đang làm việc trực tiếp trong project:
+There are still several UI regressions after the recent Audio UI refactor.
 
-D:\Metatwin\QuanlyVR360\frontend
+Do NOT patch them with random CSS.
 
-Module Runtime Viewer mục tiêu:
-
-D:\Metatwin\QuanlyVR360\frontend\src\vr360-viewer
-
-Cấu trúc BẮT BUỘC phải giữ đúng:
-
-src/vr360-viewer/
-├── assets/
-├── common/
-├── components/
-├── layout/
-├── pages/
-├── services/
-└── router.js
-
-KHÔNG tự ý thêm thư mục cấp root khác.
-Có thể tạo subfolder bên trong các thư mục trên nếu cần để tổ chức code.
-
-Đây là MIGRATION THỰC TẾ. Hãy trực tiếp chuyển Runtime Viewer hiện tại vào module mới.
+Audit the Viewer UI, Audio Panel and all hotspot renderers before modifying anything.
 
 ==================================================
-MỤC TIÊU
+1. FIX AUDIO PROGRESS BAR
 ==================================================
 
-Đóng gói toàn bộ Runtime Viewer VR360 thành module riêng, tái sử dụng được và tách biệt với VR360 Builder.
+The current progress bar looks incorrect.
 
-Production Viewer lấy dữ liệu từ API.
+Problems:
 
-Local JSON chỉ dùng cho Demo/Test/Fixture, không phải production source.
+- The played section is oversized.
+- The thumb is misaligned.
+- The track height is too large.
+- The control looks like a browser range input.
+- Timeline proportions are visually wrong.
 
-Không migrate VR360 Builder.
+Redesign the timeline.
 
-Không làm thay đổi behavior hiện tại của Builder.
+Requirements:
 
-==================================================
-NGUYÊN TẮC
-==================================================
+- thin modern track
+- centered thumb
+- smooth fill animation
+- rounded track
+- played color uses project accent
+- remaining track uses neutral gray
+- thumb size around 14~16px
+- track height around 4~6px
+- perfect vertical alignment
 
-- Không rewrite Viewer từ đầu nếu có thể tái sử dụng code hiện tại.
-- Không copy nguyên Viewer thành một phiên bản khác rồi phát triển song song.
-- Không tạo duplicate mapper/normalizer/renderer/constants/service.
-- Không đổi backend API.
-- Không đổi JSON schema.
-- Không nâng cấp dependency.
-- Không xóa Viewer cũ trước khi Viewer mới hoạt động ổn định.
-- Giữ Viewer cũ làm fallback để rollback.
-- Ưu tiên migrate từng phần và kiểm tra sau từng bước.
-- Không thay đổi behavior chỉ để "làm sạch code" nếu không cần thiết.
-
-==================================================
-NGUỒN RUNTIME HIỆN TẠI
-==================================================
-
-Đọc và migrate từ source thực tế:
-
-- src/views/TourViewerView.vue
-- src/views/PublicViewerView.vue
-- src/components/PanoramaViewer.vue
-- src/components/nav/NavRenderer.vue
-- src/components/nav/NavDefault.vue
-- src/components/nav/NavPreviewExpand.vue
-
-Đọc toàn bộ dependency trực tiếp và gián tiếp:
-
-- API modules
-- Auth/token
-- Router
-- Mapper/Normalizer
-- Asset URL resolver
-- Audio
-- Media
-- Runtime CSS
-- Scene/Hotspot logic
-
-Không dựa vào tên file giả định. Code thực tế là nguồn sự thật.
+The thumb must stay centered on the track.
 
 ==================================================
-TARGET STRUCTURE
+2. FIX VOLUME SLIDER
 ==================================================
 
-### assets/
+Current volume slider is mathematically wrong.
 
-Asset thuộc Runtime Viewer:
-- icon
-- hình mặc định
-- asset Viewer dùng chung
+There is empty spacing before 0%.
 
-Không hard-code asset path từ app cha nếu có thể đưa vào module.
+There is empty spacing after 100%.
 
-### common/
+Because of that:
 
-Logic nội bộ Runtime Viewer.
+volume = 0
 
-Có thể chia subfolder:
+still shows yellow.
 
-- engine
-- model
-- mapper
-- renderer
-- controllers
-- constants
-- utils
+volume = 1
 
-Bao gồm:
-- Runtime Model
-- API response adapter/normalizer
-- Runtime engine/controller
-- Scene navigation
-- Transition
-- Audio controller
-- Asset/media utilities
-- Constants
-- Renderer logic
+never reaches the end.
 
-Không để UI vào đây.
+Requirements:
 
-Không đưa Builder-only code vào đây.
+The fill must start exactly at the left edge.
 
-### components/
+The fill must end exactly at the right edge.
 
-UI component tái sử dụng:
+No visual padding.
 
-- Panorama
-- Hotspot/POI
-- NAV
-- Controls
-- Media
-- Scene Gallery
-- Loading
-- Transition
-- Overlay
+No fake margins.
 
-Giữ riêng:
+Audit:
 
-- NavDefault
-- NavPreviewExpand
+VolumeSlider component
 
-Không dùng Builder HotspotRenderer làm Runtime renderer.
+CSS
 
-### layout/
+pseudo elements
 
-Layout tổng thể Runtime Viewer.
+range styles
 
-Tách layout/UI khỏi API loading, router và auth.
+browser appearance
 
-### pages/
-
-Tạo:
-
-- ViewerProductionPage.vue
-- ViewerDemoPage.vue
-
-Production Page:
-- Dùng API thật.
-
-Demo Page:
-- Có thể dùng local JSON/fixture.
-
-Không copy logic normalize riêng cho Demo.
-
-### services/
-
-Chỉ xử lý external API/I/O.
-
-Ví dụ:
-- Tour
-- Scene
-- Media
-- Public Tour
-- Version Tour
-
-Ưu tiên tái sử dụng API implementation hiện tại thông qua adapter/factory.
-
-Không duplicate:
-- endpoint
-- request logic
-- authentication logic
-- response parsing
-
-Nếu API module hiện tại chứa cả Builder mutation và Viewer read logic, chỉ adapter phần read cần thiết cho Runtime Viewer.
-
-Services không xử lý:
-- UI
-- Three.js
-- Renderer
-- Runtime Model
-- Hotspot behavior
-
-Không hard-code:
-- Pinia store
-- Axios instance của app
-- API base URL
-
-### router.js
-
-Chỉ là integration layer.
-
-Viewer Core không phụ thuộc trực tiếp vào vue-router.
-
-Host router vẫn quản lý:
-- route ownership
-- auth guard
-- permission
-- redirect
-
-Trước khi migrate route, đọc `src/router/index.js` và xác định route production thực tế.
-
-Chỉ chuyển MỘT route production đầu tiên.
-
-Giữ nguyên:
-- URL path
-- route params
-- query
-- auth behavior
-- guard
-
-Không chuyển tất cả route cùng lúc.
+Remove every unnecessary padding.
 
 ==================================================
-DATA FLOW
+3. DO NOT BREAK PHOTO SPHERE VIEWER HOTSPOTS
 ==================================================
 
-Production:
+A recent CSS change has modified hotspot behaviour.
 
-API
-→ Service/Adapter
-→ Raw API Payload
-→ Runtime Normalizer
-→ Runtime Model
-→ Viewer
+Current problems:
 
-Tạo MỘT nguồn normalize dùng chung.
+Navigation hotspot animation is much faster than before.
 
-Không để:
-- TourViewerView có normalizer riêng
-- PublicViewerView có normalizer riêng
-- Demo có mapper riêng
+Pointer cursor rapidly alternates between:
 
-Normalizer:
-- Không mutate raw API data.
-- Hỗ trợ API response variants hiện tại.
-- Chuẩn hóa ID.
-- Chuẩn hóa URL asset.
-- Chuẩn hóa Scene/View/Hotspot.
-- Chuẩn hóa NAV style.
-- Chuẩn hóa POI type.
-- Giữ backward compatibility.
-- Không làm mất field chưa sử dụng.
+pointer
 
-Không đổi backend API hoặc JSON schema.
+default
 
-==================================================
-RUNTIME MODEL
-==================================================
+pointer
 
-Thiết kế model nội bộ dùng chung:
+default
 
-RuntimeTour
-- id
-- title
-- scenes
-- initialSceneId
-- narration
-- backgroundMusic
-- metadata
-- raw
+while hovering.
 
-RuntimeScene
-- id
-- name
-- group
-- imageSources
-- thumbnailSource
-- initialView
-- hotspots
-- transition
-- metadata
-- raw
+Hover transition no longer matches Photo Sphere Viewer.
 
-RuntimeHotspot
-- id
-- type
-- position
-- targetSceneId
-- targetView
-- navStyle
-- label
-- content
-- media
-- audio
-- style
-- metadata
-- raw
+Some hotspot animations appear jittery.
 
-Chỉ mapping field có cơ sở từ API thực tế.
+Audit all CSS affecting:
+
+.psv-marker
+
+.psv-marker *
+
+.hotspot
+
+.poi
+
+.nav
+
+button
+
+svg
+
+transform
+
+transition
+
+animation
+
+cursor
+
+pointer-events
+
+Find the exact rule causing this regression.
 
 ==================================================
-VIEWER / HOST BOUNDARY
+4. DO NOT APPLY GLOBAL TRANSITIONS
 ==================================================
 
-Viewer Core KHÔNG import trực tiếp:
+Search the project for rules such as:
 
-- Pinia auth store
-- vue-router
-- API modules của app cha
-- API_BASE_URL global
-- composable riêng của site
+* {
+transition: ...
+}
 
-Host App chịu trách nhiệm:
+button {
+transition: ...
+}
 
-- Auth
-- Token
-- Router
-- API client
-- Permission
-- Analytics
-- Project/Location/Version selection
+svg {
+transition: ...
+}
 
-Viewer nhận data/dependency qua:
-- props
-- options
-- factory
-- injection
-- adapter
+div {
+transition: ...
+}
 
-==================================================
-PUBLIC VIEWER API
-==================================================
+img {
+transition: ...
+}
 
-Thiết kế Viewer theo hướng:
+transform:
+transition: all
 
-<Vr360Viewer
-  :tour="tourData"
-  :options="viewerOptions"
-/>
+These rules are probably affecting PSV DOM.
 
-Hoặc loader interface nếu thực sự cần:
+Replace them with scoped classes only.
 
-<Vr360Viewer
-  :load-tour="loadTour"
-/>
-
-Events:
-
-- ready
-- scene-change
-- hotspot-click
-- load-progress
-- load-complete
-- error
-
-Exposed methods:
-
-- goToScene
-- nextScene
-- previousScene
-- getView
-- setView
-- resetView
-- toggleAutorotate
-- enterFullscreen
-- exitFullscreen
-- dispose
-
-Không expose trực tiếp Three.js internals.
+Never animate every element globally.
 
 ==================================================
-NAV / POI
+5. POINTER CURSOR MUST BE STABLE
 ==================================================
 
-Giữ nguyên behavior Runtime:
+While hovering hotspots:
 
-- NAV default
-- NAV Preview Expand
-- POI/Hotspot
-- Target Scene
-- EntryView
-- Hover
-- Click
-- Transition
+cursor must become pointer
 
-Không migrate Builder renderer.
+and remain pointer.
 
-Thiết kế mở rộng để thêm NAV style/POI type sau này mà không sửa toàn bộ Viewer.
+It must NEVER oscillate.
 
-==================================================
-MIGRATION ORDER
-==================================================
+Audit:
 
-1. Kiểm tra target structure.
-2. Migrate common Runtime logic.
-3. Tạo Runtime normalizer dùng chung.
-4. Migrate Panorama/NAV/POI/components.
-5. Migrate layout.
-6. Tách API services/adapters.
-7. Tạo ViewerProductionPage.
-8. Tạo ViewerDemoPage.
-9. Tạo router.js integration.
-10. Tích hợp Viewer mới với host app.
-11. Xác định route production thực tế từ host router.
-12. Chuyển MỘT route production sang Viewer mới.
-13. Regression test.
-14. Chỉ chuyển route tiếp theo khi route trước pass đầy đủ.
-15. Sau khi tất cả route ổn định mới loại bỏ legacy Viewer không còn sử dụng.
+mouseenter
 
-Không tạo nhiều implementation Viewer production song song lâu dài.
+mouseleave
+
+pointer-events
+
+z-index
+
+overlay elements
+
+hover overlays
+
+Pseudo elements must not steal pointer events.
+
+Decorative layers should use:
+
+pointer-events: none
 
 ==================================================
-KHÔNG ĐƯỢC LÀM HỎNG
+6. NAVIGATION HOTSPOT ANIMATION
 ==================================================
 
-Phải giữ:
+Navigation hotspots currently animate too quickly.
 
-- API load Tour.
-- API load Scene.
-- Panorama.
-- NAV default.
-- NAV Preview Expand.
-- POI/Hotspot.
-- Target Scene.
-- EntryView.
-- Transition.
-- Thumbnail.
-- Scene Gallery.
-- Audio narration.
-- Background music.
-- Drag.
-- Zoom.
-- Autorotate.
-- Fullscreen.
-- Responsive.
-- Loading/Error fallback.
+Restore original timing.
 
-Không ảnh hưởng:
+Animation should feel smooth.
 
-- VR360 Builder.
-- Builder PreviewEngine.
-- Builder HotspotRenderer.
-- Builder routes.
-- Backend API.
-- JSON schema.
+Approximately:
+
+transition:
+200~300ms
+
+ease
+
+Do not use:
+
+50ms
+
+80ms
+
+100ms
+
+Animation should match the original Viewer behaviour before the Audio UI refactor.
 
 ==================================================
-TEST
+7. AUDIO UI MUST NOT MODIFY HOTSPOT CSS
 ==================================================
 
-Bắt buộc kiểm tra:
+Audio Panel styles must be isolated.
 
-1. API load Tour.
-2. API load Scene.
-3. Panorama render.
-4. NAV default.
-5. NAV Preview Expand.
-6. POI/Hotspot.
-7. Target Scene.
-8. EntryView.
-9. Transition.
-10. Thumbnail/Scene Gallery.
-11. Audio narration.
-12. Background music.
-13. Drag/Zoom.
-14. Autorotate.
-15. Fullscreen.
-16. Responsive.
-17. API error/fallback.
-18. Unmount/remount.
-19. Chuyển Scene liên tục.
-20. Không ảnh hưởng Builder.
+They must NOT affect:
 
-Kiểm tra thêm:
-- WebGL dispose.
-- Texture cleanup/cache.
-- Audio cleanup.
-- Event listener cleanup.
-- DOM cleanup.
-- Không leak Three.js object.
+POI markers
 
-Chạy lint/build/test nếu project có.
+Navigation markers
 
-==================================================
-DEFINITION OF DONE
-==================================================
+Photo Sphere Viewer DOM
 
-Chỉ coi migration hoàn tất khi:
+Scene transitions
 
-- Production Viewer lấy dữ liệu từ API.
-- Viewer mới render được đầy đủ behavior cần thiết.
-- Một route production đã chạy ổn định trên Viewer mới.
-- Các route còn lại chỉ chuyển sau khi route trước pass regression.
-- Không còn duplicate Runtime normalizer.
-- Không có duplicate Viewer production implementation đang được sử dụng.
-- Builder không bị ảnh hưởng.
-- Backend API và JSON schema không thay đổi.
-- Không có WebGL/Audio/Event listener leak khi mount/unmount và đổi Scene nhiều lần.
-- Lint/build/test pass hoặc báo rõ lý do không chạy được.
-- `git diff` chỉ chứa thay đổi liên quan Viewer và integration cần thiết.
+Marker hover
+
+Cursor
+
+Projection
+
+Move Audio CSS into its own namespace.
+
+Examples:
+
+.audio-panel
+
+.audio-player
+
+.audio-slider
+
+.audio-progress
+
+.audio-volume
+
+Never style generic:
+
+button
+
+svg
+
+input
+
+img
+
+span
+
+div
+
+globally.
 
 ==================================================
-BÁO CÁO CUỐI
+8. VERIFY HOTSPOT TYPES
 ==================================================
 
-Báo cáo:
+Test all hotspot types.
 
-- File mới trong `src/vr360-viewer`.
-- File đã sửa.
-- File Viewer cũ được thay thế.
-- Logic Runtime đã migrate.
-- API services/adapters đã tách.
-- Normalizer dùng chung.
-- Runtime Model.
-- Public API.
-- Route đã chuyển.
-- Builder code được giữ nguyên.
-- Các lỗi phát sinh và cách xử lý.
-- Kết quả lint/build/test.
+Information POI
 
-QUAN TRỌNG:
+Image POI
 
-Hãy trực tiếp thực hiện migration.
+Video POI
 
-Không chỉ phân tích hoặc lập kế hoạch.
+Audio POI
 
-Không tạo thêm thư mục cấp root ngoài:
+Navigation POI
 
-assets/
-common/
-components/
-layout/
-pages/
-services/
+Polygon
 
-và file:
+Label
 
-router.js
+Each type must preserve:
 
-Mọi logic mới phải được đặt trong đúng các nhóm trên.
+hover
 
-Không tạo `index.js` hoặc thư mục cấp root mới ở bước này.
+animation
 
-Sau khi migration hoàn tất, kiểm tra `git diff` và đảm bảo không có thay đổi ngoài phạm vi Runtime Viewer, Host integration cần thiết và route tích hợp.
+cursor
+
+click
+
+focus
+
+==================================================
+9. REGRESSION TEST
+==================================================
+
+Verify:
+
+✓ Progress bar is visually centered.
+
+✓ Thumb alignment correct.
+
+✓ Volume reaches true 0%.
+
+✓ Volume reaches true 100%.
+
+✓ No empty spacing.
+
+✓ Navigation hotspot animation restored.
+
+✓ Pointer cursor stable.
+
+✓ Hover no longer flickers.
+
+✓ Audio CSS isolated.
+
+✓ Photo Sphere Viewer behaviour matches before Audio refactor.
+
+==================================================
+10. REPORT
+==================================================
+
+Report:
+
+Files modified.
+
+Which CSS rules caused the hotspot regression.
+
+Which global selectors were removed.
+
+How volume alignment was fixed.
+
+How progress bar was rebuilt.
+
+Confirm that Photo Sphere Viewer interaction behaviour is identical to before the Audio UI refactor.

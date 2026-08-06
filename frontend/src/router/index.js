@@ -5,12 +5,10 @@ import HomeView from '../views/HomeView.vue';
 import LoginView from '../views/LoginView.vue';
 import BuilderView from '../vr360builder/pages/Vr360Builder.vue';
 import LocationsView from '../views/LocationsView.vue';
-import PublicViewerView from '../views/PublicViewerView.vue';
-import { ViewerProductionPage } from '../vr360-viewer/router.js';
+import ViewerProductionPage from '../vr360-viewer/pages/ViewerProductionPage.vue';
 import ProjectsView from '../views/ProjectsView.vue';
 import PublishingView from '../views/PublishingView.vue';
 import StatsView from '../views/StatsView.vue';
-import TourViewerView from '../views/TourViewerView.vue';
 import VersionsView from '../views/VersionsView.vue';
 import { useAuthStore } from '../stores/authStore';
 
@@ -66,8 +64,10 @@ const routes = [
   {
     path: '/vr360/:token',
     name: 'PublicTourViewer',
-    component: TourViewerView,
-    meta: { immersive: true, public: true },
+    redirect: (to) => ({
+      path: '/viewer',
+      query: { ...to.query, token: to.params.token },
+    }),
   },
   {
     path: '/publishing',
@@ -84,8 +84,7 @@ const routes = [
   {
     path: '/public-viewer',
     name: 'PublicViewer',
-    component: PublicViewerView,
-    meta: { public: true },
+    redirect: (to) => ({ path: '/viewer', query: to.query }),
   },
 ];
 

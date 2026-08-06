@@ -19,8 +19,10 @@ import {
   defaultHoverState,
   NAV_STYLES,
 } from "@/common/vr360/tourDataMapper.js";
+import { resolvePointKind } from "@/common/vr360/pointSchema.js";
 
 import SceneEditor from "../components/scene/SceneEditor.vue";
+import BaseAccordion from "../components/common/BaseAccordion.vue";
 import PointList from "../components/point/PointList.vue";
 import PointEditor from "../components/point/PointEditor.vue";
 import { apiBaseURL, http } from "@/api/http.js";
@@ -31,6 +33,7 @@ import {
   getVersion,
   listVersions,
   updateVersion,
+  uploadHotspotAudio,
   uploadHotspotInfoImage,
   uploadHotspotInfoVideo,
 } from "@/api/toursApi.js";
@@ -54,8 +57,9 @@ const uiState = reactive({
     initialView: false,
     transition: true,
     narration: true,
+    tourAudio: true,
   },
-  hsAcc: { chung: true, noiDung: true, navTarget: true, hover: false },
+  hsAcc: { chung: true, audio: true, noiDung: true, navTarget: true, hover: false },
 });
 
 const activeScene = computed(() =>
@@ -85,14 +89,15 @@ const infoAreaOverlays = computed(() => {
   areaOverlayTick.value;
   if (!activeScene.value) return [];
   return activeScene.value.hotspots
-    .map((hotspot, index) => {
+    .filter((hotspot) => hotspot.type === "info_area")
+    .map((hotspot) => {
       const rawPoints = Array.isArray(hotspot.area_points)
         ? hotspot.area_points
         : [];
       const points = rawPoints.map(projectAreaPoint).filter(Boolean);
       if (points.length < 3) return null;
       return {
-        index,
+        index: activeScene.value.hotspots.indexOf(hotspot),
         hotspot,
         points,
         svgPoints: areaPointsToSvg(points),
@@ -133,7 +138,85 @@ const canvasRef = ref(null);
 const fileInputRef = ref(null);
 const replaceImageInputRef = ref(null);
 const audioInputRef = ref(null);
+const tourAudioInputRef = ref(null);
+const hotspotAudioInputRef = ref(null);
+
+function audioDebug(...args) {
+  if (import.meta.env?.DEV) console.debug('[Audio Builder]', ...args);
+}
 const engine = shallowRef(null);
+
+const tourAudio = reactive({
+  enabled: false,
+  file: "",
+  volume: 1,
+  language: "",
+  loop: false,
+  autoplay: false,
+  description: "",
+  _file: null,
+  _localUrl: "",
+  _fileName: "",
+  _uploadState: "idle",
+  _uploadError: "",
+});
+
+const tourAudioPreviewSrc = computed(
+  () => tourAudio._localUrl || tourAudio.file || "",
+);
+
+function isAudioFile(file) {
+  return Boolean(file?.type?.startsWith("audio/"));
+}
+
+function resetTourAudio(audio = null, file = "") {
+  if (tourAudio._localUrl?.startsWith("blob:")) {
+    URL.revokeObjectURL(tourAudio._localUrl);
+  }
+  Object.assign(tourAudio, {
+    enabled: false,
+    file: file || "",
+    volume: 1,
+    language: "",
+    loop: false,
+    autoplay: false,
+    description: "",
+    _file: null,
+    _localUrl: "",
+    _fileName: "",
+    _uploadState: "idle",
+    _uploadError: "",
+    ...(audio || {}),
+  });
+}
+
+function pickTourAudioFile() {
+  tourAudioInputRef.value?.click();
+}
+
+function handleTourAudioFile(event) {
+  const file = event.target.files?.[0];
+  event.target.value = "";
+  if (!file) return;
+  if (!isAudioFile(file)) {
+    showToast("error", "❌ Chỉ chấp nhận tệp âm thanh");
+    return;
+  }
+  if (tourAudio._localUrl?.startsWith("blob:")) {
+    URL.revokeObjectURL(tourAudio._localUrl);
+  }
+  tourAudio._file = file;
+  tourAudio._localUrl = URL.createObjectURL(file);
+  tourAudio._fileName = file.name;
+  tourAudio._uploadState = "pending";
+  tourAudio._uploadError = "";
+  tourAudio.enabled = true;
+}
+
+function clearTourAudio() {
+  resetTourAudio();
+  showToast("info", "↺ Đã xoá cấu hình Tour Audio");
+}
 
 function triggerCanvasResize() {
   setTimeout(() => engine.value?._onResize?.(), 210);
@@ -317,6 +400,7 @@ function removeScene(index) {
   previewMode.active = false;
   const rem = scenes.splice(index, 1)[0];
   if (rem.image?.startsWith("blob:")) URL.revokeObjectURL(rem.image);
+  if (rem._audioLocalUrl?.startsWith("blob:")) URL.revokeObjectURL(rem._audioLocalUrl);
   if (activeSceneIndex.value === index) {
     activeSceneIndex.value = -1;
     selectedHotspotIndex.value = -1;
@@ -408,7 +492,7 @@ function startDrawingInfoArea(seedLon = null, seedLat = null) {
   requestAreaOverlayUpdate();
   showToast(
     "info",
-    "Click các góc vùng thông tin, tối thiểu 3 điểm rồi bấm Hoàn tất vùng.",
+    "Click các đỉnh Area Landmark, tối thiểu 3 điểm rồi bấm Hoàn tất vùng.",
   );
 }
 
@@ -434,22 +518,6 @@ function cancelInfoAreaDrawing() {
   requestAreaOverlayUpdate();
 }
 
-function averageAreaPoint(points) {
-  if (!points.length) return { lon: 0, lat: 0 };
-  const total = points.reduce(
-    (acc, point) => {
-      acc.lon += Number(point.lon) || 0;
-      acc.lat += Number(point.lat) || 0;
-      return acc;
-    },
-    { lon: 0, lat: 0 },
-  );
-  return {
-    lon: Math.round((total.lon / points.length) * 10) / 10,
-    lat: Math.round((total.lat / points.length) * 10) / 10,
-  };
-}
-
 function finishInfoAreaDrawing() {
   if (activeSceneIndex.value < 0) return;
   if (infoAreaDraftPoints.value.length < 3) {
@@ -461,21 +529,22 @@ function finishInfoAreaDrawing() {
     lon: Math.round(Number(point.lon) * 10) / 10,
     lat: Math.round(Number(point.lat) * 10) / 10,
   }));
-  const center = averageAreaPoint(points);
   const newHs = {
-    id: generateHotspotId("info_area"),
-    lon: center.lon,
-    lat: center.lat,
-    label: "Thông tin " + (hs.length + 1),
+    id: generateHotspotId("area_landmark"),
+    vertices: points,
+    label: "Khu vực " + (hs.length + 1),
     target: "",
-    type: "info_area",
+    type: "area_landmark",
     icon: null,
-    loai_poi: "thong_tin_van_ban",
-    area_points: points,
+    loai_poi: "ghim_dia_danh",
+    line_height: 48,
+    show_polygon_on_hover: true,
+    style: { fill: "#fbbf24", hoverFill: "rgba(251, 191, 36, 0.32)", border: "#fbbf24", hoverBorder: "#fde68a", line: "#ffffff", opacity: 0.3, borderWidth: 2 },
+    metadata: {},
     locked: false,
     khi_dua_chuot_vao: defaultHoverState(),
     entryView: null,
-    noi_dung: defaultNoiDung("thong_tin_van_ban"),
+    noi_dung: null,
   };
   hs.push(newHs);
   selectedHotspotIndex.value = hs.length - 1;
@@ -484,7 +553,7 @@ function finishInfoAreaDrawing() {
   cancelPlacingHotspot();
   syncHotspotsToEngine();
   requestAreaOverlayUpdate();
-  showToast("success", "Đã tạo vùng thông tin. Bạn có thể điền nội dung bên phải.");
+  showToast("success", "Đã tạo Area Landmark. Bạn có thể cấu hình nhãn, đích và style bên phải.");
 }
 
 function defaultNoiDung(loai_poi) {
@@ -502,25 +571,31 @@ function defaultNoiDung(loai_poi) {
 
 function confirmHotspotType(loai_poi) {
   if (activeSceneIndex.value < 0) return;
+  if (loai_poi === "ghim_dia_danh") {
+    modals.hotspotType = false;
+    startDrawingInfoArea(pendingPlacement.lon, pendingPlacement.lat);
+    return;
+  }
   const hs = scenes[activeSceneIndex.value].hotspots;
   const isNav = loai_poi === "chuyen_canh";
+  const isAudio = loai_poi === "audio";
   const newHs = {
     id: generateHotspotId("hs"),
     lon: pendingPlacement.lon,
     lat: pendingPlacement.lat,
     label: isNav ? "Lối đi " + (hs.length + 1) : "Hotspot " + (hs.length + 1),
     target: "",
-    type: isNav ? "nav" : "poi",
+    type: isNav ? "nav" : isAudio ? "audio" : "poi",
     ...(isNav ? { navStyle: NAV_STYLES.default } : {}),
     icon: isNav ? DEFAULT_NAV_ICON : null,
-    loai_poi: loai_poi || null,
+    ...(isAudio ? {} : { loai_poi: loai_poi || null }),
+    ...(isAudio ? { radius: 0, audio: { enabled: false, url: "", title: "", description: "", volume: 1, autoplay: false, loop: false, playbackRate: 1 } } : {}),
     locked: false,
     khi_dua_chuot_vao: defaultHoverState(),
     entryView: null,
   };
   const nd = defaultNoiDung(loai_poi);
   if (nd) newHs.noi_dung = nd;
-  if (loai_poi === "ghim_dia_danh") newHs.chieu_cao_duong_ghim = 54;
   hs.push(newHs);
   selectedHotspotIndex.value = hs.length - 1;
   modals.hotspotType = false;
@@ -574,7 +649,7 @@ function quickCreateHotspot(loai_poi) {
   };
   const nd = defaultNoiDung(loai_poi);
   if (nd) newHs.noi_dung = nd;
-  if (loai_poi === "ghim_dia_danh") newHs.chieu_cao_duong_ghim = 54;
+  if (loai_poi === "ghim_dia_danh") { startDrawingInfoArea(quickMenu.lon, quickMenu.lat); return; }
   hs.push(newHs);
   selectedHotspotIndex.value = hs.length - 1;
   closeQuickMenu();
@@ -668,23 +743,65 @@ function updateHotspot(key, value) {
   if (activeSceneIndex.value < 0 || selectedHotspotIndex.value < 0) return;
   const hs =
     scenes[activeSceneIndex.value].hotspots[selectedHotspotIndex.value];
+  if (key === "audio_url") {
+    updateHotspotAudio({ url: value || "" });
+    delete hs.audio_url;
+    return;
+  }
+  if (key.startsWith("audio.")) {
+    updateHotspotAudio({ [key.slice("audio.".length)]: value });
+    syncHotspotsToEngine();
+    return;
+  }
   hs[key] = value;
   if (key === "type" && value === "nav" && !hs.icon) hs.icon = DEFAULT_NAV_ICON;
   if (key === "loai_poi") {
     hs.type =
       value === "chuyen_canh"
         ? "nav"
-        : value === "thong_tin_van_ban" && Array.isArray(hs.area_points)
+        : value === "ghim_dia_danh" && hs.type === "area_landmark"
+          ? "area_landmark"
+        : (value === "thong_tin_van_ban" && Array.isArray(hs.area_points))
           ? "info_area"
           : "poi";
     if (hs.type === "nav" && !hs.icon) hs.icon = DEFAULT_NAV_ICON;
     const nd = defaultNoiDung(value);
     hs.noi_dung = nd || null;
-    if (value === "ghim_dia_danh" && !hs.chieu_cao_duong_ghim)
+    if (value === "ghim_dia_danh" && hs.type !== "area_landmark" && !hs.chieu_cao_duong_ghim)
       hs.chieu_cao_duong_ghim = 54;
   }
   syncHotspotsToEngine();
   requestAreaOverlayUpdate();
+}
+
+function canonicalHotspotAudio(audio = {}, patch = {}) {
+  const url = patch.url ?? audio.url ?? "";
+  const volume = Number(patch.volume ?? audio.volume ?? 1);
+  const hasUrlPatch = Object.prototype.hasOwnProperty.call(patch, "url");
+  return {
+    enabled: patch.enabled ?? (hasUrlPatch ? Boolean(url) : (audio.enabled !== undefined ? Boolean(audio.enabled) : Boolean(url))),
+    url,
+    title: patch.title ?? audio.title ?? "",
+    description: patch.description ?? audio.description ?? "",
+    volume: Number.isFinite(volume) ? Math.min(1, Math.max(0, volume)) : 1,
+    autoplay: patch.autoplay ?? Boolean(audio.autoplay),
+    loop: patch.loop ?? Boolean(audio.loop),
+    playbackRate: patch.playbackRate ?? Math.min(2, Math.max(0.5, Number(audio.playbackRate) || 1)),
+  };
+}
+
+function updateHotspotAudio(patch) {
+  if (activeSceneIndex.value < 0 || selectedHotspotIndex.value < 0) return;
+  const hotspot = scenes[activeSceneIndex.value].hotspots[selectedHotspotIndex.value];
+  hotspot.audio = canonicalHotspotAudio(hotspot.audio, {
+    ...patch,
+    ...(Object.prototype.hasOwnProperty.call(patch, "url") && !Object.prototype.hasOwnProperty.call(patch, "enabled")
+      ? { enabled: Boolean(patch.url) }
+      : {}),
+  });
+  audioDebug('Update Audio POI', hotspot.id, Object.keys(patch));
+  delete hotspot.audio_url;
+  syncHotspotsToEngine();
 }
 
 function updateHotspotHover(key, value) {
@@ -701,6 +818,52 @@ function updateHotspotContent(key, value) {
     scenes[activeSceneIndex.value].hotspots[selectedHotspotIndex.value];
   if (!hs.noi_dung) hs.noi_dung = {};
   hs.noi_dung[key] = value;
+}
+
+function pickHotspotAudio() {
+  if (activeSceneIndex.value < 0 || selectedHotspotIndex.value < 0) return;
+  hotspotAudioInputRef.value?.click();
+}
+
+function handleHotspotAudioFile(event) {
+  const file = event.target.files?.[0];
+  event.target.value = '';
+  if (!file || activeSceneIndex.value < 0 || selectedHotspotIndex.value < 0) return;
+  if (!isAudioFile(file)) {
+    const hotspot = scenes[activeSceneIndex.value].hotspots[selectedHotspotIndex.value];
+    hotspot._audioUploadError = 'Định dạng không được hỗ trợ. Hãy chọn tệp âm thanh hợp lệ.';
+    showToast('error', '❌ Chỉ chấp nhận tệp âm thanh');
+    return;
+  }
+  const hotspot = scenes[activeSceneIndex.value].hotspots[selectedHotspotIndex.value];
+  ensureHotspotId(hotspot);
+  if (hotspot._audioLocalUrl?.startsWith('blob:')) URL.revokeObjectURL(hotspot._audioLocalUrl);
+  hotspot._audioFile = file;
+  delete hotspot._audioUploadError;
+  hotspot._audioLocalUrl = URL.createObjectURL(file);
+  hotspot._audioFileName = file.name;
+  hotspot.audio = canonicalHotspotAudio(hotspot.audio, {
+    url: hotspot.audio?.url || hotspot.audio_url || "",
+    enabled: true,
+  });
+  audioDebug('Upload Audio POI', hotspot.id, file.name);
+  delete hotspot.audio_url;
+  syncHotspotsToEngine();
+  showToast('info', '🎧 Audio điểm nóng sẽ được upload khi lưu tour.');
+}
+
+function clearHotspotAudio() {
+  if (activeSceneIndex.value < 0 || selectedHotspotIndex.value < 0) return;
+  const hotspot = scenes[activeSceneIndex.value].hotspots[selectedHotspotIndex.value];
+  if (hotspot._audioLocalUrl?.startsWith('blob:')) URL.revokeObjectURL(hotspot._audioLocalUrl);
+  delete hotspot._audioFile;
+  delete hotspot._audioLocalUrl;
+  delete hotspot._audioFileName;
+  delete hotspot._audioUploadError;
+  hotspot.audio = canonicalHotspotAudio(hotspot.audio, { url: "", enabled: false });
+  delete hotspot.audio_url;
+  syncHotspotsToEngine();
+  showToast('info', '↺ Đã xóa Audio điểm nóng.');
 }
 
 function handleHotspotInfoImageFile(file) {
@@ -919,34 +1082,28 @@ function pickAudioFile() {
   if (activeSceneIndex.value < 0) return;
   audioInputRef.value?.click();
 }
-const handleAudioFile = async (ev) => {
+const handleAudioFile = (ev) => {
   const f = ev.target.files?.[0];
   ev.target.value = "";
   if (!f || activeSceneIndex.value < 0) return;
+  if (!isAudioFile(f)) {
+    showToast("error", "❌ Chỉ chấp nhận tệp âm thanh");
+    return;
+  }
   const s = scenes[activeSceneIndex.value];
   ensureNarration(s);
   if (s._audioLocalUrl) URL.revokeObjectURL(s._audioLocalUrl);
   s._audioLocalUrl = URL.createObjectURL(f);
+  s._audioFile = f;
   s._audioFileName = f.name;
+  s._audioUploadState = "pending";
+  s._audioUploadError = "";
+  ensureNarration(s).enabled = true;
   readAudioDuration(s._audioLocalUrl, s);
-  if (api.connected) {
-    showToast("info", "⏳ Đang upload audio...");
-    const url = await apiUploadAudio(f);
-    if (url) {
-      s.am_thanh_thuyet_minh.duong_dan_file_audio = url;
-      showToast("success", "☁️ Đã upload audio");
-    } else {
-      showToast(
-        "info",
-        "⚠ Server chưa nhận audio — dán URL đã host vào ô bên dưới để xuất JSON",
-      );
-    }
-  } else {
-    showToast(
-      "info",
-      "🎧 Đã nạp để nghe thử — dán URL đã host vào ô bên dưới để xuất JSON",
-    );
-  }
+  showToast(
+    "info",
+    "🎧 Đã nạp để nghe thử. Scene Audio cần endpoint upload backend trước khi có thể lưu.",
+  );
 };
 function readAudioDuration(src, s) {
   const a = new Audio();
@@ -969,6 +1126,9 @@ function clearNarration() {
     s._audioLocalUrl = "";
   }
   s._audioFileName = "";
+  delete s._audioFile;
+  delete s._audioUploadState;
+  delete s._audioUploadError;
   s.am_thanh_thuyet_minh = defaultNarration();
   showToast("info", "↺ Đã xoá thuyết minh của scene");
 }
@@ -1232,10 +1392,6 @@ async function apiUpload(f, sceneKey) {
   }
   return null;
 }
-async function apiUploadAudio(f) {
-  console.warn("Scene narration audio upload is not mapped to the current backend yet.", f?.name);
-  return null;
-}
 async function apiSaveTour(d) {
   if (!api.connected) {
     showToast("error", "❌ Chưa kết nối");
@@ -1243,13 +1399,48 @@ async function apiSaveTour(d) {
   }
   if (!requireBackendContext()) return null;
   try {
-    const response = await updateVersion(backendContext.locationId, backendContext.versionId, {
+    if (tourAudio._file) {
+      tourAudio._uploadState = "uploading";
+      tourAudio._uploadError = "";
+    }
+    let response = await updateVersion(backendContext.locationId, backendContext.versionId, {
       label: d.title || "VR360 Virtual Tour",
       data: d,
+      ...(tourAudio._file ? { background_audio_file: tourAudio._file } : {}),
     });
+    const backgroundAudio = apiUrl(response.data.background_audio || "");
+    if (tourAudio._file && backgroundAudio) {
+      if (tourAudio._localUrl?.startsWith("blob:")) {
+        URL.revokeObjectURL(tourAudio._localUrl);
+      }
+      tourAudio.file = backgroundAudio;
+      tourAudio._file = null;
+      tourAudio._localUrl = "";
+      tourAudio._fileName = "";
+      tourAudio._uploadState = "idle";
+      d.audio = {
+        enabled: Boolean(tourAudio.enabled),
+        file: tourAudio.file,
+        volume: tourAudio.volume,
+        language: tourAudio.language,
+        loop: Boolean(tourAudio.loop),
+        autoplay: Boolean(tourAudio.autoplay),
+        description: tourAudio.description,
+      };
+      response = await updateVersion(backendContext.locationId, backendContext.versionId, {
+        label: d.title || "VR360 Virtual Tour",
+        data: d,
+      });
+    } else if (tourAudio._file) {
+      throw new Error("Backend không trả về URL ổn định cho Tour Audio.");
+    }
     api.currentTourId = response.data.id || backendContext.versionId;
     return { ...response.data, tour_id: response.data.id };
   } catch (e) {
+    if (tourAudio._file) {
+      tourAudio._uploadState = "error";
+      tourAudio._uploadError = e.response?.data?.detail || e.message || "Upload Tour Audio thất bại";
+    }
     showToast("error", e.response?.data?.detail || "Could not save tour version.");
     return null;
   }
@@ -1283,6 +1474,7 @@ async function apiLoadTour(id) {
       title: response.data.label,
       scenes: response.data.data?.scenes || [],
       ...response.data.data,
+      background_audio: response.data.background_audio || "",
     };
   } catch (e) {
     showToast("error", e.response?.data?.detail || "Could not load tour version.");
@@ -1463,8 +1655,17 @@ async function saveToServer() {
     showToast("error", "❌ Chưa có scene");
     return;
   }
+  const pendingSceneAudio = scenes.filter((scene) => scene._audioFile);
+  if (pendingSceneAudio.length) {
+    showToast(
+      "error",
+      `❌ Chưa thể lưu Scene Audio: backend chưa có endpoint upload cho ${pendingSceneAudio.map((scene) => scene.name || scene.id).join(", ")}.`,
+    );
+    return;
+  }
   try {
     const c = cloneForExport();
+    audioDebug('Save Audio POI', c.flatMap((scene) => scene.hotspots).filter((hotspot) => hotspot.type === 'audio').map((hotspot) => hotspot.id));
     const pending = c.filter((x) => x._file && !x.exportUrl);
     if (pending.length) {
       const preSave = await apiSaveTour(buildJson(c));
@@ -1475,6 +1676,11 @@ async function saveToServer() {
         showToast("error", "❌ Upload thất bại");
         return;
       }
+    }
+    const hotspotAudioUpload = await uploadHotspotAudioFiles(c);
+    if (!hotspotAudioUpload.ok) {
+      showToast("error", "❌ Upload audio điểm nóng thất bại");
+      return;
     }
     const infoImageUpload = await uploadHotspotInfoImages(c);
     if (!infoImageUpload.ok) {
@@ -1511,6 +1717,7 @@ async function loadTourById(id) {
   const mapped = (d.scenes || []).map((s) =>
     normalizeScene(s, { generateId, resolveUrl }),
   );
+  resetTourAudio(d.audio, resolveUrl(d.background_audio));
   scenes.splice(0, scenes.length, ...mapped);
   api.currentTourId = id;
   activeSceneIndex.value = -1;
@@ -1546,6 +1753,19 @@ function cloneForExport() {
 function buildJson(c) {
   return {
     title: "VR360 Virtual Tour",
+    ...(tourAudio.file
+      ? {
+          audio: {
+            enabled: Boolean(tourAudio.enabled),
+            file: tourAudio.file,
+            volume: tourAudio.volume,
+            language: tourAudio.language,
+            loop: Boolean(tourAudio.loop),
+            autoplay: Boolean(tourAudio.autoplay),
+            description: tourAudio.description,
+          },
+        }
+      : {}),
     scenes: c.map((s) => ({
       id: s.id,
       name: s.name,
@@ -1577,16 +1797,87 @@ function cleanHotspotForSave(hotspot) {
         key === "_galleryImageFiles" ||
         key === "_videoFile" ||
         key === "_videoPreview" ||
-        key === "_videoName"
+        key === "_videoName" ||
+        key === "_audioFile" ||
+        key === "_audioLocalUrl" ||
+        key === "_audioFileName" ||
+        key === "_audioBlob" ||
+        key === "audioFile" ||
+        key === "localAudio"
       )
         return undefined;
       return value;
     }),
   );
-  if (copy.type === "info_area" && !Array.isArray(copy.area_points)) {
-    copy.type = "poi";
+  if (resolvePointKind(copy) === "audio") {
+    const legacyAudioUrl = copy.audio?.url || copy.audio_url || "";
+    copy.audio = canonicalHotspotAudio(copy.audio, {
+      url: legacyAudioUrl,
+      enabled: copy.audio?.enabled !== undefined ? Boolean(copy.audio.enabled) : Boolean(legacyAudioUrl),
+    });
+    copy.position = { lon: Number(copy.lon) || 0, lat: Number(copy.lat) || 0 };
+    audioDebug('Export Audio POI', copy.id);
+  } else {
+    delete copy.audio;
+  }
+  delete copy.audio_url;
+  if (copy.type === "area_landmark" || copy.pointKind === "area_landmark") {
+    const vertices = Array.isArray(copy.vertices)
+      ? copy.vertices
+      : Array.isArray(copy.polygon)
+        ? copy.polygon
+        : Array.isArray(copy.area_points)
+          ? copy.area_points
+          : [];
+    copy.vertices = vertices;
+    delete copy.anchor;
+    delete copy.label_position;
+    delete copy.polygon;
+    delete copy.area_points;
+    delete copy.lon;
+    delete copy.lat;
   }
   return copy;
+}
+
+async function uploadHotspotAudioFiles(c) {
+  const pending = c.flatMap((scene) => scene.hotspots
+    .filter((hotspot) => hotspot?._audioFile)
+    .map((hotspot) => ({ hotspot, file: hotspot._audioFile })));
+  if (!pending.length) return { ok: true, up: 0, fail: 0 };
+  if (!backendContext.locationId || !backendContext.versionId) {
+    showToast("error", "❌ Chưa chọn location/version để upload audio điểm nóng");
+    return { ok: false, up: 0, fail: pending.length };
+  }
+  let up = 0;
+  let fail = 0;
+  for (const { hotspot, file } of pending) {
+    try {
+      ensureHotspotId(hotspot);
+      const response = await uploadHotspotAudio(backendContext.locationId, backendContext.versionId, {
+        hotspotId: hotspot.id,
+        audioFile: file,
+      });
+      const audioUrl = response?.data?.audio_url || response?.data?.audio_path || response?.data?.url || "";
+      if (!audioUrl) throw new Error("No audio URL returned");
+      hotspot.audio = canonicalHotspotAudio(hotspot.audio, {
+        url: apiUrl(audioUrl),
+        enabled: true,
+      });
+      delete hotspot.audio_url;
+      if (hotspot._audioLocalUrl?.startsWith("blob:")) URL.revokeObjectURL(hotspot._audioLocalUrl);
+      delete hotspot._audioFile;
+      delete hotspot._audioLocalUrl;
+      delete hotspot._audioFileName;
+      delete hotspot._audioUploadError;
+      up++;
+    } catch (error) {
+      console.error("uploadHotspotAudio error:", error);
+      hotspot._audioUploadError = 'Không thể tải file audio lên. Vui lòng thử lại.';
+      fail++;
+    }
+  }
+  return { ok: fail === 0, up, fail };
 }
 
 async function uploadHotspotInfoImages(c) {
@@ -1729,6 +2020,9 @@ function syncBack(c) {
       if (!target) return;
       if (hotspot.noi_dung) target.noi_dung = { ...hotspot.noi_dung };
       if (hotspot.id) target.id = hotspot.id;
+      if (hotspot.audio) target.audio = { ...hotspot.audio };
+      if (hotspot.type === 'audio' && hotspot.audio) audioDebug('Reload Builder Audio POI', hotspot.id, hotspot.audio.url || '');
+      delete target.audio_url;
       delete target._galleryImageFiles;
       delete target._videoFile;
       delete target._videoPreview;
@@ -1741,6 +2035,33 @@ function hasPendingUploads(c) {
 }
 async function exportJSON() {
   try {
+    if (tourAudio._file) {
+      showToast(
+        "error",
+        "⚠ Tour Audio chưa được tải lên. Hãy lưu tour vào server trước khi export JSON.",
+      );
+      return;
+    }
+    const scenesWithLocalAudio = scenes.filter(
+      (scene) => scene._audioLocalUrl,
+    );
+    if (scenesWithLocalAudio.length) {
+      showToast(
+        "error",
+        "⚠ Scene Audio đang là tệp cục bộ. Hãy dùng URL audio đã host trước khi export JSON.",
+      );
+      return;
+    }
+    const hotspotsWithPendingAudio = scenes.flatMap((scene) =>
+      (scene.hotspots || []).filter((hotspot) => hotspot?._audioFile),
+    );
+    if (hotspotsWithPendingAudio.length) {
+      showToast(
+        "error",
+        "⚠ POI Audio chưa được tải lên. Hãy lưu tour vào server trước khi export JSON.",
+      );
+      return;
+    }
     const c = cloneForExport();
     const pending = c.filter((x) => x._file && !x.exportUrl);
     if (pending.length && !api.connected) {
@@ -1807,6 +2128,7 @@ function doImportJSON() {
     const sc = d.scenes || d;
     if (!Array.isArray(sc)) throw new Error("Invalid");
     const mapped = sc.map((s) => normalizeScene(s, { generateId }));
+    resetTourAudio(d.audio);
     scenes.splice(0, scenes.length, ...mapped);
     activeSceneIndex.value = -1;
     selectedHotspotIndex.value = -1;
@@ -1862,6 +2184,23 @@ onMounted(() => {
     onCancelPlacing: () => cancelPlacingHotspot(),
     onHotspotSelect: (index) => selectHotspot(index),
     onHotspotNav: (index) => goToHotspotTarget(index),
+    onAreaLandmarkSelect: (annotation) => {
+      const index = scenes[activeSceneIndex.value]?.hotspots.findIndex(
+        (hotspot) => String(hotspot.id) === String(annotation.id),
+      ) ?? -1;
+      if (index >= 0) selectHotspot(index);
+    },
+    onAreaLandmarkLabelDragEnd: (annotation, position) => {
+      annotation.line_height = Math.max(40, Math.round(Math.abs(position.y)));
+      syncHotspotsToEngine();
+    },
+    onAreaLandmarkVertexDragEnd: (annotation, vertexIndex, point) => {
+      const vertices = Array.isArray(annotation.vertices) ? annotation.vertices : [];
+      if (!vertices[vertexIndex]) return;
+      vertices[vertexIndex] = point;
+      annotation.vertices = vertices;
+      syncHotspotsToEngine();
+    },
     resolveNavTarget: (targetId) =>
       scenes.find((scene) => scene.id === targetId) || null,
     onHotspotDragEnd: (index, lon, lat) => {
@@ -1883,11 +2222,17 @@ onBeforeUnmount(() => {
   window.removeEventListener("keydown", onGlobalKeydown);
   if (areaOverlayRaf) cancelAnimationFrame(areaOverlayRaf);
   engine.value?.dispose();
+  if (tourAudio._localUrl?.startsWith("blob:")) {
+    URL.revokeObjectURL(tourAudio._localUrl);
+  }
   scenes.forEach((s) => {
     if (s.image?.startsWith("blob:")) URL.revokeObjectURL(s.image);
     if (s._audioLocalUrl?.startsWith("blob:"))
       URL.revokeObjectURL(s._audioLocalUrl);
     s.hotspots?.forEach((hotspot) => {
+      if (hotspot._audioLocalUrl?.startsWith("blob:")) {
+        URL.revokeObjectURL(hotspot._audioLocalUrl);
+      }
       if (hotspot._infoImagePreview?.startsWith("blob:")) {
         URL.revokeObjectURL(hotspot._infoImagePreview);
       }
@@ -2176,6 +2521,28 @@ onBeforeUnmount(() => {
           </div>
         </template>
       </div>
+
+      <input
+        ref="audioInputRef"
+        type="file"
+        accept="audio/*"
+        style="display: none"
+        @change="handleAudioFile"
+      />
+      <input
+        ref="tourAudioInputRef"
+        type="file"
+        accept="audio/*"
+        style="display: none"
+        @change="handleTourAudioFile"
+      />
+      <input
+        ref="hotspotAudioInputRef"
+        type="file"
+        accept="audio/*"
+        style="display: none"
+        @change="handleHotspotAudioFile"
+      />
 
       <!-- CENTER: CANVAS -->
       <div class="vb-center">
@@ -2485,6 +2852,52 @@ onBeforeUnmount(() => {
         </div>
         <template v-if="!uiState.rightCollapsed">
           <div class="vb-right-scroll">
+            <BaseAccordion
+              title="Tour Audio"
+              :open="!uiState.collapsed.tourAudio"
+              :badge="tourAudioPreviewSrc ? 'Đã chọn' : ''"
+              @toggle="uiState.collapsed.tourAudio = !uiState.collapsed.tourAudio"
+            >
+              <template #icon>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13">
+                  <path d="M9 18V5l12-2v13" />
+                  <circle cx="6" cy="18" r="3" />
+                  <circle cx="18" cy="16" r="3" />
+                </svg>
+              </template>
+              <div class="vb-prop-row">
+                <button class="vb-prop-btn vb-prop-btn-accent" @click="pickTourAudioFile">
+                  {{ tourAudioPreviewSrc ? 'Thay file âm thanh' : 'Chọn file âm thanh' }}
+                </button>
+                <span v-if="tourAudio._fileName" class="vb-prop-filename">{{ tourAudio._fileName }}</span>
+              </div>
+              <div class="vb-prop-row">
+                <label class="vb-prop-label">URL audio đã host</label>
+                <input v-model.trim="tourAudio.file" class="vb-prop-input vb-prop-input-mono" placeholder="https://.../tour-audio.mp3" />
+              </div>
+              <div v-if="tourAudioPreviewSrc" class="vb-prop-row">
+                <audio class="vb-audio-player" controls :src="tourAudioPreviewSrc"></audio>
+              </div>
+              <div class="vb-prop-row">
+                <label class="vb-prop-label vb-hover-toggle-label"><input v-model="tourAudio.enabled" type="checkbox" :disabled="!tourAudioPreviewSrc" /> Bật Tour Audio</label>
+              </div>
+              <div class="vb-prop-row-inline">
+                <div class="vb-prop-row" style="flex:1"><label class="vb-prop-label">Âm lượng cấu hình</label><input v-model.number="tourAudio.volume" class="vb-prop-input vb-prop-input-mono" type="number" min="0" max="1" step="0.1" /></div>
+                <div class="vb-prop-row" style="flex:1"><label class="vb-prop-label">Ngôn ngữ</label><input v-model.trim="tourAudio.language" class="vb-prop-input" placeholder="vi" /></div>
+              </div>
+              <div class="vb-prop-row-inline">
+                <div class="vb-prop-row" style="flex:1"><label class="vb-prop-label vb-hover-toggle-label"><input v-model="tourAudio.loop" type="checkbox" /> Lặp lại</label></div>
+                <div class="vb-prop-row" style="flex:1"><label class="vb-prop-label vb-hover-toggle-label"><input v-model="tourAudio.autoplay" type="checkbox" /> Tự động phát</label></div>
+              </div>
+              <div class="vb-prop-row">
+                <label class="vb-prop-label">Mô tả</label>
+                <input v-model.trim="tourAudio.description" class="vb-prop-input" placeholder="Mô tả audio (tuỳ chọn)" />
+              </div>
+              <div v-if="tourAudioPreviewSrc" class="vb-prop-row">
+                <button class="vb-prop-btn vb-prop-btn-danger" @click="clearTourAudio">Xoá cấu hình audio</button>
+              </div>
+            </BaseAccordion>
+
             <!-- EMPTY STATE -->
             <div v-if="!activeScene" class="vb-empty-state">
               <svg
@@ -2548,11 +2961,15 @@ onBeforeUnmount(() => {
               :target-scene="targetScene"
               :acc-open="uiState.hsAcc"
               @update="updateHotspot"
+              @update-audio="updateHotspotAudio"
               @update:hover="updateHotspotHover"
               @update:content="updateHotspotContent"
               @select-info-image="handleHotspotInfoImageFile"
               @select-gallery-images="handleGalleryImageFiles"
               @select-video="handleHotspotVideoFile"
+              @pick-audio="pickHotspotAudio"
+              @clear-audio="clearHotspotAudio"
+              @select-audio="pickHotspotAudio"
               @toggle-lock="toggleLockHotspot"
               @duplicate="duplicateHotspot"
               @remove="removeHotspot"
@@ -2742,6 +3159,11 @@ onBeforeUnmount(() => {
               <div class="vb-hs-type-option-label">Phát video</div>
               <div class="vb-hs-type-option-desc">Nhúng video vào cảnh</div>
             </button>
+            <button class="vb-hs-type-option vb-hs-type-audio" @click="confirmHotspotType('audio')">
+              <div class="vb-hs-type-option-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="24" height="24"><path d="M4 10v4h3l4 3V7l-4 3H4z" fill="currentColor" stroke="none"/><path d="M15 9.5a4 4 0 010 5M17.5 7a7 7 0 010 10"/></svg></div>
+              <div class="vb-hs-type-option-label">Audio</div>
+              <div class="vb-hs-type-option-desc">Thuyết minh tại vị trí này</div>
+            </button>
             <button
               class="vb-hs-type-option vb-hs-type-pin"
               @click="confirmHotspotType('ghim_dia_danh')"
@@ -2761,8 +3183,8 @@ onBeforeUnmount(() => {
                   <line x1="4" y1="22" x2="4" y2="15" />
                 </svg>
               </div>
-              <div class="vb-hs-type-option-label">Ghim địa danh</div>
-              <div class="vb-hs-type-option-desc">Thẻ nhãn tên địa điểm</div>
+              <div class="vb-hs-type-option-label">Địa danh</div>
+              <div class="vb-hs-type-option-desc">Vẽ khu vực, nhãn và đường dẫn</div>
             </button>
             <button
               class="vb-hs-type-option vb-hs-type-generic"
@@ -3578,6 +4000,49 @@ onBeforeUnmount(() => {
   padding: 7px 12px;
   font-size: 12px;
 }
+.area-landmark-layer {
+  z-index: 9;
+}
+.area-landmark polygon {
+  fill-opacity: 0.3;
+  filter: drop-shadow(0 0 6px rgba(251, 191, 36, 0.28));
+  pointer-events: none;
+}
+.area-landmark.is-selected polygon {
+  filter: drop-shadow(0 0 10px rgba(253, 224, 71, 0.78));
+  stroke: #fde047;
+}
+.area-landmark line {
+  pointer-events: none;
+  stroke-linecap: round;
+}
+.area-landmark circle {
+  pointer-events: auto;
+}
+.area-landmark .area-landmark-vertex {
+  filter: drop-shadow(0 0 4px rgba(251, 191, 36, 0.96));
+}
+.area-landmark.is-selected .area-landmark-vertex {
+  r: 6px;
+  stroke: #fde047;
+}
+.area-landmark-label {
+  align-items: center;
+  background: rgba(18, 18, 28, 0.92);
+  border: 1px solid #fbbf24;
+  border-radius: 8px;
+  color: #fff;
+  cursor: grab;
+  display: inline-flex;
+  font-size: 12px;
+  font-weight: 700;
+  left: 0;
+  padding: 8px 10px;
+  position: absolute;
+  top: 0;
+  z-index: 10;
+}
+.area-landmark-label:active { cursor: grabbing; }
 .preview-hotspot-container .hotspot {
   position: absolute;
   left: 0;
@@ -4750,6 +5215,13 @@ textarea.vb-form-input {
 }
 .vb-hs-type-video:hover {
   border-color: #ff4757;
+}
+.vb-hs-type-audio .vb-hs-type-option-icon {
+  background: rgba(250, 204, 21, 0.15);
+  color: #facc15;
+}
+.vb-hs-type-audio:hover {
+  border-color: #facc15;
 }
 .vb-hs-type-pin .vb-hs-type-option-icon {
   background: rgba(255, 138, 43, 0.15);

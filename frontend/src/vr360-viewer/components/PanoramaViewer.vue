@@ -1,7 +1,13 @@
 <script setup>
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, onUpdated, ref, watch } from 'vue';
 import * as THREE from 'three';
 import NavRenderer from './nav/NavRenderer.vue';
+import { createCameraController } from '../common/runtime/cameraController.js';
+import { createLandmarkRenderer } from '../common/runtime/landmarkRenderer.js';
+import { projectViewerPoints } from '../common/runtime/pointProjection.js';
+import { createProjectionPanoramaMaterial } from '../common/runtime/projectionPanoramaMaterial.js';
+import { createProjectionState } from '../common/runtime/projectionState.js';
+import { createTextureManager } from '../common/runtime/textureManager.js';
 
 const props = defineProps({
   imageUrl: {
@@ -17,6 +23,10 @@ const props = defineProps({
     default: () => [],
   },
   selectedHotspotId: {
+    type: String,
+    default: '',
+  },
+  activeAudioPoiId: {
     type: String,
     default: '',
   },
@@ -44,26 +54,37 @@ const props = defineProps({
     type: Number,
     default: 2.5,
   },
+  transition: {
+    type: Object,
+    default: () => ({ enabled: true, effect: 'fade', duration: 650, rotation: true }),
+  },
+  maxPixelRatio: {
+    type: Number,
+    default: 2,
+  },
+  interactive: {
+    type: Boolean,
+    default: true,
+  },
 });
 
-const emit = defineEmits(['panorama-click', 'hotspot-click', 'hotspot-dblclick', 'view-change']);
+const emit = defineEmits(['panorama-click', 'hotspot-click', 'hotspot-dblclick', 'view-change', 'texture-ready']);
 
 const container = ref(null);
 const projectedHotspots = ref([]);
 const projectedInfoAreas = ref([]);
 const isTextureLoading = ref(false);
 const textureError = ref('');
+const projectionBlend = ref(0);
 const hasImage = computed(() => Boolean(props.imageUrl));
+const hotspotsVisible = computed(() => projectionBlend.value >= 0.92);
+const EMPTY_HOTSPOTS = Object.freeze([]);
+const drawingBufferSize = new THREE.Vector2();
 
 let renderer;
 let scene;
 let camera;
 let mesh;
-let texture;
-let transitionMesh;
-let transitionTexture;
-let transitionStartedAt = 0;
-const transitionDuration = 650;
 let animationId;
 let resizeObserver;
 let raycaster;
@@ -72,64 +93,23 @@ let isDragging = false;
 let pointerDown = null;
 let lastInteractionAt = 0;
 let lastFrameAt = 0;
-let cameraTween = null;
-let lon = 0;
-let lat = 0;
-let fov = 75;
-// Khong cho camera nhin qua sat cuc day cua anh 360.
-// Neu nhin gan -90 do, equirectangular panorama se bi don pixel ve 1 diem
-// nen phan chan may/san se bi xoay/nhoe. -58 van xem duoc san nhung tranh lo cuc day.
-const MIN_LAT = -58;
-const MAX_LAT = 82;
-
-function clamp(value, min, max) {
-  return Math.min(max, Math.max(min, value));
-}
-
-function clampLat(value) {
-  return clamp(Number(value || 0), MIN_LAT, MAX_LAT);
-}
+let needsProjection = true;
+let hasAppliedInitialView = false;
+let textureReadyPending = false;
+let areaLandmarkRenderer;
+let cameraController;
+let textureManager;
+let projectionState;
+let projectionRenderCount = 0;
+let componentUpdateCount = 0;
 
 function emitViewChange() {
-  emit('view-change', {
-    lon: Math.round(lon * 10) / 10,
-    lat: Math.round(lat * 10) / 10,
-    fov: Math.round(fov),
-  });
+  emit('view-change', cameraController?.getRoundedView() || { lon: 0, lat: 0, fov: 75 });
 }
 
 function markInteraction() {
   lastInteractionAt = performance.now();
-}
-
-function easeInOutCubic(value) {
-  return value < 0.5
-    ? 4 * value * value * value
-    : 1 - Math.pow(-2 * value + 2, 3) / 2;
-}
-
-function shortestLonDelta(from, to) {
-  return ((((to - from) % 360) + 540) % 360) - 180;
-}
-
-function lonLatToVector(hotspotLon, hotspotLat, radius = 500) {
-  const phi = THREE.MathUtils.degToRad(90 - Number(hotspotLat || 0));
-  const theta = THREE.MathUtils.degToRad(Number(hotspotLon || 0));
-  return new THREE.Vector3(
-    radius * Math.sin(phi) * Math.cos(theta),
-    radius * Math.cos(phi),
-    radius * Math.sin(phi) * Math.sin(theta),
-  );
-}
-
-function vectorToLonLat(vector) {
-  const normalized = vector.clone().normalize();
-  const nextLon = THREE.MathUtils.radToDeg(Math.atan2(normalized.z, normalized.x));
-  const nextLat = THREE.MathUtils.radToDeg(Math.asin(normalized.y));
-  return {
-    lon: Math.round(nextLon * 10) / 10,
-    lat: Math.round(nextLat * 10) / 10,
-  };
+  needsProjection = true;
 }
 
 function youtubeEmbedUrl(url) {
@@ -159,183 +139,113 @@ function hasAreaInlineMedia(area) {
 }
 
 function updateProjectedHotspots() {
-  if (!container.value || !camera || isTextureLoading.value) {
+  if (!container.value || !camera || isTextureLoading.value || !hotspotsVisible.value) {
     projectedHotspots.value = [];
     projectedInfoAreas.value = [];
+    if (container.value && camera) {
+      areaLandmarkRenderer?.update(
+        EMPTY_HOTSPOTS,
+        camera,
+        container.value.clientWidth || 1,
+        container.value.clientHeight || 1,
+      );
+    }
     return;
   }
 
   const width = container.value.clientWidth || 1;
   const height = container.value.clientHeight || 1;
-  const cameraDirection = new THREE.Vector3();
-  camera.getWorldDirection(cameraDirection);
-
-  function projectLonLat(item) {
-    const worldPosition = lonLatToVector(item.lon, item.lat);
-    const directionToPoint = worldPosition.clone().normalize();
-    const isInFront = cameraDirection.dot(directionToPoint) > 0;
-    const screenPosition = worldPosition.clone().project(camera);
-    return {
-      visible:
-        isInFront &&
-        screenPosition.z > -1 &&
-        screenPosition.z < 1 &&
-        screenPosition.x >= -1.2 &&
-        screenPosition.x <= 1.2 &&
-        screenPosition.y >= -1.2 &&
-        screenPosition.y <= 1.2,
-      screenX: (screenPosition.x * 0.5 + 0.5) * width,
-      screenY: (-screenPosition.y * 0.5 + 0.5) * height,
-    };
+  projectionRenderCount += 1;
+  if (import.meta.env?.DEV) console.debug('[Viewer Render] pointProjection()', projectionRenderCount);
+  const projection = projectViewerPoints(props.hotspots, camera, width, height, youtubeEmbedUrl);
+  projectedHotspots.value = projection.markers;
+  if (import.meta.env?.DEV) {
+    const audioMarkers = projection.markers.filter((hotspot) => hotspot.type === 'audio');
+    if (audioMarkers.length) console.debug('[Audio Renderer] render()', audioMarkers.map((hotspot) => hotspot.id));
   }
-
-  projectedHotspots.value = props.hotspots
-    .filter((hotspot) => hotspot.type !== 'info_area')
-    .map((hotspot, index) => {
-      const projected = projectLonLat(hotspot);
-
-      return {
-        ...hotspot,
-        index,
-        ...projected,
-      };
-    })
-    .filter((hotspot) => hotspot.visible);
-
-  projectedInfoAreas.value = props.hotspots
-    .filter((hotspot) => hotspot.type === 'info_area' && Array.isArray(hotspot.area_points))
-    .map((hotspot, index) => {
-      const projectedPoints = hotspot.area_points.map(projectLonLat);
-      const visiblePoints = projectedPoints.filter((point) => point.visible);
-      const minimumPoints = hotspot.isDraft ? 2 : 3;
-      const allPointsVisible = projectedPoints.length > 0 && visiblePoints.length === projectedPoints.length;
-      const xs = projectedPoints.map((point) => point.screenX);
-      const ys = projectedPoints.map((point) => point.screenY);
-      const minX = Math.min(...xs);
-      const maxX = Math.max(...xs);
-      const minY = Math.min(...ys);
-      const maxY = Math.max(...ys);
-      const boxWidth = Math.max(...xs) - Math.min(...xs);
-      const boxHeight = Math.max(...ys) - Math.min(...ys);
-      const crossesScreenEdge = boxWidth > width * 0.72 || boxHeight > height * 0.72;
-      const canRenderDraft = hotspot.isDraft && projectedPoints.length >= minimumPoints && visiblePoints.length >= minimumPoints;
-      const canRenderArea = !hotspot.isDraft && projectedPoints.length >= minimumPoints && allPointsVisible && !crossesScreenEdge;
-        const drawablePoints = hotspot.isDraft ? visiblePoints : projectedPoints;
-        const clipPoints = drawablePoints.map((point) => {
-          const x = boxWidth ? ((point.screenX - minX) / boxWidth) * 100 : 0;
-          const y = boxHeight ? ((point.screenY - minY) / boxHeight) * 100 : 0;
-          return `${Math.min(100, Math.max(0, x)).toFixed(2)}% ${Math.min(100, Math.max(0, y)).toFixed(2)}%`;
-        });
-        return {
-          ...hotspot,
-          index,
-          visible: canRenderDraft || canRenderArea,
-          polygonPoints: drawablePoints.map((point) => `${point.screenX},${point.screenY}`).join(' '),
-          mediaClipPath: clipPoints.length >= 3 ? `polygon(${clipPoints.join(', ')})` : '',
-          box: {
-            left: minX,
-            top: minY,
-            width: boxWidth,
-          height: boxHeight,
-          },
-          mediaBox: {
-            left: minX,
-            top: minY,
-            width: boxWidth,
-            height: boxHeight,
-          },
-        youtube_embed_url: youtubeEmbedUrl(hotspot.info?.youtube_url),
-      };
-    })
-    .filter((area) => area.visible);
-}
-
-function updateCamera() {
-  lat = clampLat(lat);
-  const phi = THREE.MathUtils.degToRad(90 - lat);
-  const theta = THREE.MathUtils.degToRad(lon);
-  const target = new THREE.Vector3(
-    500 * Math.sin(phi) * Math.cos(theta),
-    500 * Math.cos(phi),
-    500 * Math.sin(phi) * Math.sin(theta),
-  );
-  camera.lookAt(target);
-  camera.fov = fov;
-  camera.updateProjectionMatrix();
+  projectedInfoAreas.value = projection.infoAreas;
+  areaLandmarkRenderer?.update(props.hotspots, camera, width, height);
 }
 
 function renderLoop() {
   const now = performance.now();
   const deltaSeconds = lastFrameAt ? (now - lastFrameAt) / 1000 : 0;
   lastFrameAt = now;
-  if (cameraTween) {
-    const progress = Math.min((now - cameraTween.startedAt) / cameraTween.duration, 1);
-    const eased = easeInOutCubic(progress);
-    lon = cameraTween.from.lon + cameraTween.lonDelta * eased;
-    lat = cameraTween.from.lat + (cameraTween.to.lat - cameraTween.from.lat) * eased;
-    fov = cameraTween.from.fov + (cameraTween.to.fov - cameraTween.from.fov) * eased;
-    emitViewChange();
-    if (progress >= 1) {
-      lon = cameraTween.to.lon;
-      lat = cameraTween.to.lat;
-      fov = cameraTween.to.fov;
-      cameraTween.resolve();
-      cameraTween = null;
-    }
-  }
+  if (cameraController.tick(now)) needsProjection = true;
   if (
     props.autoRotate &&
     hasImage.value &&
     !isDragging &&
-    !cameraTween &&
+    !cameraController.isAnimating() &&
     now - lastInteractionAt >= props.autoRotateDelay
   ) {
-    lon += props.autoRotateSpeed * deltaSeconds;
-    emitViewChange();
+    cameraController.dragBy(-props.autoRotateSpeed * deltaSeconds / 0.12, 0);
+    needsProjection = true;
   }
-  updateCamera();
-  updateProjectedHotspots();
-  updateTransitionFade();
+  cameraController.updateCamera();
+  if (needsProjection) {
+    updateProjectedHotspots();
+    needsProjection = false;
+  }
+  textureManager?.updateTransition();
   renderer.render(scene, camera);
+  if (textureReadyPending) {
+    textureReadyPending = false;
+    emit('texture-ready');
+  }
   animationId = requestAnimationFrame(renderLoop);
 }
 
 function animateToView(targetView = {}, duration = 520) {
   markInteraction();
-  cameraTween?.resolve?.();
-  return new Promise((resolve) => {
-    const targetLon = Number(targetView.lon ?? lon);
-    const targetLat = clampLat(targetView.lat ?? lat);
-    const targetFov = clamp(Number(targetView.fov ?? fov), 35, 100);
-    cameraTween = {
-      startedAt: performance.now(),
-      duration,
-      from: { lon, lat, fov },
-      to: { lon: targetLon, lat: targetLat, fov: targetFov },
-      lonDelta: shortestLonDelta(lon, targetLon),
-      resolve,
-    };
-  });
+  return cameraController.animateTo(targetView, duration);
 }
 
 function getView() {
-  return { lon, lat, fov };
+  return cameraController.getView();
 }
 
 function setView(targetView = {}) {
   markInteraction();
-  lon = Number(targetView.lon ?? lon);
-  lat = clampLat(targetView.lat ?? lat);
-  fov = clamp(Number(targetView.fov ?? fov), 35, 100);
+  cameraController.setView(targetView);
   emitViewChange();
+  needsProjection = true;
+}
+
+function setIntroState(state = {}) {
+  if (Number.isFinite(Number(state.fov))) {
+    cameraController.setView({
+      fov: Number(state.fov),
+      lon: state.lon,
+      lat: state.lat,
+    });
+  }
+  if (Number.isFinite(Number(state.progress))) {
+    projectionState?.setProgress(state.progress);
+    projectionBlend.value = projectionState?.state.projectionBlend ?? 1;
+    mesh?.material.setProjectionState?.(projectionState?.state);
+    needsProjection = true;
+  }
+}
+
+function resetProjectionIntro() {
+  projectionState?.reset();
+  projectionBlend.value = projectionState?.state.projectionBlend ?? 0;
+  mesh?.material.setProjectionState?.(projectionState?.state);
+  projectedHotspots.value = [];
+  projectedInfoAreas.value = [];
+  needsProjection = true;
 }
 
 function dispose() {
   window.removeEventListener('resize', resize);
   resizeObserver?.disconnect();
   cancelAnimationFrame(animationId);
-  disposeTexture();
-  clearTransition();
+  textureManager?.dispose();
+  textureManager = null;
+  projectionState = null;
+  areaLandmarkRenderer?.dispose();
+  areaLandmarkRenderer = null;
   if (mesh) {
     mesh.geometry.dispose();
     mesh.material.dispose();
@@ -352,53 +262,9 @@ function resize() {
   camera.aspect = width / height;
   camera.updateProjectionMatrix();
   renderer.setSize(width, height);
-  updateProjectedHotspots();
-}
-
-function disposeTexture() {
-  if (texture) {
-    texture.dispose();
-    texture = null;
-  }
-}
-
-function clearTransition() {
-  if (transitionMesh) {
-    scene?.remove(transitionMesh);
-    transitionMesh.geometry.dispose();
-    transitionMesh.material.dispose();
-    transitionMesh = null;
-  }
-  if (transitionTexture) {
-    transitionTexture.dispose();
-    transitionTexture = null;
-  }
-}
-
-function startTextureTransition(oldTexture) {
-  if (!oldTexture || !scene) return;
-  clearTransition();
-  const geometry = new THREE.SphereGeometry(499, 128, 64);
-  geometry.scale(-1, 1, 1);
-  const material = new THREE.MeshBasicMaterial({
-    map: oldTexture,
-    transparent: true,
-    opacity: 1,
-    depthWrite: false,
-  });
-  transitionMesh = new THREE.Mesh(geometry, material);
-  transitionMesh.renderOrder = 2;
-  transitionTexture = oldTexture;
-  transitionStartedAt = performance.now();
-  scene.add(transitionMesh);
-}
-
-function updateTransitionFade() {
-  if (!transitionMesh) return;
-  const progress = Math.min((performance.now() - transitionStartedAt) / transitionDuration, 1);
-  const eased = 1 - Math.pow(1 - progress, 3);
-  transitionMesh.material.opacity = 1 - eased;
-  if (progress >= 1) clearTransition();
+  renderer.getDrawingBufferSize(drawingBufferSize);
+  mesh?.material.setProjectionResolution?.(drawingBufferSize.x, drawingBufferSize.y);
+  needsProjection = true;
 }
 
 function textureCandidates() {
@@ -407,79 +273,62 @@ function textureCandidates() {
     .filter((url, index, items) => items.indexOf(url) === index);
 }
 
-function loadTexture(candidateIndex = 0) {
+function loadTexture() {
   if (!mesh) return;
   isTextureLoading.value = true;
   projectedHotspots.value = [];
   projectedInfoAreas.value = [];
   textureError.value = '';
-  const candidates = textureCandidates();
-  const imageUrl = candidates[candidateIndex];
-  if (!imageUrl) {
-    disposeTexture();
-    clearTransition();
-    mesh.material.map = null;
-    mesh.material.color.set(0x111827);
-    mesh.material.needsUpdate = true;
-    isTextureLoading.value = false;
-    textureError.value = props.imageUrl ? 'Could not load panorama image.' : '';
-    return;
-  }
-  const loader = new THREE.TextureLoader();
-  loader.setCrossOrigin('anonymous');
-  loader.load(
-    imageUrl,
-    (loadedTexture) => {
-      const oldTexture = texture;
-      texture = loadedTexture;
-      texture.colorSpace = THREE.SRGBColorSpace;
-      texture.minFilter = THREE.LinearFilter;
-      texture.magFilter = THREE.LinearFilter;
-      texture.generateMipmaps = false;
-      if (renderer?.capabilities) {
-        texture.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
-      }
-      mesh.material.map = texture;
-      mesh.material.color.set(0xffffff);
-      mesh.material.needsUpdate = true;
-      if (oldTexture) startTextureTransition(oldTexture);
-      isTextureLoading.value = false;
-      resize();
-    },
-    undefined,
-    (error) => {
-      if (candidateIndex + 1 < candidates.length) {
-        loadTexture(candidateIndex + 1);
-        return;
-      }
-      console.warn('Panorama texture could not be loaded.', imageUrl, error);
-      mesh.material.map = null;
-      mesh.material.color.set(0x111827);
-      mesh.material.needsUpdate = true;
-      isTextureLoading.value = false;
-      textureError.value = 'Could not load panorama image.';
-    },
-  );
+  textureManager.load(textureCandidates());
+}
+
+function preloadTexture(url) {
+  return textureManager?.preload(url) || Promise.resolve(null);
 }
 
 function initThree() {
   if (!container.value) return;
   scene = new THREE.Scene();
-  camera = new THREE.PerspectiveCamera(fov, 1, 1, 1100);
+  camera = new THREE.PerspectiveCamera(75, 1, 1, 1100);
+  cameraController = createCameraController(camera);
+  if (!hasAppliedInitialView) {
+    cameraController.setInitialView(props.initialView);
+    hasAppliedInitialView = true;
+  }
   raycaster = new THREE.Raycaster();
   pointer = new THREE.Vector2();
 
   const geometry = new THREE.SphereGeometry(500, 128, 64);
   geometry.scale(-1, 1, 1);
-  const material = new THREE.MeshBasicMaterial({ color: 0x111827 });
+  projectionState = createProjectionState();
+  const material = createProjectionPanoramaMaterial();
+  material.setProjectionState(projectionState.state);
   mesh = new THREE.Mesh(geometry, material);
   scene.add(mesh);
 
-  renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+  renderer = new THREE.WebGLRenderer({ antialias: false, alpha: false });
   renderer.setClearColor(0x111827, 1);
-  renderer.setPixelRatio(window.devicePixelRatio || 1);
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, props.maxPixelRatio));
   renderer.domElement.className = 'panorama-canvas';
   container.value.appendChild(renderer.domElement);
+  textureManager = createTextureManager({
+    scene,
+    mesh,
+    renderer,
+    getTransition: () => props.transition,
+    hasPrimaryImage: () => Boolean(props.imageUrl),
+    onLoadingChange: (value) => { isTextureLoading.value = value; },
+    onError: (value) => { textureError.value = value; },
+    onApplied: () => {
+      needsProjection = true;
+      resize();
+      textureReadyPending = true;
+    },
+  });
+  areaLandmarkRenderer = createLandmarkRenderer(
+    container.value,
+    (hotspot, event) => emit('hotspot-click', hotspot, event),
+  );
   resize();
   loadTexture();
   markInteraction();
@@ -487,27 +336,28 @@ function initThree() {
 }
 
 function onPointerDown(event) {
-  if (!hasImage.value) return;
+  if (!props.interactive || !hasImage.value) return;
   markInteraction();
   isDragging = true;
   pointerDown = {
     x: event.clientX,
     y: event.clientY,
-    lon,
-    lat,
+    view: cameraController.getView(),
   };
 }
 
 function onPointerMove(event) {
-  if (!isDragging || !pointerDown) return;
+  if (!props.interactive || !isDragging || !pointerDown) return;
   markInteraction();
-  lon = pointerDown.lon - (event.clientX - pointerDown.x) * 0.12;
-  lat = clampLat(pointerDown.lat + (event.clientY - pointerDown.y) * 0.12);
+  const deltaX = event.clientX - pointerDown.x;
+  const deltaY = event.clientY - pointerDown.y;
+  cameraController.restoreView(pointerDown.view);
+  cameraController.dragBy(deltaX, deltaY);
   emitViewChange();
 }
 
 function onPointerUp(event) {
-  if (!isDragging || !pointerDown) return;
+  if (!props.interactive || !isDragging || !pointerDown) return;
   markInteraction();
   const moved = Math.hypot(event.clientX - pointerDown.x, event.clientY - pointerDown.y);
   isDragging = false;
@@ -519,7 +369,7 @@ function onPointerUp(event) {
     pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
     raycaster.setFromCamera(pointer, camera);
     const intersection = raycaster.intersectObject(mesh, false)[0];
-    const sphericalPoint = intersection ? vectorToLonLat(intersection.point) : { lon, lat };
+    const sphericalPoint = intersection ? cameraController.vectorToLonLat(intersection.point) : cameraController.getView();
 
     emit('panorama-click', {
       x: ((event.offsetX || 0) / (container.value?.clientWidth || 1)) * 100,
@@ -530,11 +380,18 @@ function onPointerUp(event) {
   }
 }
 
+function onHotspotClick(hotspot, event) {
+  if (!props.interactive) return;
+  if (hotspot.type === 'audio' && import.meta.env?.DEV) console.debug('[Audio Renderer] click()', hotspot.id);
+  markInteraction();
+  emit('hotspot-click', hotspot, event);
+}
+
 function onWheel(event) {
-  if (!hasImage.value) return;
+  if (!props.interactive || !hasImage.value) return;
   markInteraction();
   event.preventDefault();
-  fov = clamp(fov + event.deltaY * 0.04, 35, 100);
+  cameraController.zoomBy(event.deltaY);
   emitViewChange();
 }
 
@@ -544,25 +401,25 @@ watch(
     await nextTick();
     loadTexture();
   },
-  { deep: true },
+  { deep: false },
 );
 
 watch(
   () => props.hotspots,
-  () => updateProjectedHotspots(),
-  { deep: true },
+  () => { needsProjection = true; },
+  { deep: false },
 );
 
 watch(
   () => props.initialView,
   (value) => {
-    lon = Number(value?.lon ?? 0);
-    lat = clampLat(value?.lat ?? 0);
-      fov = Number(value?.fov ?? 75);
+    if (hasAppliedInitialView || !cameraController) return;
+    hasAppliedInitialView = true;
+    cameraController.setInitialView(value);
     markInteraction();
     emitViewChange();
   },
-  { deep: true, immediate: true },
+  { deep: false, immediate: true },
 );
 
 onMounted(() => {
@@ -578,10 +435,18 @@ onBeforeUnmount(() => {
   dispose();
 });
 
+onUpdated(() => {
+  componentUpdateCount += 1;
+  if (import.meta.env?.DEV) console.debug('[Viewer Render] PanoramaViewer updated()', componentUpdateCount);
+});
+
 defineExpose({
   animateToView,
   getView,
   setView,
+  setIntroState,
+  resetProjectionIntro,
+  preloadTexture,
   dispose,
 });
 </script>
@@ -590,7 +455,7 @@ defineExpose({
   <div
     ref="container"
     class="panorama-viewer"
-    :class="{ empty: !hasImage }"
+    :class="{ empty: !hasImage, 'is-interaction-locked': !interactive }"
     @pointerdown="onPointerDown"
     @pointermove="onPointerMove"
     @pointerup="onPointerUp"
@@ -615,7 +480,7 @@ defineExpose({
           v-else
           class="panorama-info-area"
           :points="area.polygonPoints"
-          @click.stop="markInteraction(); emit('hotspot-click', area, $event)"
+          @click.stop="interactive && (markInteraction(), emit('hotspot-click', area, $event))"
         />
       </template>
     </svg>
@@ -631,7 +496,7 @@ defineExpose({
           clipPath: area.mediaClipPath,
           WebkitClipPath: area.mediaClipPath,
         }"
-      @click.stop="markInteraction(); emit('hotspot-click', area, $event)"
+      @click.stop="interactive && (markInteraction(), emit('hotspot-click', area, $event))"
     >
       <iframe
           v-if="area.youtube_embed_url"
@@ -655,24 +520,25 @@ defineExpose({
       class="panorama-hotspot"
       :class="[
         hotspotDisplayMode === 'viewer' ? `viewer-hotspot viewer-hotspot-${hotspot.type || 'point'}` : 'hotspot-dot',
-        { active: hotspot.id === selectedHotspotId },
+        { active: hotspot.id === selectedHotspotId, playing: hotspot.type === 'audio' && hotspot.id === activeAudioPoiId },
       ]"
       :style="{ left: `${hotspot.screenX}px`, top: `${hotspot.screenY}px` }"
       type="button"
-      @click.stop="markInteraction(); emit('hotspot-click', hotspot, $event)"
-      @dblclick.stop="markInteraction(); emit('hotspot-dblclick', hotspot, $event)"
+      @click.stop="onHotspotClick(hotspot, $event)"
+      @dblclick.stop="interactive && (markInteraction(), emit('hotspot-dblclick', hotspot, $event))"
     >
       <template v-if="hotspotDisplayMode === 'viewer' && hotspot.type === 'nav'">
         <NavRenderer :hotspot="hotspot" />
       </template>
       <template v-else>
+        <span v-if="hotspotDisplayMode === 'viewer' && hotspot.type === 'audio'" class="viewer-audio-poi-icon" aria-hidden="true"><i></i><svg viewBox="0 0 24 24"><path d="M6 9v6M10 6v12M14 3v18M18 8v8" /></svg></span>
         <span
-          v-if="hotspotDisplayMode === 'viewer' && pointHotspotLogo && hotspot.type !== 'info'"
+          v-if="hotspotDisplayMode === 'viewer' && pointHotspotLogo && hotspot.type !== 'info' && hotspot.type !== 'audio'"
           class="viewer-point-logo"
           :style="{ backgroundImage: `url(${pointHotspotLogo})` }"
         ></span>
         <span v-else-if="hotspotDisplayMode === 'viewer' && hotspot.type === 'info'" class="viewer-info-dot">i</span>
-        <span v-else class="viewer-point-dot">{{ hotspot.index + 1 }}</span>
+        <span v-else-if="hotspot.type !== 'audio'" class="viewer-point-dot">{{ hotspot.index + 1 }}</span>
         <span class="hotspot-label">{{ hotspot.label || 'Hotspot' }}</span>
         <span class="viewer-hotspot-preview" v-if="hotspotDisplayMode === 'viewer' && hotspot.preview_image" :style="{ backgroundImage: `url(${hotspot.preview_image})` }"></span>
       </template>

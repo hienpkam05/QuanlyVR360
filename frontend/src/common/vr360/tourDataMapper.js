@@ -1,5 +1,14 @@
 export function defaultNarration() {
-  return { duong_dan_file_audio: "", tu_dong_phat: false, thoi_luong_giay: 0 };
+  return {
+    enabled: false,
+    duong_dan_file_audio: "",
+    tu_dong_phat: false,
+    thoi_luong_giay: 0,
+    volume: 1,
+    language: "",
+    loop: false,
+    description: "",
+  };
 }
 
 export function defaultTransition() {
@@ -22,26 +31,20 @@ export function normalizeNavStyle(navStyle) {
     : NAV_STYLES.default;
 }
 
-export function normalizeHotspot(h) {
+import { normalizeBuilderPoint } from "./pointSchema.js";
+
+export function normalizeHotspot(h = {}) {
+  const point = normalizeBuilderPoint(h);
   return {
-    lon: h.lon || 0,
-    lat: h.lat || 0,
-    label: h.label || "",
-    target: h.target || "",
-    type: h.type || "poi",
-    ...(h.type === "nav" || h.loai_poi === "chuyen_canh"
-      ? { navStyle: normalizeNavStyle(h.navStyle) }
+    ...point,
+    ...(point.type === "nav" || point.loai_poi === "chuyen_canh"
+      ? { navStyle: normalizeNavStyle(point.navStyle) }
       : {}),
-    icon: h.icon || null,
-    loai_poi: h.loai_poi || null,
-    ...(h.chieu_cao_duong_ghim != null ? { chieu_cao_duong_ghim: h.chieu_cao_duong_ghim } : {}),
-    ...(h.thong_tin_gioi_thieu ? { thong_tin_gioi_thieu: h.thong_tin_gioi_thieu } : {}),
     khi_dua_chuot_vao: {
-      hien_thi_anh_thu_nho: h.khi_dua_chuot_vao?.hien_thi_anh_thu_nho || false,
-      duong_dan_thumbnail: h.khi_dua_chuot_vao?.duong_dan_thumbnail || "",
-      van_ban_huong_dan: h.khi_dua_chuot_vao?.van_ban_huong_dan || "",
+      hien_thi_anh_thu_nho: point.khi_dua_chuot_vao?.hien_thi_anh_thu_nho || false,
+      duong_dan_thumbnail: point.khi_dua_chuot_vao?.duong_dan_thumbnail || "",
+      van_ban_huong_dan: point.khi_dua_chuot_vao?.van_ban_huong_dan || "",
     },
-    entryView: h.entryView || null,
   };
 }
 

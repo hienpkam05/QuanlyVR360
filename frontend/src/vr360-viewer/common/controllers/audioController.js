@@ -1,59 +1,53 @@
-function dispose(player) {
-  if (!player) return;
-  try {
-    player.pause();
-    player.currentTime = 0;
-    player.removeAttribute('src');
-    player.load();
-  } catch {
-    // Audio cleanup must never block Viewer unmount or scene changes.
-  }
-}
+import AudioManager from '../audio/AudioManager.js';
+import { AUDIO_SCOPE } from '../audio/constants.js';
 
-export function createAudioController() {
-  let background = null;
-  let scene = null;
-  let hotspot = null;
-
-  function stop(which) {
-    dispose(which === 'background' ? background : which === 'scene' ? scene : hotspot);
-    if (which === 'background') background = null;
-    if (which === 'scene') scene = null;
-    if (which === 'hotspot') hotspot = null;
-  }
+// Compatibility adapter for the existing layout API. HTMLAudioElement access
+// remains exclusively inside AudioManager.
+export function createAudioController(options = {}) {
+  const manager = options.manager || new AudioManager(options);
 
   return {
-    async playBackground(url) {
-      if (!url) { stop('background'); return { playing: false, blocked: false }; }
-      if (!background || background.src !== url) {
-        stop('background');
-        background = new Audio(url);
-        background.loop = true;
-        background.volume = 0.55;
+    manager,
+    preload: (source, scope = AUDIO_SCOPE.SCENE) => manager.preload(source, scope),
+    preloadWithOptions: (source, scope, options) => manager.preload(source, scope, options),
+    play: (source, scope, options) => manager.play(source, scope, options),
+    playNarration: (source, scope, options) => manager.playNarration(source, scope, options),
+    playScene: (source) => manager.play(source, AUDIO_SCOPE.SCENE),
+    pauseScene: () => manager.pause(AUDIO_SCOPE.SCENE),
+    resumeScene: () => manager.resume(AUDIO_SCOPE.SCENE),
+    stopScene: () => manager.stop(AUDIO_SCOPE.SCENE),
+    pause: (scope) => manager.pause(scope),
+    resume: (scope) => manager.resume(scope),
+    stop: (scope, options) => manager.stop(scope, options),
+    playBackground: async (source, options = {}) => {
+      if (!source) {
+        manager.stop(AUDIO_SCOPE.BACKGROUND);
+        return { playing: false, blocked: false };
       }
-      try { await background.play(); return { playing: true, blocked: false }; }
-      catch { return { playing: false, blocked: true }; }
+      return manager.play(source, AUDIO_SCOPE.BACKGROUND, { loop: true, ...options });
     },
-    toggleBackground() {
-      if (!background) return false;
-      if (background.paused) { background.play().catch(() => {}); return true; }
-      background.pause();
-      return false;
+    toggleBackground: async () => {
+      if (manager.isPlaying(AUDIO_SCOPE.BACKGROUND)) {
+        return manager.pause(AUDIO_SCOPE.BACKGROUND);
+      }
+      return manager.resume(AUDIO_SCOPE.BACKGROUND);
     },
-    async playScene(url) {
-      stop('scene');
-      if (!url) return { playing: false, blocked: false };
-      scene = new Audio(url);
-      try { await scene.play(); return { playing: true, blocked: false }; }
-      catch { return { playing: false, blocked: true }; }
+    playHotspot: (source, options = {}) => {
+      if (!source) return Promise.resolve();
+      return manager.playNarration(source, AUDIO_SCOPE.POI, options);
     },
-    playHotspot(url) {
-      stop('hotspot');
-      if (!url) return;
-      hotspot = new Audio(url);
-      hotspot.play().catch(() => {});
-    },
-    stopAll() { stop('background'); stop('scene'); stop('hotspot'); },
-    dispose() { this.stopAll(); },
+    seek: (time, scope) => manager.seek(time, scope),
+    mute: (scope) => manager.mute(scope),
+    unmute: (scope) => manager.unmute(scope),
+    setVolume: (volume, scope) => manager.setVolume(volume, scope),
+    setPlaybackRate: (rate, scope) => manager.setPlaybackRate(rate, scope),
+    setMasterVolume: (volume) => manager.setMasterVolume(volume),
+    getMasterVolume: () => manager.getMasterVolume(),
+    setLoop: (loop, scope) => manager.setLoop(loop, scope),
+    getPlaybackState: (scope) => manager.getPlaybackState(scope),
+    getNarrationQueue: () => manager.getNarrationQueue(),
+    resumeInterrupted: (scope) => manager.resumeInterrupted(scope),
+    stopAll: () => manager.stop(),
+    dispose: () => manager.dispose(),
   };
 }

@@ -48,8 +48,8 @@ const typeLabel = (h) => {
               <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="11" height="11"><circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" /></svg>
             </span>
             <span class="vb-hs-idx">{{ i + 1 }}</span>
-            <span class="vb-hs-type-badge" :class="'vb-hs-badge-' + (h.loai_poi || h.type)">{{ typeLabel(h) }}</span>
             <span class="vb-hs-name">{{ h.label || 'Điểm ' + (i + 1) }}</span>
+            <span class="vb-hs-type-badge" :class="'vb-hs-badge-' + (h.loai_poi || h.type)">{{ typeLabel(h) }}</span>
           </div>
           <div class="vb-hs-card-actions">
             <button class="vb-hs-card-btn" :class="{ 'vb-hs-card-btn-locked': h.locked }" :title="h.locked ? 'Mở khóa' : 'Khóa vị trí'" @click.stop="emit('toggle-lock', i)">
