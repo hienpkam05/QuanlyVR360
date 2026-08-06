@@ -26,3 +26,12 @@ coverage/
 # OS
 .DS_Store
 Thumbs.db
+
+# AI generated folders
+.dist-*
+.audio-*
+
+# nếu AI còn tạo thêm
+.check-*
+.temp-*
+.tmp-*
