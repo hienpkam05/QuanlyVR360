@@ -6,6 +6,9 @@
 // ═══════════════════════════════════════════════════════════════
 import * as THREE from "three";
 import { resolveHotspotIcon, navIconSvg } from "@/common/hotspotIcons";
+import { renderNavHotspot } from "./NavRenderer.js";
+import { resolvePointKind } from "./pointSchema.js";
+import { resolvePointRenderer } from "./pointRendererRegistry.js";
 
 // Re-export for convenience
 export { resolveHotspotIcon, navIconSvg } from "@/common/hotspotIcons";
@@ -15,27 +18,26 @@ const NAV_ARROW_SVG = `
   <path d="M28 70 48 51l20 19" fill="none" stroke="white" stroke-width="9" stroke-linecap="round" stroke-linejoin="round" opacity=".9"/>
 </svg>`;
 export const NAV_ARROW_IMG = `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(NAV_ARROW_SVG)}`;
+const AUDIO_ICON_SVG = '<path d="M6 9v6M10 6v12M14 3v18M18 8v8" stroke-linecap="round"/>';
 
 // ═══════════════════════════════════════════════════════════════
 //  Hotspot DOM Builder — creates the exact same HTML structure
 //  that VrTourViewer uses for each hotspot type.
 // ═══════════════════════════════════════════════════════════════
 export function buildHotspotElement(hs, index, options = {}) {
-  const { editMode = false, navArrowSrc = NAV_ARROW_IMG } = options;
+  const { editMode = false, navArrowSrc = NAV_ARROW_IMG, targetScene = null } = options;
   const el = document.createElement("div");
   el.className = "hotspot";
   el.dataset.lon = hs.lon;
   el.dataset.lat = hs.lat;
   el.dataset.index = index;
 
-  if (hs.type === "nav") {
-    // "Lối đi" — mũi tên chevron hướng xuống có hiệu ứng chảy
+  const kind = resolvePointKind(hs);
+  const renderer = resolvePointRenderer(hs);
+  if (kind === "nav") {
     el.classList.add("hotspot-nav");
-    el.innerHTML = `
-      <div class="hotspot-marker hotspot-marker-nav hotspot-walk">
-        <img class="hotspot-walk-img" src="${navArrowSrc}" alt="" draggable="false" />
-      </div>`;
-  } else if (hs.loai_poi === "ghim_dia_danh") {
+    renderNavHotspot(el, hs, { navArrowSrc, targetScene });
+  } else if (kind === "pin") {
     // "Th? ghim ch�n kh�ng" � nh�n ch? IN HOA + du?ng n�t d?t c?m xu?ng
     el.classList.add("hotspot-badge");
     const rawH = Number(hs.chieu_cao_duong_ghim);
@@ -49,7 +51,9 @@ export function buildHotspotElement(hs, index, options = {}) {
       </div>`;
   } else {
     // POI mặc định — pin giọt nước + icon + nhãn
-    const poiSvg = hs.loai_poi
+    const poiSvg = kind === "audio"
+      ? AUDIO_ICON_SVG
+      : hs.loai_poi
       ? navIconSvg(resolveHotspotIcon(hs))
       : '<path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/>';
     el.innerHTML = `
@@ -89,6 +93,7 @@ export class HotspotRenderer {
       onHotspotDragEnd: null,  // (index, event) => void
       onHotspotHover: null,    // (index, hs, el) => void
       onHotspotHoverEnd: null, // () => void
+      resolveNavTarget: null, // (targetId) => scene
       selectedIndex: -1,
       ...options,
     };
@@ -99,11 +104,6 @@ export class HotspotRenderer {
     this._dragStartPos = null;
     this._dragStartLonLat = null;
 
-    // Hover popup (shared, same as VrTourViewer)
-    this.hoverPopupEl = document.createElement("div");
-    this.hoverPopupEl.className = "hotspot-hover-popup";
-    this.container.appendChild(this.hoverPopupEl);
-
     // Reusable THREE objects for projection math
     this._proj = new THREE.Vector3();
     this._camDir = new THREE.Vector3();
@@ -112,6 +112,7 @@ export class HotspotRenderer {
 
   // Update all hotspots from scene data + camera
   update(hotspots, camera, containerWidth, containerHeight) {
+    this._allHotspots = hotspots;
     const n = hotspots.length;
     const opts = this.options;
 
@@ -132,12 +133,15 @@ export class HotspotRenderer {
       const hs = hotspots[i];
 
       // Rebuild DOM if hotspot data changed (type, icon, label, etc.)
-      const dataKey = `${hs.type}|${hs.loai_poi}|${resolveHotspotIcon(hs)}|${hs.label}|${hs.chieu_cao_duong_ghim}`;
+  const kind = resolvePointKind(hs);
+    const renderer = resolvePointRenderer(hs);
+      const targetScene = kind === "nav" ? opts.resolveNavTarget?.(hs.target) : null;
+      const dataKey = `${kind}|${hs.navStyle}|${hs.loai_poi}|${resolveHotspotIcon(hs)}|${hs.label}|${hs.target}|${targetScene?.name || ""}|${targetScene?.thumb || targetScene?.image || ""}|${hs.chieu_cao_duong_ghim}`;
       if (el._dataKey !== dataKey) {
         el._dataKey = dataKey;
         el.innerHTML = "";
         // Rebuild using the same structure as VrTourViewer
-        this._rebuildElement(el, hs, i);
+        this._rebuildElement(el, hs, i, targetScene);
       }
 
       // Update dataset
@@ -149,7 +153,7 @@ export class HotspotRenderer {
       const pos = this._projectToScreen(hs.lon, hs.lat, camera, containerWidth, containerHeight);
       if (!pos) {
         el.classList.add("hidden");
-        if (el === this._hoveredEl) this._hideHoverPopup();
+        if (el === this._hoveredEl) this._hoveredEl = null;
         continue;
       }
 
@@ -179,28 +183,22 @@ export class HotspotRenderer {
       el.classList.toggle("hotspot-locked", !!hs.locked);
     }
 
-    // Position hover popup if visible
-    if (this._hoveredEl) this._positionHoverPopup(this._hoveredEl);
   }
 
-  _rebuildElement(el, hs, index) {
+  _rebuildElement(el, hs, index, targetScene) {
     el.innerHTML = "";
     el.className = "hotspot";
 
     if (hs.loai_poi) el.classList.add("hotspot-poi-" + hs.loai_poi);
 
-    if (hs.type === "nav") {
+    const kind = resolvePointKind(hs);
+    if (kind === "nav") {
       el.classList.add("hotspot-nav");
-      const marker = document.createElement("div");
-      marker.className = "hotspot-marker hotspot-marker-nav hotspot-walk";
-      const img = document.createElement("img");
-      img.className = "hotspot-walk-img";
-      img.src = this.options.navArrowSrc;
-      img.alt = "";
-      img.draggable = false;
-      marker.appendChild(img);
-      el.appendChild(marker);
-    } else if (hs.loai_poi === "ghim_dia_danh") {
+      renderNavHotspot(el, hs, {
+        navArrowSrc: this.options.navArrowSrc,
+        targetScene,
+      });
+    } else if (kind === "pin") {
       el.classList.add("hotspot-badge");
       const rawH = Number(hs.chieu_cao_duong_ghim);
       const lineH = rawH > 0 ? rawH : 54;
@@ -212,17 +210,24 @@ export class HotspotRenderer {
           <div class="badge-pin-anchor"></div>
         </div>`;
     } else {
-      const poiSvg = hs.loai_poi
+      const poiSvg = kind === "audio"
+        ? AUDIO_ICON_SVG
+        : hs.loai_poi
         ? navIconSvg(resolveHotspotIcon(hs))
         : '<path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/>';
       const marker = document.createElement("div");
-      marker.className = "hotspot-marker";
+      marker.className = `hotspot-marker${kind === "audio" ? " hotspot-audio-marker" : ""}`;
       marker.innerHTML = `
         <div class="hotspot-icon">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">${poiSvg}</svg>
         </div>
         <div class="hotspot-label">${hs.label || "Hotspot " + (index + 1)}</div>`;
       el.appendChild(marker);
+      if (kind === "audio") {
+        el.classList.add("hotspot-audio-marker");
+        marker.setAttribute("data-audio-renderer", "true");
+        if (import.meta.env?.DEV) console.debug('[Audio Renderer] render()', hs.id || index);
+      }
     }
 
     // Edit mode ring
@@ -242,6 +247,7 @@ export class HotspotRenderer {
 
     el.onclick = (e) => {
       e.stopPropagation();
+      if (resolvePointKind(this._allHotspots?.[index] || {}) === 'audio' && import.meta.env?.DEV) console.debug('[Audio Renderer] click()', this._allHotspots[index]?.id || index);
       opts.onHotspotClick?.(index, e);
     };
 
@@ -252,14 +258,11 @@ export class HotspotRenderer {
 
     el.onmouseenter = () => {
       this._hoveredEl = el;
-      // Hover chỉ highlight UI, không hiển thị popup preview
-      // (popup preview chỉ hiển thị khi click/select - xử lý ở builder)
       opts.onHotspotHover?.(index, el);
     };
 
     el.onmouseleave = () => {
       this._hoveredEl = null;
-      // Không gọi showHoverPopup nữa - chỉ notify builder
       opts.onHotspotHoverEnd?.();
     };
 
@@ -334,43 +337,6 @@ export class HotspotRenderer {
     return { x, y };
   }
 
-  // Hover popup (same as VrTourViewer)
-  showHoverPopup(hs, el, scenes) {
-    const cfg = hs.khi_dua_chuot_vao;
-    let thumb = null;
-    let caption = "";
-    if (cfg?.hien_thi_anh_thu_nho && cfg?.duong_dan_thumbnail) {
-      thumb = cfg.duong_dan_thumbnail;
-      caption = cfg.van_ban_huong_dan || "";
-    } else if (hs.type === "nav" && hs.target && scenes) {
-      const target = scenes.find((s) => s.id === hs.target);
-      if (target) {
-        thumb = target.thumb || target.image;
-        caption = hs.label || target.name || "";
-      }
-    }
-    if (!thumb) return;
-    this.hoverPopupEl.innerHTML = `
-      <img src="${thumb}" alt="" />
-      ${caption ? `<div class="hotspot-hover-caption">${caption}</div>` : ""}
-    `;
-    this._hoveredEl = el;
-    this.hoverPopupEl.classList.add("show");
-    this._positionHoverPopup(el);
-  }
-
-  _hideHoverPopup() {
-    this._hoveredEl = null;
-    this.hoverPopupEl.classList.remove("show");
-  }
-
-  _positionHoverPopup(el) {
-    const elRect = el.getBoundingClientRect();
-    const containerRect = this.container.getBoundingClientRect();
-    this.hoverPopupEl.style.left = `${elRect.left - containerRect.left + elRect.width / 2}px`;
-    this.hoverPopupEl.style.top = `${elRect.top - containerRect.top}px`;
-  }
-
   // Convert screen coordinates to sphere lon/lat (for drag)
   screenToSphere(cx, cy, camera, canvasRect) {
     const mouse = new THREE.Vector2(
@@ -389,6 +355,5 @@ export class HotspotRenderer {
   dispose() {
     this._els.forEach((el) => el.remove());
     this._els = [];
-    this.hoverPopupEl?.remove();
   }
 }

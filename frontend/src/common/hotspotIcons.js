@@ -39,6 +39,10 @@ export const NAV_ICONS = {
     label: "Phát video",
     svg: '<circle cx="12" cy="12" r="10"/><polygon points="10 8 16 12 10 16 10 8" fill="currentColor" stroke="none"/>',
   },
+  audio: {
+    label: "Audio",
+    svg: '<path d="M4 10v4h3l4 3V7l-4 3H4z" fill="currentColor" stroke="none"/><path d="M15 9.5a4 4 0 010 5M17.5 7a7 7 0 010 10"/>',
+  },
 };
 
 export function navIconSvg(key) {
@@ -57,12 +61,13 @@ export const POI_TYPES = {
   thong_tin_van_ban: { label: "Thông tin văn bản", icon: "info" },
   thu_vien_anh: { label: "Thư viện ảnh", icon: "gallery" },
   phat_video: { label: "Phát video", icon: "video" },
+  audio: { label: "Audio", icon: "audio" },
   // "Th? ghim ch�n kh�ng" (Pin Marker Badge) � d�nh d?u danh lam / v? tr� d?a
   // l� / ph�n khu n?m XA t?m m?t camera: nh�n ch? IN HOA n?i tr�n n?n tr?i/n�i,
   // đường nét đứt cắm xuống chấm neo tại điểm thực tế. Hình dạng riêng (không
   // dùng pin giọt nước) — dựng ở VrTourViewer; `icon` chỉ dùng cho dropdown
   // trong builder. Xem [[project_vr360_builder_platform]].
-  ghim_dia_danh: { label: "Ghim địa danh (thẻ ở xa)", icon: "flag" },
+  ghim_dia_danh: { label: "Địa danh", icon: "flag" },
 };
 
 // Thứ tự ưu tiên khi chọn icon cho 1 hotspot: loai_poi > icon tự chọn > mặc định.

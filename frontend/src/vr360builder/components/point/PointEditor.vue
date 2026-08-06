@@ -1,12 +1,10 @@
 ﻿<script setup>
-import { computed, markRaw } from 'vue';
+import { computed } from 'vue';
 import BaseAccordion from '../common/BaseAccordion.vue';
 import NavPointEditor from './editors/NavPointEditor.vue';
-import TextInfoEditor from './editors/poi/TextInfoEditor.vue';
-import VideoEditor from './editors/poi/VideoEditor.vue';
-import GalleryEditor from './editors/poi/GalleryEditor.vue';
-import PinMarkerEditor from './editors/poi/PinMarkerEditor.vue';
 import { POI_TYPES } from '@/common/hotspotIcons.js';
+import { resolvePointKind } from '@/common/vr360/pointSchema.js';
+import { resolvePointEditor } from './editorRegistry.js';
 
 const props = defineProps({
   hotspot: { type: Object, required: true },
@@ -22,10 +20,16 @@ const emit = defineEmits([
   'toggle-lock', 'duplicate', 'remove',
   'preview-target', 'save-entry-view', 'clear-entry-view',
   'toggle-acc', 'select-info-image', 'select-gallery-images', 'select-video',
+  'pick-audio', 'clear-audio', 'update-audio',
+  'select-audio',
 ]);
 
 // Forward helpers for nested component emit
 function forwardUpdate(key, value) {
+  if (key.startsWith('audio.')) {
+    emit('update-audio', { [key.slice(6)]: value });
+    return;
+  }
   emit('update', key, value);
 }
 function forwardUpdateHover(key, value) {
@@ -35,23 +39,19 @@ function forwardAccToggle(key) {
   emit('toggle-acc', key);
 }
 
-// ── Dynamic editor map ──
-// Key: loai_poi value → component
-const poiEditorMap = {
-  thong_tin_van_ban: markRaw(TextInfoEditor),
-  phat_video: markRaw(VideoEditor),
-  thu_vien_anh: markRaw(GalleryEditor),
-  ghim_dia_danh: markRaw(PinMarkerEditor),
-};
-
-const isNav = computed(() => props.hotspot.type === 'nav' || props.hotspot.loai_poi === 'chuyen_canh');
+const pointKind = computed(() => resolvePointKind(props.hotspot));
+const isNav = computed(() => pointKind.value === 'nav');
 const isPoi = computed(() => !isNav.value);
 const poiType = computed(() => props.hotspot.loai_poi);
-const poiEditor = computed(() => poiEditorMap[poiType.value] || null);
-const hasContent = computed(() => poiType.value && poiType.value !== 'chuyen_canh' && poiType.value !== 'ghim_dia_danh');
-const isPinMarker = computed(() => poiType.value === 'ghim_dia_danh');
+const poiEditor = computed(() => resolvePointEditor(props.hotspot));
+const hasContent = computed(() => ['info', 'gallery', 'video'].includes(pointKind.value));
+const isPinMarker = computed(() => pointKind.value === 'pin');
+const isAreaLandmark = computed(() => pointKind.value === 'area_landmark');
+const isAudio = computed(() => pointKind.value === 'audio');
 
 const typeLabel = computed(() => {
+  if (isAudio.value) return 'Audio';
+  if (isAreaLandmark.value) return 'Địa danh';
   if (poiType.value && POI_TYPES[poiType.value]) return POI_TYPES[poiType.value].label;
   return isNav.value ? 'Chỉ đường' : 'POI';
 });
@@ -93,8 +93,9 @@ const typeLabel = computed(() => {
 
     <!-- ── POI EDITOR ── -->
     <template v-if="isPoi">
+      <component v-if="isAudio && poiEditor" :is="poiEditor" :hotspot="hotspot" @update="forwardUpdate" @select-audio="emit('pick-audio')" @clear-audio="emit('clear-audio')" />
       <!-- Accordion: Thông tin chung -->
-      <BaseAccordion title="Thông tin chung" :open="accOpen.chung" @toggle="emit('toggle-acc', 'chung')">
+      <BaseAccordion v-if="!isAudio" title="Thông tin chung" :open="accOpen.chung" @toggle="emit('toggle-acc', 'chung')">
         <template #icon>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" /></svg>
         </template>
@@ -112,17 +113,17 @@ const typeLabel = computed(() => {
         <div class="vb-prop-row-inline">
           <div class="vb-prop-row">
             <label class="vb-prop-label">LON</label>
-            <input class="vb-prop-input vb-prop-input-mono" type="number" step="0.1" :value="hotspot.lon" :disabled="hotspot.locked" @input="emit('update', 'lon', +$event.target.value)" />
+            <input class="vb-prop-input vb-prop-input-mono" type="number" step="0.1" :value="hotspot.lon" :disabled="hotspot.locked || isAreaLandmark" @input="emit('update', 'lon', +$event.target.value)" />
           </div>
           <div class="vb-prop-row">
             <label class="vb-prop-label">LAT</label>
-            <input class="vb-prop-input vb-prop-input-mono" type="number" step="0.1" :value="hotspot.lat" :disabled="hotspot.locked" @input="emit('update', 'lat', +$event.target.value)" />
+            <input class="vb-prop-input vb-prop-input-mono" type="number" step="0.1" :value="hotspot.lat" :disabled="hotspot.locked || isAreaLandmark" @input="emit('update', 'lat', +$event.target.value)" />
           </div>
         </div>
       </BaseAccordion>
 
       <BaseAccordion
-        v-if="!hotspot.loai_poi"
+        v-if="!hotspot.loai_poi && !isAudio"
         title="Cảnh đích & góc nhìn"
         :open="accOpen.navTarget"
         @toggle="emit('toggle-acc', 'navTarget')"
@@ -167,7 +168,7 @@ const typeLabel = computed(() => {
       </BaseAccordion>
 
       <!-- Accordion: Nội dung (dynamic by loai_poi) -->
-      <BaseAccordion v-if="hasContent" title="Nội dung" :open="accOpen.noiDung" @toggle="emit('toggle-acc', 'noiDung')">
+      <BaseAccordion v-if="hasContent && !isAudio" title="Nội dung" :open="accOpen.noiDung" @toggle="emit('toggle-acc', 'noiDung')">
         <template #icon>
           <svg v-if="poiType === 'phat_video'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><circle cx="12" cy="12" r="10" /><polygon points="10 8 16 12 10 16 10 8" fill="currentColor" stroke="none" /></svg>
           <svg v-else-if="poiType === 'thu_vien_anh'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="8.5" cy="8.5" r="1.5" /><path d="M21 15l-5-5L5 21" /></svg>
@@ -186,16 +187,20 @@ const typeLabel = computed(() => {
         />
       </BaseAccordion>
 
+      <BaseAccordion v-if="isAreaLandmark && !isAudio" title="Địa danh" :open="accOpen.noiDung" @toggle="emit('toggle-acc', 'noiDung')">
+        <component :is="poiEditor" :hotspot="hotspot" :scenes="scenes" @update="forwardUpdate" />
+      </BaseAccordion>
+
       <!-- Accordion: Ghim địa danh -->
-      <BaseAccordion v-if="isPinMarker" title="Cấu hình ghim" :open="accOpen.noiDung" @toggle="emit('toggle-acc', 'noiDung')">
+      <BaseAccordion v-if="isPinMarker && !isAudio" title="Cấu hình ghim" :open="accOpen.noiDung" @toggle="emit('toggle-acc', 'noiDung')">
         <template #icon>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z" /><line x1="4" y1="22" x2="4" y2="15" /></svg>
         </template>
-        <PinMarkerEditor :hotspot="hotspot" @update="emit('update', $event, arguments[1])" />
+        <component :is="poiEditor" :hotspot="hotspot" @update="forwardUpdate" />
       </BaseAccordion>
 
       <!-- Accordion: Hover -->
-      <BaseAccordion title="Hiệu ứng di chuột" :open="accOpen.hover" @toggle="emit('toggle-acc', 'hover')">
+      <BaseAccordion v-if="!isAudio" title="Hiệu ứng di chuột" :open="accOpen.hover" @toggle="emit('toggle-acc', 'hover')">
         <template #icon>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><path d="M18 11V6a2 2 0 00-2-2h-1M10 4H7a2 2 0 00-2 2v11a8 8 0 0016 0v-5" /><path d="M14 8l2-2-2-2" /></svg>
         </template>
