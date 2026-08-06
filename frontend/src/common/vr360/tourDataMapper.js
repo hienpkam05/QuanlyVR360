@@ -1,5 +1,14 @@
 export function defaultNarration() {
-  return { duong_dan_file_audio: "", tu_dong_phat: false, thoi_luong_giay: 0 };
+  return {
+    enabled: false,
+    duong_dan_file_audio: "",
+    tu_dong_phat: false,
+    thoi_luong_giay: 0,
+    volume: 1,
+    language: "",
+    loop: false,
+    description: "",
+  };
 }
 
 export function defaultTransition() {
@@ -10,41 +19,32 @@ export function defaultHoverState() {
   return { hien_thi_anh_thu_nho: false, duong_dan_thumbnail: "", van_ban_huong_dan: "" };
 }
 
-function normalizeHotspotContent(noiDung, resolve) {
-  if (!noiDung) return null;
-  const content = { ...noiDung };
-  if (content.anh_minh_hoa) content.anh_minh_hoa = resolve(content.anh_minh_hoa);
-  if (content.url_video) content.url_video = resolve(content.url_video);
-  if (Array.isArray(content.danh_sach_anh)) {
-    content.danh_sach_anh = content.danh_sach_anh.map((url) => resolve(url));
-  }
-  return content;
+export const NAV_STYLES = {
+  default: "default",
+  previewExpand: "preview_expand",
+};
+
+export function normalizeNavStyle(navStyle) {
+  if (navStyle === "arrow") return NAV_STYLES.default;
+  return Object.values(NAV_STYLES).includes(navStyle)
+    ? navStyle
+    : NAV_STYLES.default;
 }
 
-export function normalizeHotspot(h, { resolveUrl } = {}) {
-  const resolve = resolveUrl || ((u) => u || "");
+import { normalizeBuilderPoint } from "./pointSchema.js";
+
+export function normalizeHotspot(h = {}) {
+  const point = normalizeBuilderPoint(h);
   return {
-    id: h.id || "",
-    lon: h.lon || 0,
-    lat: h.lat || 0,
-    x: h.x ?? 50,
-    y: h.y ?? 50,
-    label: h.label || "",
-    target: h.target || "",
-    type: h.type || "poi",
-    icon: h.icon || null,
-    loai_poi: h.loai_poi || null,
-    locked: !!h.locked,
-    ...(Array.isArray(h.area_points) ? { area_points: h.area_points } : {}),
-    ...(h.noi_dung ? { noi_dung: normalizeHotspotContent(h.noi_dung, resolve) } : {}),
-    ...(h.chieu_cao_duong_ghim != null ? { chieu_cao_duong_ghim: h.chieu_cao_duong_ghim } : {}),
-    ...(h.thong_tin_gioi_thieu ? { thong_tin_gioi_thieu: h.thong_tin_gioi_thieu } : {}),
+    ...point,
+    ...(point.type === "nav" || point.loai_poi === "chuyen_canh"
+      ? { navStyle: normalizeNavStyle(point.navStyle) }
+      : {}),
     khi_dua_chuot_vao: {
-      hien_thi_anh_thu_nho: h.khi_dua_chuot_vao?.hien_thi_anh_thu_nho || false,
-      duong_dan_thumbnail: h.khi_dua_chuot_vao?.duong_dan_thumbnail || "",
-      van_ban_huong_dan: h.khi_dua_chuot_vao?.van_ban_huong_dan || "",
+      hien_thi_anh_thu_nho: point.khi_dua_chuot_vao?.hien_thi_anh_thu_nho || false,
+      duong_dan_thumbnail: point.khi_dua_chuot_vao?.duong_dan_thumbnail || "",
+      van_ban_huong_dan: point.khi_dua_chuot_vao?.van_ban_huong_dan || "",
     },
-    entryView: h.entryView || null,
   };
 }
 

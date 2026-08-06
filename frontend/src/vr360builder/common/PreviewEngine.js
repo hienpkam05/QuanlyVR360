@@ -1,5 +1,7 @@
 import * as THREE from "three";
 import { HotspotRenderer } from "@/common/vr360/HotspotRenderer";
+import { AreaLandmarkRenderer } from "@/common/vr360/AreaLandmarkRenderer";
+import { isAreaLandmarkPoint } from "@/common/vr360/pointRendererRegistry.js";
 
 // ══════════════════════════════════════
 //  LRU TEXTURE CACHE (max 3)
@@ -185,6 +187,7 @@ export class PreviewEngine {
     this._initScene();
     this._initEvents();
     this._initHotspotRenderer();
+    this._initAreaLandmarkRenderer();
     this._startLoop();
   }
 
@@ -254,18 +257,37 @@ export class PreviewEngine {
       onHotspotHoverEnd: () => {
         this.callbacks.onHotspotHoverEnd?.();
       },
+      resolveNavTarget: (targetId) => this.callbacks.resolveNavTarget?.(targetId),
+    });
+  }
+
+  _initAreaLandmarkRenderer() {
+    this.areaLandmarkRenderer = new AreaLandmarkRenderer(this.canvas.parentElement, {
+      editMode: true,
+      onClick: (annotation, event) => this.callbacks.onAreaLandmarkSelect?.(annotation, event),
+      onLabelDragEnd: (annotation, position) => this.callbacks.onAreaLandmarkLabelDragEnd?.(annotation, position),
+      onVertexDragEnd: (annotation, vertexIndex, position) => {
+        const sphere = this.screenToSphere(position.x + position.rect.left, position.y + position.rect.top);
+        if (sphere) this.callbacks.onAreaLandmarkVertexDragEnd?.(annotation, vertexIndex, sphere);
+      },
     });
   }
 
   setHotspots(hotspots, selectedIndex = -1) {
-    this._sceneHotspots = hotspots || [];
+    this._allHotspots = hotspots || [];
+    this._sceneHotspots = this._allHotspots.filter((hotspot) => !isAreaLandmarkPoint(hotspot));
     this._selectedHotspotIndex = selectedIndex;
+    const selected = this._allHotspots[selectedIndex];
+    this.areaLandmarkRenderer?.setSelectedAnnotation(isAreaLandmarkPoint(selected) ? selected : null);
+    this.areaLandmarkRenderer?.setAnnotations(this._allHotspots.filter(isAreaLandmarkPoint));
     this.requestRender();
   }
 
   setSelectedIndex(index) {
     if (this._selectedHotspotIndex === index) return;
     this._selectedHotspotIndex = index;
+    const selected = this._allHotspots?.[index];
+    this.areaLandmarkRenderer?.setSelectedAnnotation(isAreaLandmarkPoint(selected) ? selected : null);
     this.requestRender();
   }
 
@@ -409,6 +431,7 @@ export class PreviewEngine {
       p.clientWidth,
       p.clientHeight
     );
+    this.areaLandmarkRenderer?.update(this.camera, p.clientWidth, p.clientHeight);
   }
 
   screenToSphere(cx, cy) {
@@ -509,6 +532,7 @@ export class PreviewEngine {
     window.removeEventListener("resize", this._onResize);
     window.removeEventListener("keydown", this._onKeydown);
     this.hotspotRenderer?.dispose();
+    this.areaLandmarkRenderer?.dispose();
     this.textureCache.clear();
     this.renderer.dispose();
   }
