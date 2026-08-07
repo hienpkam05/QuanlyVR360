@@ -1,6 +1,7 @@
 import { normalizeNavStyle } from '../constants/nav.js';
 import { validateTourPayload } from './validateTour.js';
 import { normalizePoint } from '../../../common/vr360/pointSchema.js';
+import { isNavigationPoint } from '../../../common/vr360/pointRendererRegistry.js';
 
 const DEFAULT_VIEW = { lon: 0, lat: 0, fov: 75 };
 const DEFAULT_TRANSITION = { enabled: true, effect: 'fade', duration: 1200, speed: 10, rotation: true };
@@ -59,6 +60,10 @@ export function normalizeHotspot(rawHotspot = {}, sceneIndex = 0, hotspotIndex =
   if (import.meta.env?.DEV && point.type === 'audio') {
     console.debug('[Audio Viewer] Import Audio POI', point.id, raw.type, raw.loai_poi || '');
     console.debug('[Audio Viewer] Normalize Audio POI', point.id, point.audio?.url || '');
+  }
+  if (import.meta.env?.DEV) {
+    console.debug('[POI Runtime] Runtime type:', point.id, point.type);
+    if (point.type === 'area') console.debug('[AreaMedia] Import/Runtime', point.id, point.areaMedia.type, point.areaMedia.src);
   }
   return {
     ...point,
@@ -124,6 +129,7 @@ export function runtimeHotspotForViewer(hotspot, scenes, activeScene) {
     label: hotspot.label,
     content: hotspot.content,
     media: hotspot.media,
+    areaMedia: hotspot.areaMedia,
     audio: hotspot.audio,
     hover: hotspot.hover,
     style: hotspot.style,
@@ -134,22 +140,26 @@ export function runtimeHotspotForViewer(hotspot, scenes, activeScene) {
   if (cached && cached.scenes === scenes && cached.activeScene === activeScene && cached.target === target && cached.signature === signature) {
     return cached.value;
   }
-  const isNav = Boolean(hotspot.targetSceneId) && (
-    hotspot.type === 'nav'
-    || hotspot.loaiPoi === 'chuyen_canh'
-    || hotspot.type === 'area_landmark'
-    || hotspot.type === 'generic'
-    || hotspot.type === 'pin'
-  );
+  // Navigation is resolved from the renderer registry. This preserves Area
+  // Landmark targets without allowing Area Media to navigate.
+  const canNavigate = Boolean(hotspot.targetSceneId) && isNavigationPoint(hotspot);
   const value = {
-    ...hotspot, target_scene_id: isNav && target ? hotspot.targetSceneId : '', target_scene_name: target?.name || '', target_view: hotspot.targetView,
+    ...hotspot, target_scene_id: canNavigate && target ? hotspot.targetSceneId : '', target_scene_name: target?.name || '', target_scene_thumbnail: target?.thumbnailSource || '', target_view: hotspot.targetView,
     lon: hotspot.position.lon, lat: hotspot.position.lat, x: hotspot.position.x, y: hotspot.position.y, label: hotspot.label, type: hotspot.type, navStyle: hotspot.navStyle,
-    ...(hotspot.audio ? { audio_url: hotspot.audio.url, audio: { ...hotspot.audio } } : {}), preview_image: hotspot.hover.hien_thi_anh_thu_nho && hotspot.hover.duong_dan_thumbnail ? hotspot.hover.duong_dan_thumbnail : (hotspot.type === 'info' || hotspot.type === 'info_area' ? hotspot.media.imageUrl || target?.imageSources?.[0] || activeScene?.imageSources?.[0] || '' : target?.thumbnailSource || activeScene?.imageSources?.[0] || ''),
+    ...(hotspot.audio ? { audio_url: hotspot.audio.url, audio: { ...hotspot.audio } } : {}),
+    // Preview assets are opted into by the per-type preview registry. Do not
+    // synthesize scene thumbnails for unrelated POIs.
+    preview_image: hotspot.type === 'gallery'
+      ? (hotspot.media.images?.[0] || hotspot.hover.thumbnail || '')
+      : '',
     info: { title: hotspot.content.title, description: hotspot.content.description, image_url: hotspot.media.imageUrl, video_url: hotspot.media.videoUrl, youtube_url: hotspot.media.youtubeUrl },
+    areaMedia: hotspot.areaMedia,
     vertices: hotspot.vertices, area_points: hotspot.areaPoints, polygon: hotspot.polygon, anchor: hotspot.anchor, label_config: hotspot.labelConfig, label_position: hotspot.labelPosition, line_height: hotspot.lineHeight, show_polygon_on_hover: hotspot.showPolygonOnHover, style: hotspot.annotationStyle || hotspot.style, glow: hotspot.style.glow, khi_dua_chuot_vao: hotspot.hover, loai_poi: hotspot.loaiPoi, chieu_cao_duong_ghim: hotspot.pinHeight,
   };
+  if (import.meta.env?.DEV) console.debug('[POI Viewer] Viewer render type:', hotspot.id, hotspot.type);
   runtimeHotspotCache.set(hotspot, { activeScene, scenes, signature, target, value });
   if (import.meta.env?.DEV) console.debug('[Viewer Render] runtimeHotspotForViewer()', hotspot.id);
+  if (import.meta.env?.DEV && hotspot.type === 'area') console.debug('[AreaMedia] runtimeHotspotForViewer', hotspot.id, hotspot.areaMedia?.src || '');
   return value;
 }
 

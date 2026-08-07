@@ -7,20 +7,27 @@ import { resolvePointKind } from './pointSchema.js';
  * while retaining their existing DOM/Three.js implementations.
  */
 export const pointRendererRegistry = Object.freeze({
-  nav: { renderer: 'marker', interactive: true },
-  info: { renderer: 'marker', interactive: true },
-  gallery: { renderer: 'marker', interactive: true },
-  video: { renderer: 'marker', interactive: true },
+  nav: { renderer: 'nav-marker', interaction: 'navigate', interactive: true },
+  info: { renderer: 'info-marker', interaction: 'info-panel', interactive: true },
+  gallery: { renderer: 'gallery-marker', interaction: 'info-panel', interactive: true },
+  video: { renderer: 'video-marker', interaction: 'info-panel', interactive: true },
   audio: { renderer: 'audio-marker', interaction: 'poi-audio', interactive: true },
-  pin: { renderer: 'marker', interactive: true },
-  info_area: { renderer: 'info-area', interactive: true },
-  area_landmark: { renderer: 'area-landmark', interactive: true },
-  generic: { renderer: 'marker', interactive: true },
+  pin: { renderer: 'pin-marker', interactive: true },
+  info_area: { renderer: 'info-area', interaction: 'info-panel', interactive: true },
+  area_landmark: { renderer: 'area-landmark', interaction: 'navigate', interactive: true },
+  area: { renderer: 'area-media', interaction: 'none', interactive: false },
+  generic: { renderer: 'generic-marker', interactive: true },
 });
 
 export function resolvePointRenderer(point) {
   const kind = resolvePointKind(point);
-  return pointRendererRegistry[kind] || pointRendererRegistry.generic;
+  const renderer = pointRendererRegistry[kind];
+  if (!renderer) {
+    if (import.meta.env?.DEV) console.warn('[POI Registry] Missing renderer mapping:', kind, point?.type, point?.id);
+    return pointRendererRegistry.generic;
+  }
+  if (import.meta.env?.DEV) console.debug('[POI Registry] Viewer render type:', point?.id || 'unknown', kind, renderer.renderer);
+  return renderer;
 }
 
 export function hasPointRenderer(point, renderer) {
@@ -28,11 +35,25 @@ export function hasPointRenderer(point, renderer) {
 }
 
 export function isMarkerPoint(point) {
-  return hasPointRenderer(point, 'marker');
+  return String(resolvePointRenderer(point).renderer).endsWith('-marker');
 }
 
 export function isAreaLandmarkPoint(point) {
   return hasPointRenderer(point, 'area-landmark');
+}
+
+export function isAreaOverlayPoint(point) {
+  return hasPointRenderer(point, 'area-media');
+}
+
+/** Navigation is a capability, not a visual marker type. Area Landmark uses
+ * the same capability while keeping its own polygon renderer and events. */
+export function isNavigationPoint(point) {
+  return resolvePointRenderer(point).interaction === 'navigate';
+}
+
+export function isAreaAnnotationPoint(point) {
+  return isAreaLandmarkPoint(point);
 }
 
 export function isInfoAreaPoint(point) {

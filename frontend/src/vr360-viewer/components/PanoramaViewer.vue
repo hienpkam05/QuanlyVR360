@@ -4,10 +4,12 @@ import * as THREE from 'three';
 import NavRenderer from './nav/NavRenderer.vue';
 import { createCameraController } from '../common/runtime/cameraController.js';
 import { createLandmarkRenderer } from '../common/runtime/landmarkRenderer.js';
+import { createAreaMediaRenderer } from '../common/runtime/areaMediaRenderer.js';
 import { projectViewerPoints } from '../common/runtime/pointProjection.js';
 import { createProjectionPanoramaMaterial } from '../common/runtime/projectionPanoramaMaterial.js';
 import { createProjectionState } from '../common/runtime/projectionState.js';
 import { createTextureManager } from '../common/runtime/textureManager.js';
+import { resolvePointPreview, resolvePointVisual } from '../common/registry/pointPluginRegistry.js';
 
 const props = defineProps({
   imageUrl: {
@@ -90,6 +92,7 @@ let resizeObserver;
 let raycaster;
 let pointer;
 let isDragging = false;
+let isPointerOver = false;
 let pointerDown = null;
 let lastInteractionAt = 0;
 let lastFrameAt = 0;
@@ -97,6 +100,7 @@ let needsProjection = true;
 let hasAppliedInitialView = false;
 let textureReadyPending = false;
 let areaLandmarkRenderer;
+let areaMediaRenderer;
 let cameraController;
 let textureManager;
 let projectionState;
@@ -134,10 +138,6 @@ function youtubeEmbedUrl(url) {
     return `https://www.youtube.com/embed/${match[1]}?${params.toString()}`;
   }
 
-function hasAreaInlineMedia(area) {
-  return Boolean(youtubeEmbedUrl(area.info?.youtube_url) || area.info?.video_url);
-}
-
 function updateProjectedHotspots() {
   if (!container.value || !camera || isTextureLoading.value || !hotspotsVisible.value) {
     projectedHotspots.value = [];
@@ -149,6 +149,7 @@ function updateProjectedHotspots() {
         container.value.clientWidth || 1,
         container.value.clientHeight || 1,
       );
+      areaMediaRenderer?.update(EMPTY_HOTSPOTS);
     }
     return;
   }
@@ -165,6 +166,7 @@ function updateProjectedHotspots() {
   }
   projectedInfoAreas.value = projection.infoAreas;
   areaLandmarkRenderer?.update(props.hotspots, camera, width, height);
+  areaMediaRenderer?.update(props.hotspots);
 }
 
 function renderLoop() {
@@ -176,6 +178,7 @@ function renderLoop() {
     props.autoRotate &&
     hasImage.value &&
     !isDragging &&
+    !isPointerOver &&
     !cameraController.isAnimating() &&
     now - lastInteractionAt >= props.autoRotateDelay
   ) {
@@ -241,11 +244,14 @@ function dispose() {
   window.removeEventListener('resize', resize);
   resizeObserver?.disconnect();
   cancelAnimationFrame(animationId);
+  cameraController?.cancelTween?.();
   textureManager?.dispose();
   textureManager = null;
   projectionState = null;
   areaLandmarkRenderer?.dispose();
   areaLandmarkRenderer = null;
+  areaMediaRenderer?.dispose();
+  areaMediaRenderer = null;
   if (mesh) {
     mesh.geometry.dispose();
     mesh.material.dispose();
@@ -329,15 +335,28 @@ function initThree() {
     container.value,
     (hotspot, event) => emit('hotspot-click', hotspot, event),
   );
+  areaMediaRenderer = createAreaMediaRenderer(scene);
   resize();
   loadTexture();
   markInteraction();
   renderLoop();
 }
 
+function onPointerEnter() {
+  if (!props.interactive) return;
+  isPointerOver = true;
+  markInteraction();
+}
+
+function onPointerLeave(event) {
+  isPointerOver = false;
+  onPointerUp(event);
+}
+
 function onPointerDown(event) {
   if (!props.interactive || !hasImage.value) return;
   markInteraction();
+  cameraController.cancelTween();
   isDragging = true;
   pointerDown = {
     x: event.clientX,
@@ -387,9 +406,14 @@ function onHotspotClick(hotspot, event) {
   emit('hotspot-click', hotspot, event);
 }
 
+function videoMarkerPoster(hotspot) {
+  return hotspot.media?.previewUrl || hotspot.hover?.thumbnail || '';
+}
+
 function onWheel(event) {
   if (!props.interactive || !hasImage.value) return;
   markInteraction();
+  cameraController.cancelTween();
   event.preventDefault();
   cameraController.zoomBy(event.deltaY);
   emitViewChange();
@@ -459,7 +483,8 @@ defineExpose({
     @pointerdown="onPointerDown"
     @pointermove="onPointerMove"
     @pointerup="onPointerUp"
-    @pointerleave="onPointerUp"
+    @pointerenter="onPointerEnter"
+    @pointerleave="onPointerLeave"
     @wheel="onWheel"
     @click="markInteraction"
   >
@@ -484,39 +509,9 @@ defineExpose({
         />
       </template>
     </svg>
-    <div
-      v-for="area in projectedInfoAreas.filter(hasAreaInlineMedia)"
-      :key="`${area.id}-media`"
-      class="panorama-info-area-media"
-        :style="{
-          left: `${area.mediaBox.left}px`,
-          top: `${area.mediaBox.top}px`,
-          width: `${area.mediaBox.width}px`,
-          height: `${area.mediaBox.height}px`,
-          clipPath: area.mediaClipPath,
-          WebkitClipPath: area.mediaClipPath,
-        }"
-      @click.stop="interactive && (markInteraction(), emit('hotspot-click', area, $event))"
-    >
-      <iframe
-          v-if="area.youtube_embed_url"
-          :src="area.youtube_embed_url"
-          title="YouTube video"
-          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-        ></iframe>
-      <video
-        v-else
-        :src="area.info.video_url"
-        autoplay
-        muted
-        loop
-        playsinline
-        controls
-      ></video>
-    </div>
     <button
       v-for="hotspot in projectedHotspots"
-      :key="hotspot.id"
+      :key="hotspot.renderKey || hotspot.id"
       class="panorama-hotspot"
       :class="[
         hotspotDisplayMode === 'viewer' ? `viewer-hotspot viewer-hotspot-${hotspot.type || 'point'}` : 'hotspot-dot',
@@ -527,20 +522,27 @@ defineExpose({
       @click.stop="onHotspotClick(hotspot, $event)"
       @dblclick.stop="interactive && (markInteraction(), emit('hotspot-dblclick', hotspot, $event))"
     >
-      <template v-if="hotspotDisplayMode === 'viewer' && hotspot.type === 'nav'">
+        <template v-if="hotspotDisplayMode === 'viewer' && resolvePointVisual(hotspot).nav">
         <NavRenderer :hotspot="hotspot" />
       </template>
       <template v-else>
-        <span v-if="hotspotDisplayMode === 'viewer' && hotspot.type === 'audio'" class="viewer-audio-poi-icon" aria-hidden="true"><i></i><svg viewBox="0 0 24 24"><path d="M6 9v6M10 6v12M14 3v18M18 8v8" /></svg></span>
+        <span v-if="hotspotDisplayMode === 'viewer' && resolvePointVisual(hotspot).video" class="viewer-video-poi-marker" :class="{ 'has-poster': videoMarkerPoster(hotspot) }">
+          <span v-if="videoMarkerPoster(hotspot)" class="viewer-video-poi-poster" :style="{ backgroundImage: `url(${videoMarkerPoster(hotspot)})` }"></span>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="12" height="14" rx="3"/><path d="m15 10 5-3v10l-5-3z"/><path class="viewer-video-poi-play" d="m9 9 4 3-4 3z"/></svg>
+        </span>
+        <span v-if="hotspotDisplayMode === 'viewer' && resolvePointVisual(hotspot).audio" class="viewer-audio-poi-icon" aria-hidden="true"><i></i><svg viewBox="0 0 24 24"><path d="M6 9v6M10 6v12M14 3v18M18 8v8" /></svg></span>
         <span
-          v-if="hotspotDisplayMode === 'viewer' && pointHotspotLogo && hotspot.type !== 'info' && hotspot.type !== 'audio'"
+          v-else-if="hotspotDisplayMode === 'viewer' && !resolvePointVisual(hotspot).video && pointHotspotLogo && !resolvePointVisual(hotspot).info && !resolvePointVisual(hotspot).audio && !resolvePointVisual(hotspot).nav"
           class="viewer-point-logo"
           :style="{ backgroundImage: `url(${pointHotspotLogo})` }"
         ></span>
-        <span v-else-if="hotspotDisplayMode === 'viewer' && hotspot.type === 'info'" class="viewer-info-dot">i</span>
-        <span v-else-if="hotspot.type !== 'audio'" class="viewer-point-dot">{{ hotspot.index + 1 }}</span>
-        <span class="hotspot-label">{{ hotspot.label || 'Hotspot' }}</span>
-        <span class="viewer-hotspot-preview" v-if="hotspotDisplayMode === 'viewer' && hotspot.preview_image" :style="{ backgroundImage: `url(${hotspot.preview_image})` }"></span>
+        <span v-else-if="hotspotDisplayMode === 'viewer' && !resolvePointVisual(hotspot).video && resolvePointVisual(hotspot).info" class="viewer-info-dot">i</span>
+        <span v-else-if="!resolvePointVisual(hotspot).video && !resolvePointVisual(hotspot).audio && !resolvePointVisual(hotspot).nav" class="viewer-point-dot">{{ hotspot.index + 1 }}</span>
+        <span v-if="!resolvePointVisual(hotspot).video" class="hotspot-label">{{ hotspot.label || 'Hotspot' }}</span>
+        <template v-if="hotspotDisplayMode === 'viewer' && !resolvePointVisual(hotspot).video">
+          <span v-if="resolvePointPreview(hotspot).kind === 'tooltip' && resolvePointPreview(hotspot).text" class="viewer-hotspot-tooltip">{{ resolvePointPreview(hotspot).text }}</span>
+          <span v-else-if="resolvePointPreview(hotspot).kind === 'image' && resolvePointPreview(hotspot).imageUrl" class="viewer-hotspot-image-preview" :style="{ backgroundImage: `url(${resolvePointPreview(hotspot).imageUrl})` }"></span>
+        </template>
       </template>
     </button>
   </div>

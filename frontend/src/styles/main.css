@@ -3174,32 +3174,6 @@ th {
   stroke: #ffd84d;
 }
 
-.panorama-info-area-media {
-  background: rgba(2, 6, 23, 0.72);
-  border: 0;
-  border-radius: 0;
-  box-shadow:
-    0 12px 32px rgba(0, 0, 0, 0.28);
-  cursor: pointer;
-  overflow: hidden;
-  position: absolute;
-  z-index: 3;
-}
-
-.panorama-info-area-media iframe,
-.panorama-info-area-media video {
-  background: #020617;
-  border: 0;
-  display: block;
-  height: 100%;
-  object-fit: cover;
-  width: 100%;
-}
-
-.panorama-info-area-media iframe {
-  pointer-events: auto;
-}
-
 @keyframes info-area-glow {
   0%,
   100% {

@@ -1,7 +1,9 @@
 import * as THREE from "three";
 import { HotspotRenderer } from "@/common/vr360/HotspotRenderer";
 import { AreaLandmarkRenderer } from "@/common/vr360/AreaLandmarkRenderer";
-import { isAreaLandmarkPoint } from "@/common/vr360/pointRendererRegistry.js";
+import { AreaMediaRenderer } from "@/common/vr360/AreaMediaRenderer.js";
+import { isAreaLandmarkPoint, isAreaOverlayPoint } from "@/common/vr360/pointRendererRegistry.js";
+import { AreaMediaEditorOverlay } from './AreaMediaEditorOverlay.js';
 
 // ══════════════════════════════════════
 //  LRU TEXTURE CACHE (max 3)
@@ -188,6 +190,7 @@ export class PreviewEngine {
     this._initEvents();
     this._initHotspotRenderer();
     this._initAreaLandmarkRenderer();
+    this._initAreaMediaRenderer();
     this._startLoop();
   }
 
@@ -273,13 +276,27 @@ export class PreviewEngine {
     });
   }
 
+  _initAreaMediaRenderer() {
+    this.areaMediaRenderer = new AreaMediaRenderer(this.scene);
+    this.areaMediaEditorOverlay = new AreaMediaEditorOverlay(this.canvas.parentElement, {
+      onSelect: (area) => this.callbacks.onAreaMediaSelect?.(area),
+      onVertexDrop: (area, vertexIndex, position) => {
+        const sphere = this.screenToSphere(position.x, position.y);
+        if (sphere) this.callbacks.onAreaMediaVertexDragEnd?.(area, vertexIndex, sphere);
+      },
+    });
+  }
+
   setHotspots(hotspots, selectedIndex = -1) {
     this._allHotspots = hotspots || [];
-    this._sceneHotspots = this._allHotspots.filter((hotspot) => !isAreaLandmarkPoint(hotspot));
+    this._sceneHotspots = this._allHotspots.filter((hotspot) => !isAreaLandmarkPoint(hotspot) && !isAreaOverlayPoint(hotspot));
     this._selectedHotspotIndex = selectedIndex;
     const selected = this._allHotspots[selectedIndex];
     this.areaLandmarkRenderer?.setSelectedAnnotation(isAreaLandmarkPoint(selected) ? selected : null);
     this.areaLandmarkRenderer?.setAnnotations(this._allHotspots.filter(isAreaLandmarkPoint));
+    this.areaMediaRenderer?.setAreas(this._allHotspots);
+    this.areaMediaEditorOverlay?.setAreas(this._allHotspots);
+    this.areaMediaEditorOverlay?.setSelectedArea(isAreaOverlayPoint(selected) ? selected : null);
     this.requestRender();
   }
 
@@ -288,6 +305,7 @@ export class PreviewEngine {
     this._selectedHotspotIndex = index;
     const selected = this._allHotspots?.[index];
     this.areaLandmarkRenderer?.setSelectedAnnotation(isAreaLandmarkPoint(selected) ? selected : null);
+    this.areaMediaEditorOverlay?.setSelectedArea(isAreaOverlayPoint(selected) ? selected : null);
     this.requestRender();
   }
 
@@ -432,6 +450,7 @@ export class PreviewEngine {
       p.clientHeight
     );
     this.areaLandmarkRenderer?.update(this.camera, p.clientWidth, p.clientHeight);
+    this.areaMediaEditorOverlay?.update(this.camera, p.clientWidth, p.clientHeight);
   }
 
   screenToSphere(cx, cy) {
@@ -533,6 +552,8 @@ export class PreviewEngine {
     window.removeEventListener("keydown", this._onKeydown);
     this.hotspotRenderer?.dispose();
     this.areaLandmarkRenderer?.dispose();
+    this.areaMediaRenderer?.dispose();
+    this.areaMediaEditorOverlay?.dispose();
     this.textureCache.clear();
     this.renderer.dispose();
   }

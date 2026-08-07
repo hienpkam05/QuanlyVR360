@@ -41,7 +41,15 @@ export function projectViewerPoints(hotspots, camera, width, height, youtubeEmbe
         || resolvePointRenderer(hotspot).renderer === 'audio-marker';
       return result;
     })
-    .map((hotspot, index) => ({ ...hotspot, index, ...projectLonLat(hotspot) }))
+    .map((hotspot, index) => ({
+      ...hotspot,
+      index,
+      // Point IDs originate from persisted tour data and are not guaranteed
+      // unique. The render key must identify this concrete list entry so Vue
+      // never reuses a navigation marker DOM node at another position.
+      renderKey: `${hotspot.id}:${index}`,
+      ...projectLonLat(hotspot),
+    }))
     .filter((hotspot) => hotspot.visible);
 
   const infoAreas = hotspots
