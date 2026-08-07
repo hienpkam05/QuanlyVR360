@@ -3147,15 +3147,14 @@ th {
 }
 
 .panorama-info-area {
-  animation: info-area-glow 1.8s ease-in-out infinite;
   cursor: pointer;
-  fill: rgba(80, 231, 255, 0.14);
+  fill: transparent;
   pointer-events: auto;
-  stroke: rgba(255, 255, 255, 0.82);
-  stroke-dasharray: 1 7;
+  stroke: rgba(255, 216, 77, 0.9);
+  stroke-dasharray: 4 4;
   stroke-linecap: round;
   stroke-linejoin: round;
-  stroke-width: 2;
+  stroke-width: 1;
   transition:
     fill 0.18s ease,
     stroke 0.18s ease,
@@ -3163,9 +3162,9 @@ th {
 }
 
 .panorama-info-area:hover {
-  fill: rgba(80, 231, 255, 0.22);
-  stroke: #50e7ff;
-  stroke-width: 2.5;
+  fill: rgba(255, 255, 255, 0.12);
+  stroke: #ffd84d;
+  stroke-width: 1.5;
 }
 
 .panorama-info-area.draft {
@@ -3332,47 +3331,30 @@ th {
 
 .viewer-nav-default {
   align-items: center;
-  animation: nav-arrow-forward 1.15s ease-in-out infinite;
-  color: #ffffff;
   display: inline-flex;
-  filter: drop-shadow(0 10px 7px rgba(0, 0, 0, 0.62));
-  font-size: 46px;
-  height: 58px;
   justify-content: center;
-  line-height: 1;
+  padding: 6px;
   position: relative;
-  text-shadow:
-    0 0 10px rgba(255, 255, 255, 0.55),
-    0 4px 12px rgba(0, 0, 0, 0.55);
-  transform: perspective(130px) rotateX(56deg);
-  width: 72px;
 }
 
-.viewer-nav-default i {
+.viewer-nav-default-arrow img {
+  animation: nav-arrow-walk-bob 1.6s ease-in-out infinite;
   display: block;
+  filter: drop-shadow(0 3px 6px rgba(0, 0, 0, 0.55));
+  height: auto;
+  pointer-events: none;
+  transition: filter 0.25s ease;
+  user-select: none;
+  width: 58px;
 }
 
-.viewer-hotspot-nav:hover .viewer-nav-default {
-  color: #ffffff;
-  filter: drop-shadow(0 12px 10px rgba(0, 0, 0, 0.72));
-  text-shadow:
-    0 0 14px rgba(255, 255, 255, 0.82),
-    0 4px 14px rgba(0, 0, 0, 0.62);
+.viewer-hotspot-nav:hover .viewer-nav-default-arrow img {
+  filter: drop-shadow(0 5px 12px rgba(0, 0, 0, 0.6)) brightness(1.25);
 }
 
-@keyframes nav-arrow-forward {
-  0% {
-    opacity: 0.58;
-    translate: 0 10px;
-  }
-  45% {
-    opacity: 1;
-    translate: 0 0;
-  }
-  100% {
-    opacity: 0.58;
-    translate: 0 -8px;
-  }
+@keyframes nav-arrow-walk-bob {
+  0%, 100% { transform: translateY(0); opacity: 0.82; }
+  50% { transform: translateY(-4px); opacity: 1; }
 }
 
 .viewer-hotspot-preview {

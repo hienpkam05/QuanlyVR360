@@ -224,19 +224,20 @@ export class AreaLandmarkRenderer {
       const positions = projected.filter(Boolean).map((point) => `${point.x.toFixed(1)},${point.y.toFixed(1)}`).join(' ');
       element.group.style.display = '';
       element.group.classList.toggle('is-selected', this.selectedId === id);
-      const displayPolygonOnHover = this.options.editMode || (annotation.show_polygon_on_hover !== false && element.group.classList.contains('is-hovered'));
-      element.polygon.style.display = displayPolygonOnHover ? '' : 'none';
+      element.polygon.style.display = '';
       element.polygon.setAttribute('points', positions);
-      element.polygon.setAttribute('fill', style.fill);
-      element.polygon.setAttribute('fill-opacity', String(style.opacity));
+      element.polygon.setAttribute('fill', 'none');
+      element.polygon.setAttribute('fill-opacity', '0');
       element.polygon.setAttribute('stroke', style.border);
-      element.polygon.setAttribute('stroke-width', String(style.borderWidth));
+      element.polygon.setAttribute('stroke-width', '1');
+      element.polygon.setAttribute('stroke-dasharray', '4 4');
+      element.polygon.setAttribute('stroke-linecap', 'round');
       element.polygon.setAttribute('stroke-linejoin', 'round');
       element.group.style.setProperty('--area-landmark-hover-fill', style.hoverFill);
       element.group.style.setProperty('--area-landmark-hover-border', style.hoverBorder);
       element.line.setAttribute('x1', String(anchor.x)); element.line.setAttribute('y1', String(anchor.y));
       const labelX = anchor.x;
-      const labelOffset = Math.max(40, Number(annotation.line_height || annotation.lineHeight) || 48);
+      const labelOffset = Math.max(40, Number(annotation.line_height || annotation.lineHeight) || 48) * 2;
       const labelBottom = anchor.y - labelOffset;
       element.label.style.display = '';
       element.label.textContent = annotation.label?.text || annotation.label || annotation.name || 'Area Landmark';
@@ -245,8 +246,8 @@ export class AreaLandmarkRenderer {
       const labelHeight = element.label.offsetHeight || 32;
       const labelTop = labelBottom - labelHeight;
       element.line.setAttribute('x2', String(labelX)); element.line.setAttribute('y2', String(labelBottom));
-      element.line.setAttribute('stroke', style.line || '#ffffff'); element.line.setAttribute('stroke-width', '2'); element.line.removeAttribute('stroke-dasharray');
-      element.anchor.setAttribute('cx', String(anchor.x)); element.anchor.setAttribute('cy', String(anchor.y)); element.anchor.setAttribute('r', String(style.radius)); element.anchor.setAttribute('fill', style.border); element.anchor.setAttribute('stroke', '#fff'); element.anchor.setAttribute('stroke-width', '2');
+      element.line.setAttribute('stroke', style.line || '#ffffff'); element.line.setAttribute('stroke-width', '2'); element.line.setAttribute('stroke-dasharray', '6 4');
+      element.anchor.setAttribute('cx', String(anchor.x)); element.anchor.setAttribute('cy', String(anchor.y)); element.anchor.setAttribute('r', '5.5'); element.anchor.setAttribute('fill', '#ff5a1f'); element.anchor.setAttribute('stroke', '#fff'); element.anchor.setAttribute('stroke-width', '2');
       element.anchor.style.cursor = 'pointer';
       if (this.options.editMode) {
         while (element.vertices.length < projected.length) {

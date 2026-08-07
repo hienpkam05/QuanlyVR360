@@ -793,10 +793,10 @@
 
 .tour-viewer-page .area-landmark polygon {
   cursor: pointer;
-  filter: drop-shadow(0 0 8px rgba(251, 191, 36, 0.35));
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 190ms ease, fill 190ms ease, stroke 190ms ease;
+  opacity: 1;
+  pointer-events: auto;
+  z-index: var(--viewer-z-polygon);
+  transition: fill 190ms ease, stroke 190ms ease, stroke-width 190ms ease;
 }
 
 .tour-viewer-page .area-landmark line {
@@ -807,40 +807,50 @@
 
 .tour-viewer-page .area-landmark circle {
   pointer-events: auto;
+  animation: area-landmark-anchor-pulse 2.2s ease-in-out infinite;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.5));
+}
+
+@keyframes area-landmark-anchor-pulse {
+  0%, 100% { filter: drop-shadow(0 0 0 rgba(255, 90, 31, 0)) drop-shadow(0 2px 4px rgba(0, 0, 0, 0.5)); }
+  50% { filter: drop-shadow(0 0 8px rgba(255, 90, 31, 0.85)) drop-shadow(0 2px 4px rgba(0, 0, 0, 0.5)); }
 }
 
 .tour-viewer-page .area-landmark.is-hovered polygon {
-  fill: var(--area-landmark-hover-fill, rgba(251, 191, 36, 0.34));
-  opacity: 1;
-  stroke: var(--area-landmark-hover-border, #fff3b0);
+  fill: rgba(255, 255, 255, 0.12);
+  stroke: #ffd84d;
+  stroke-width: 1.5;
 }
 
 .tour-viewer-page .area-landmark-label {
-  --area-landmark-fill: rgba(245, 158, 11, 0.18);
   align-items: center;
-  background: rgba(16, 18, 26, 0.9);
-  border: 1px solid rgba(251, 191, 36, 0.82);
-  border-radius: 9px;
-  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.34);
+  background: linear-gradient(135deg, #ff8a2b 0%, #e0301b 100%);
+  border: 1.5px solid rgba(255, 255, 255, 0.92);
+  border-radius: 8px;
   color: #fff;
   cursor: pointer;
   display: inline-flex;
-  font: 800 12px/1.2 inherit;
+  font: 800 13px/1.15 inherit;
+  filter: drop-shadow(0 3px 9px rgba(0, 0, 0, 0.55));
   left: 0;
+  letter-spacing: 0.6px;
   max-width: min(250px, 48vw);
-  padding: 9px 12px;
+  padding: 7px 14px;
   position: absolute;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+  text-transform: uppercase;
   top: 0;
   transform: translate3d(0, 0, 0) translateX(-50%);
-  transition: transform 160ms ease, background 160ms ease, box-shadow 160ms ease;
+  transition: filter 220ms ease, transform 220ms ease;
   touch-action: manipulation;
+  white-space: nowrap;
   z-index: var(--viewer-z-label);
 }
 
 .tour-viewer-page .area-landmark-label:hover,
 .tour-viewer-page .area-landmark-label.is-hovered {
-  background: rgba(72, 48, 8, 0.95);
-  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.46), 0 0 0 4px var(--area-landmark-fill);
+  filter: brightness(1.08) drop-shadow(0 4px 12px rgba(224, 48, 27, 0.55));
+  transform: translate3d(0, -1px, 0) translateX(-50%);
 }
 
 .tour-viewer-page .panorama-info-area-layer {
@@ -852,15 +862,14 @@
 }
 
 .tour-viewer-page .panorama-info-area {
-  animation: info-area-glow 1.8s ease-in-out infinite;
   cursor: pointer;
-  fill: rgba(80, 231, 255, 0.14);
+  fill: transparent;
   pointer-events: auto;
-  stroke: rgba(255, 255, 255, 0.82);
-  stroke-dasharray: 1 7;
+  stroke: rgba(255, 216, 77, 0.9);
+  stroke-dasharray: 4 4;
   stroke-linecap: round;
   stroke-linejoin: round;
-  stroke-width: 2;
+  stroke-width: 1;
   transition:
     fill 0.18s ease,
     stroke 0.18s ease,
@@ -868,9 +877,9 @@
 }
 
 .tour-viewer-page .panorama-info-area:hover {
-  fill: rgba(80, 231, 255, 0.22);
-  stroke: #50e7ff;
-  stroke-width: 2.5;
+  fill: rgba(255, 255, 255, 0.12);
+  stroke: #ffd84d;
+  stroke-width: 1.5;
 }
 
 .tour-viewer-page .panorama-info-area.draft {
@@ -1037,47 +1046,74 @@
 
 .tour-viewer-page .viewer-nav-default {
   align-items: center;
-  animation: nav-arrow-forward 1.15s ease-in-out infinite;
-  color: #ffffff;
   display: inline-flex;
-  filter: drop-shadow(0 10px 7px rgba(0, 0, 0, 0.62));
-  font-size: 46px;
-  height: 58px;
   justify-content: center;
-  line-height: 1;
+  padding: 6px;
   position: relative;
-  text-shadow:
-    0 0 10px rgba(255, 255, 255, 0.55),
-    0 4px 12px rgba(0, 0, 0, 0.55);
-  transform: perspective(130px) rotateX(56deg);
-  width: 72px;
 }
 
-.tour-viewer-page .viewer-nav-default i {
+.tour-viewer-page .viewer-nav-default-arrow {
+  display: inline-flex;
+}
+
+.tour-viewer-page .viewer-nav-default-arrow img {
+  animation: nav-arrow-walk-bob 1.6s ease-in-out infinite;
   display: block;
+  filter: drop-shadow(0 3px 6px rgba(0, 0, 0, 0.55));
+  height: auto;
+  pointer-events: none;
+  transition: filter 0.25s ease;
+  user-select: none;
+  width: 58px;
 }
 
-.tour-viewer-page .viewer-hotspot-nav:hover .viewer-nav-default {
-  color: #ffffff;
-  filter: drop-shadow(0 12px 10px rgba(0, 0, 0, 0.72));
-  text-shadow:
-    0 0 14px rgba(255, 255, 255, 0.82),
-    0 4px 14px rgba(0, 0, 0, 0.62);
+.tour-viewer-page .viewer-hotspot-nav:hover .viewer-nav-default-arrow img {
+  filter: drop-shadow(0 5px 12px rgba(0, 0, 0, 0.6)) brightness(1.25);
 }
 
-@keyframes nav-arrow-forward {
-  0% {
-    opacity: 0.58;
-    translate: 0 10px;
-  }
-  45% {
-    opacity: 1;
-    translate: 0 0;
-  }
-  100% {
-    opacity: 0.58;
-    translate: 0 -8px;
-  }
+@keyframes nav-arrow-walk-bob {
+  0%, 100% { transform: translateY(0); opacity: 0.82; }
+  50% { transform: translateY(-4px); opacity: 1; }
+}
+
+.tour-viewer-page .viewer-nav-default-preview {
+  background: rgba(10, 12, 20, 0.86);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 10px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+  left: 50%;
+  opacity: 0;
+  overflow: hidden;
+  pointer-events: none;
+  position: absolute;
+  top: 0;
+  transform: translate(-50%, calc(-100% - 14px));
+  transition: opacity 200ms ease, transform 200ms ease;
+  width: 180px;
+  z-index: var(--viewer-z-label);
+}
+
+.tour-viewer-page .viewer-nav-default-preview img {
+  display: block;
+  height: 100px;
+  object-fit: cover;
+  width: 100%;
+}
+
+.tour-viewer-page .viewer-nav-default-preview-name {
+  color: #fff;
+  display: block;
+  font-size: 12px;
+  line-height: 1.4;
+  padding: 8px 10px;
+}
+
+.tour-viewer-page .viewer-hotspot-nav:hover .viewer-nav-default-preview,
+.tour-viewer-page .viewer-hotspot-nav:focus-visible .viewer-nav-default-preview {
+  opacity: 1;
+  transform: translate(-50%, calc(-100% - 20px));
 }
 
 .tour-viewer-page .viewer-hotspot-preview {
