@@ -528,9 +528,11 @@ defineExpose({
         :is-transitioning="isTransitioning"
         :audio-session="audioStore.state.activeSession"
         :audio-service="audioService"
+        :active-view-mode="activeViewMode"
         @home="resetView"
         @prev="previousScene"
         @next="nextScene"
+        @view-mode-change="setViewMode"
       />
       <ScenesSidebar
         v-if="viewerUIReady && scenes.length"
