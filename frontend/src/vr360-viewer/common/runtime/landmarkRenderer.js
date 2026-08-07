@@ -1,5 +1,5 @@
-import { AreaLandmarkRenderer } from '../../../common/vr360/AreaLandmarkRenderer.js';
-import { isAreaLandmarkPoint } from '../../../common/vr360/pointRendererRegistry.js';
+import { AreaLandmarkRenderer } from '../vr360/AreaLandmarkRenderer.js';
+import { isAreaLandmarkPoint } from '../vr360/pointRendererRegistry.js';
 
 export function createLandmarkRenderer(container, onClick) {
   const renderer = new AreaLandmarkRenderer(container, {
