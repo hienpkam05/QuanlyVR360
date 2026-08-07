@@ -7,7 +7,8 @@
     "dev": "vite --host 127.0.0.1",
     "build": "vite build",
     "preview": "vite preview --host 127.0.0.1",
-    "test:poi": "node tests/poiArchitecture.test.mjs"
+    "test:poi": "node tests/poiArchitecture.test.mjs",
+    "test:audio": "node tests/audioManager.test.mjs"
   },
   "dependencies": {
     "@vitejs/plugin-vue": "^6.0.0",

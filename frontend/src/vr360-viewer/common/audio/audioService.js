@@ -1,6 +1,6 @@
 export function createAudioService(manager, store) {
   const command = (name, callback) => (...args) => {
-    if (import.meta.env?.DEV) console.debug('[AudioController]', name);
+    if (import.meta.env?.DEV) console.debug('[Audio Controller]', name);
     return callback(...args);
   };
 

@@ -30,6 +30,7 @@ Thumbs.db
 # AI generated folders
 .dist-*
 .audio-*
+dist
 
 # nếu AI còn tạo thêm
 .check-*

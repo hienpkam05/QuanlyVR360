@@ -1,7 +1,7 @@
 import { AUDIO_SCOPE } from '../audio/constants.js';
 
 function debug(...args) {
-  if (import.meta.env?.DEV) console.debug('[AudioController]', ...args);
+  if (import.meta.env?.DEV) console.debug('[Audio Controller]', ...args);
 }
 
 /** Tour boundary used by autoplay and the Audio bottom sheet. */

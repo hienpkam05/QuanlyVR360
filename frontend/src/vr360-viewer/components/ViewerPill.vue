@@ -13,6 +13,7 @@ const props = defineProps({
   isTransitioning: { type: Boolean, default: false },
   audioSession: { type: Object, default: () => ({}) },
   audioService: { type: Object, default: null },
+  audioTour: { type: Object, default: () => ({}) },
   activeViewMode: { type: String, default: VIEW_MODE.NORMAL },
 });
 
@@ -131,8 +132,9 @@ onBeforeUnmount(() => {});
         class="viewer-pill-audio"
         :session="audioSession"
         :audio-service="audioService"
+        :tour="audioTour"
       />
-      <button
+      <!-- <button
         type="button"
         class="viewer-pill-btn viewer-pill-info"
         :aria-pressed="infoOpen"
@@ -145,7 +147,7 @@ onBeforeUnmount(() => {});
           <line x1="12" y1="16" x2="12" y2="12" />
           <line x1="12" y1="8" x2="12.01" y2="8" />
         </svg>
-      </button>
+      </button> -->
       <button
         v-if="hasMultipleScenes"
         type="button"
@@ -213,7 +215,7 @@ onBeforeUnmount(() => {});
   display: flex;
   align-items: center;
   gap: 2px;
-  overflow: hidden;
+  overflow: visible;
   transition: opacity 200ms ease, max-width 260ms cubic-bezier(0.22, 0.61, 0.36, 1), transform 260ms cubic-bezier(0.22, 0.61, 0.36, 1);
   max-width: 300px;
 }
@@ -226,6 +228,7 @@ onBeforeUnmount(() => {});
 }
 
 .viewer-pill-btn {
+  box-sizing: border-box;
   width: 26px;
   height: 26px;
   border-radius: 50%;
@@ -236,6 +239,7 @@ onBeforeUnmount(() => {});
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  line-height: 1;
   padding: 0;
   flex-shrink: 0;
   transition: background 140ms ease, color 140ms ease;
@@ -262,6 +266,7 @@ onBeforeUnmount(() => {});
 }
 
 .viewer-pill-btn svg {
+  display: block;
   width: 14px;
   height: 14px;
 }
@@ -305,7 +310,27 @@ onBeforeUnmount(() => {});
   color: #D5001C;
 }
 
+.viewer-pill-audio {
+  --viewer-audio-control-size: 26px;
+  --viewer-audio-icon-size: 14px;
+  align-items: center;
+  display: inline-flex;
+  flex: 0 0 26px;
+  height: 26px;
+  justify-content: center;
+  width: 26px;
+}
+
+.viewer-pill-audio :deep(.viewer-audio-hover) {
+  align-items: center;
+  display: inline-flex;
+  height: 26px;
+  justify-content: center;
+  width: 26px;
+}
+
 .viewer-pill-audio :deep(.viewer-audio-hover-trigger) {
+  box-sizing: border-box;
   width: 26px;
   height: 26px;
   border-radius: 50%;
@@ -318,7 +343,7 @@ onBeforeUnmount(() => {});
   color: #D5001C;
 }
 
-.viewer-pill-audio :deep(.viewer-audio-hover-trigger svg) {
+.viewer-pill-audio :deep(.viewer-audio-icon) {
   width: 14px;
   height: 14px;
 }

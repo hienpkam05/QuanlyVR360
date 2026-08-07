@@ -106,6 +106,7 @@ let textureManager;
 let projectionState;
 let projectionRenderCount = 0;
 let componentUpdateCount = 0;
+let introRotationClock = 0;
 
 function emitViewChange() {
   emit('view-change', cameraController?.getRoundedView() || { lon: 0, lat: 0, fov: 75 });
@@ -173,6 +174,14 @@ function renderLoop() {
   const now = performance.now();
   const deltaSeconds = lastFrameAt ? (now - lastFrameAt) / 1000 : 0;
   lastFrameAt = now;
+  if (!props.interactive && hasImage.value) {
+    introRotationClock += deltaSeconds * 0.16;
+    projectionState?.setIntroRotation?.(
+      (projectionState?.state.introRotation ?? -Math.PI / 2) + deltaSeconds * 0.16,
+    );
+    mesh?.material.setProjectionState?.(projectionState?.state);
+    needsProjection = true;
+  }
   if (cameraController.tick(now)) needsProjection = true;
   if (
     props.autoRotate &&
@@ -225,13 +234,39 @@ function setIntroState(state = {}) {
   }
   if (Number.isFinite(Number(state.progress))) {
     projectionState?.setProgress(state.progress);
+    if (Number.isFinite(Number(state.rotation))) {
+      projectionState?.setRotation(state.rotation);
+    }
     projectionBlend.value = projectionState?.state.projectionBlend ?? 1;
     mesh?.material.setProjectionState?.(projectionState?.state);
     needsProjection = true;
   }
 }
 
+function prepareIntroCamera(view = {}) {
+  cameraController?.setView({ lon: view.lon, lat: view.lat, fov: view.fov });
+  cameraController?.setIntroDistance(view.distance);
+  needsProjection = true;
+}
+
+function setIntroCameraState(state = {}) {
+  cameraController?.setView({ lon: state.lon, lat: state.lat, fov: state.fov });
+  cameraController?.setIntroDistance(state.distance);
+  setIntroState({ progress: state.progress });
+  if (Number.isFinite(Number(state.rotation))) {
+    projectionState?.setIntroRotation?.(Number(state.rotation) + introRotationClock);
+    mesh?.material.setProjectionState?.(projectionState?.state);
+  }
+}
+
+function completeIntroCamera() {
+  cameraController?.setIntroDistance(0);
+  needsProjection = true;
+}
+
 function resetProjectionIntro() {
+  introRotationClock = 0;
+  cameraController?.setIntroDistance(0);
   projectionState?.reset();
   projectionBlend.value = projectionState?.state.projectionBlend ?? 0;
   mesh?.material.setProjectionState?.(projectionState?.state);
@@ -469,6 +504,9 @@ defineExpose({
   getView,
   setView,
   setIntroState,
+  prepareIntroCamera,
+  setIntroCameraState,
+  completeIntroCamera,
   resetProjectionIntro,
   preloadTexture,
   dispose,

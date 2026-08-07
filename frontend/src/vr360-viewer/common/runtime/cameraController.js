@@ -35,6 +35,7 @@ export function createCameraController(camera) {
   let lon = 0;
   let lat = 0;
   let fov = 75;
+  let introDistance = 0;
   let tween = null;
 
   function getView() {
@@ -49,11 +50,13 @@ export function createCameraController(camera) {
     lat = clampLat(lat);
     const phi = THREE.MathUtils.degToRad(90 - lat);
     const theta = THREE.MathUtils.degToRad(lon);
-    camera.lookAt(new THREE.Vector3(
+    const direction = new THREE.Vector3(
       500 * Math.sin(phi) * Math.cos(theta),
       500 * Math.cos(phi),
       500 * Math.sin(phi) * Math.sin(theta),
-    ));
+    ).normalize();
+    camera.position.copy(direction).multiplyScalar(-introDistance);
+    camera.lookAt(camera.position.clone().addScaledVector(direction, 500));
     camera.fov = fov;
     camera.updateProjectionMatrix();
   }
@@ -76,6 +79,10 @@ export function createCameraController(camera) {
     // Preserves the pre-refactor initial-view behavior: initial FOV is not
     // clamped until a caller changes it through setView/zoom.
     fov = Number(next.fov ?? 75);
+  }
+
+  function setIntroDistance(distance = 0) {
+    introDistance = Math.max(0, Number(distance) || 0);
   }
 
   function dragBy(deltaX, deltaY) {
@@ -127,5 +134,5 @@ export function createCameraController(camera) {
 
   function isAnimating() { return Boolean(tween); }
 
-  return { getView, getRoundedView, updateCamera, setView, restoreView, setInitialView, dragBy, zoomBy, animateTo, cancelTween, tick, isAnimating, vectorToLonLat };
+  return { getView, getRoundedView, updateCamera, setView, restoreView, setInitialView, setIntroDistance, dragBy, zoomBy, animateTo, cancelTween, tick, isAnimating, vectorToLonLat };
 }

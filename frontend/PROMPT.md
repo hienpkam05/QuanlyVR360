@@ -1,355 +1,614 @@
-There are still several UI regressions after the recent Audio UI refactor.
+Technical Design Document
+VR360 Viewer Intro Experience v2.0
 
-Do NOT patch them with random CSS.
+Version: 2.0
 
-Audit the Viewer UI, Audio Panel and all hotspot renderers before modifying anything.
+Status: Approved Design
 
-==================================================
-1. FIX AUDIO PROGRESS BAR
-==================================================
+Priority: Critical
 
-The current progress bar looks incorrect.
+1. Design Goal
 
-Problems:
+Intro không phải là một animation.
 
-- The played section is oversized.
-- The thumb is misaligned.
-- The track height is too large.
-- The control looks like a browser range input.
-- Timeline proportions are visually wrong.
+Intro là một trải nghiệm dẫn người dùng từ thế giới bên ngoài bước vào thế giới VR.
 
-Redesign the timeline.
+Người dùng phải có cảm giác:
 
-Requirements:
+"Tôi đang đứng trước một mô hình thu nhỏ của cả thế giới."
 
-- thin modern track
-- centered thumb
-- smooth fill animation
-- rounded track
-- played color uses project accent
-- remaining track uses neutral gray
-- thumb size around 14~16px
-- track height around 4~6px
-- perfect vertical alignment
+↓
 
-The thumb must stay centered on the track.
+"Tôi quyết định bước vào."
 
-==================================================
-2. FIX VOLUME SLIDER
-==================================================
+↓
 
-Current volume slider is mathematically wrong.
+"Tôi tiến lại gần."
 
-There is empty spacing before 0%.
+↓
 
-There is empty spacing after 100%.
+"Tôi bước vào bên trong."
 
-Because of that:
+↓
 
-volume = 0
+"Tôi đang ở trong không gian VR."
 
-still shows yellow.
+Tuyệt đối KHÔNG được tạo cảm giác:
 
-volume = 1
+"Một quả cầu đang zoom."
 
-never reaches the end.
+2. UX Goal
 
-Requirements:
+Người dùng phải trải nghiệm theo đúng thứ tự sau.
 
-The fill must start exactly at the left edge.
+Stage 1
 
-The fill must end exactly at the right edge.
+Loading
 
-No visual padding.
+↓
 
-No fake margins.
+Hiển thị Little Planet
 
-Audit:
+↓
 
-VolumeSlider component
+Không có animation.
 
-CSS
+Không xoay.
 
-pseudo elements
+Không zoom.
 
-range styles
+Không chuyển projection.
 
-browser appearance
+Không tự chạy.
 
-Remove every unnecessary padding.
+Stage 2
 
-==================================================
-3. DO NOT BREAK PHOTO SPHERE VIEWER HOTSPOTS
-==================================================
+Hiển thị UI Intro
 
-A recent CSS change has modified hotspot behaviour.
+Ví dụ:
 
-Current problems:
+Đình Chùa Tây Phương
 
-Navigation hotspot animation is much faster than before.
+Khám phá không gian di sản bằng công nghệ VR360
 
-Pointer cursor rapidly alternates between:
+────────────────────────
 
-pointer
+      [ BẮT ĐẦU KHÁM PHÁ ]
 
-default
+UI phải cực kỳ tối giản.
 
-pointer
+Không:
 
-default
+overlay đen
+blur
+vignette
+opacity layer
+Stage 3
 
-while hovering.
+Người dùng bấm
 
-Hover transition no longer matches Photo Sphere Viewer.
+"Bắt đầu khám phá"
 
-Some hotspot animations appear jittery.
+Sau đó
 
-Audit all CSS affecting:
+chờ khoảng
 
-.psv-marker
-
-.psv-marker *
-
-.hotspot
-
-.poi
-
-.nav
-
-button
-
-svg
-
-transform
-
-transition
-
-animation
-
-cursor
-
-pointer-events
-
-Find the exact rule causing this regression.
-
-==================================================
-4. DO NOT APPLY GLOBAL TRANSITIONS
-==================================================
-
-Search the project for rules such as:
-
-* {
-transition: ...
-}
-
-button {
-transition: ...
-}
-
-svg {
-transition: ...
-}
-
-div {
-transition: ...
-}
-
-img {
-transition: ...
-}
-
-transform:
-transition: all
-
-These rules are probably affecting PSV DOM.
-
-Replace them with scoped classes only.
-
-Never animate every element globally.
-
-==================================================
-5. POINTER CURSOR MUST BE STABLE
-==================================================
-
-While hovering hotspots:
-
-cursor must become pointer
-
-and remain pointer.
-
-It must NEVER oscillate.
-
-Audit:
-
-mouseenter
-
-mouseleave
-
-pointer-events
-
-z-index
-
-overlay elements
-
-hover overlays
-
-Pseudo elements must not steal pointer events.
-
-Decorative layers should use:
-
-pointer-events: none
-
-==================================================
-6. NAVIGATION HOTSPOT ANIMATION
-==================================================
-
-Navigation hotspots currently animate too quickly.
-
-Restore original timing.
-
-Animation should feel smooth.
-
-Approximately:
-
-transition:
 200~300ms
 
-ease
+để người dùng có phản hồi.
 
-Do not use:
+Stage 4
 
-50ms
+Camera bắt đầu tiến.
 
-80ms
+Lưu ý:
 
-100ms
+KHÔNG phải quả cầu phóng to.
 
-Animation should match the original Viewer behaviour before the Audio UI refactor.
+Camera mới là thứ di chuyển.
 
-==================================================
-7. AUDIO UI MUST NOT MODIFY HOTSPOT CSS
-==================================================
+Little Planet gần như đứng yên.
 
-Audio Panel styles must be isolated.
+3. Core Principle
 
-They must NOT affect:
+Đây là nguyên lý quan trọng nhất.
 
-POI markers
+Animation phải được chia thành hai phần.
 
-Navigation markers
+Camera Motion
 
-Photo Sphere Viewer DOM
+chịu trách nhiệm
 
-Scene transitions
+đưa người xem tiến vào.
 
-Marker hover
+Projection Transition
 
-Cursor
+chịu trách nhiệm
+
+biến Little Planet thành Panorama.
+
+Hai thứ này KHÔNG bắt đầu cùng lúc.
+
+4. Timeline
+
+Tổng thời gian
+
+≈ 3.5~4 giây
+
+Phase A
+
+Idle
+
+0%
+
+Little Planet
+
+100%
 
 Projection
 
-Move Audio CSS into its own namespace.
+Camera đứng rất xa.
 
-Examples:
+Không chuyển động.
 
-.audio-panel
+Phase B
 
-.audio-player
+User Click
 
-.audio-slider
+0.2s
 
-.audio-progress
+Không animation.
 
-.audio-volume
+Chỉ tạo cảm giác
 
-Never style generic:
+"Tôi vừa bấm."
 
-button
+Phase C
 
-svg
+Camera Move
 
-input
+1.2s
 
-img
+Camera bắt đầu tiến.
 
-span
+Projection
 
-div
+gần như giữ nguyên.
 
-globally.
+Little Planet
 
-==================================================
-8. VERIFY HOTSPOT TYPES
-==================================================
+vẫn là Little Planet.
 
-Test all hotspot types.
+Khoảng
 
-Information POI
+70%
 
-Image POI
+chuyển động ở Intro
 
-Video POI
+đến từ Camera.
 
-Audio POI
+Chỉ
 
-Navigation POI
+30%
 
-Polygon
+đến từ Projection.
 
-Label
+Phase D
 
-Each type must preserve:
+Projection Relax
+
+1.3s
+
+Camera vẫn tiếp tục tiến.
+
+Projection mới bắt đầu mở.
+
+Không được mở ngay.
+
+Projection chỉ nên bắt đầu khi camera đã đi khoảng
+
+50~60%
+
+quãng đường.
+
+Phase E
+
+Enter World
+
+0.6s
+
+Camera tiến vào.
+
+Projection gần hoàn tất.
+
+Người dùng bắt đầu cảm thấy
+
+"Tôi đã ở bên trong."
+
+Phase F
+
+Settle
+
+0.5s
+
+Camera dừng.
+
+Projection hoàn tất.
+
+Không mở interaction ngay.
+
+Giữ frame ổn định.
+
+Sau đó
+
+enable controls.
+
+5. Motion Curve
+
+Camera
+
+easeInOutCubic
+
+Projection
+
+easeOutSine
+
+Opacity UI
+
+easeOutQuad
+
+Không dùng
+
+bounce
+elastic
+back
+6. Camera Behaviour
+
+Camera là nhân vật chính.
+
+Không phải FOV.
+
+Không phải Projection.
+
+Camera cần:
+
+distance
+
+8
+
+↓
+
+7
+
+↓
+
+6
+
+↓
+
+5
+
+↓
+
+4
+
+↓
+
+3
+
+↓
+
+2
+
+Tiến đều.
+
+Không giật.
+
+Không reset.
+
+7. FOV
+
+FOV chỉ dùng để
+
+điều chỉnh cảm giác.
+
+Không dùng để giả lập chuyển động.
+
+Ví dụ
+
+60°
+
+↓
+
+63°
+
+↓
+
+66°
+
+↓
+
+70°
+
+↓
+
+73°
+
+↓
+
+75°
+
+Không được:
+
+60
+
+↓
+
+100
+8. Projection Behaviour
+
+Projection không được
+
+0%
+
+↓
+
+100%
+
+một mạch.
+
+Projection nên giữ
+
+100%
+
+trong khoảng
+
+30%
+
+thời gian đầu.
+
+Sau đó
+
+mới bắt đầu relax.
+
+Ví dụ
+
+100
+
+100
+
+100
+
+95
+
+90
+
+80
+
+70
+
+60
+
+50
+
+40
+
+30
+
+20
+
+10
+
+0
+9. Sphere Behaviour
+
+Little Planet
+
+KHÔNG được
+
+scale.
+
+Nếu cần
+
+chỉ
+
+1
+
+↓
+
+1.03
+
+Tối đa
+
+1.05
+
+10. Intro UI
+
+Không cần nhiều.
+
+Tên tour
+
+Subtitle
+
+Button
+
+[BẮT ĐẦU KHÁM PHÁ]
+
+Button
 
 hover
 
-animation
+↓
 
-cursor
+phóng nhẹ
 
-click
+↓
 
-focus
+shadow nhẹ
 
-==================================================
-9. REGRESSION TEST
-==================================================
+↓
 
-Verify:
+cursor pointer
 
-✓ Progress bar is visually centered.
+11. State Machine
+Idle
 
-✓ Thumb alignment correct.
+↓
 
-✓ Volume reaches true 0%.
+WaitingForUser
 
-✓ Volume reaches true 100%.
+↓
 
-✓ No empty spacing.
+DelayAfterClick
 
-✓ Navigation hotspot animation restored.
+↓
 
-✓ Pointer cursor stable.
+CameraMove
 
-✓ Hover no longer flickers.
+↓
 
-✓ Audio CSS isolated.
+ProjectionRelax
 
-✓ Photo Sphere Viewer behaviour matches before Audio refactor.
+↓
 
-==================================================
-10. REPORT
-==================================================
+EnterWorld
 
-Report:
+↓
 
-Files modified.
+Settle
 
-Which CSS rules caused the hotspot regression.
+↓
 
-Which global selectors were removed.
+Completed
 
-How volume alignment was fixed.
+Không được bỏ qua state.
 
-How progress bar was rebuilt.
+12. Architecture
+IntroOverlay
 
-Confirm that Photo Sphere Viewer interaction behaviour is identical to before the Audio UI refactor.
+↓
+
+ViewerIntroController
+
+↓
+
+IntroCameraAdapter
+
+↓
+
+CameraController
+
+↓
+
+ProjectionBridge
+
+↓
+
+PanoramaViewer
+
+Không được để
+
+PanoramaViewer
+
+chứa logic Intro.
+
+13. Runtime Responsibility
+IntroOverlay
+
+UI
+
+Button
+
+Fade
+
+Không animation camera.
+
+ViewerIntroController
+
+Timeline.
+
+State Machine.
+
+Synchronization.
+
+IntroCameraAdapter
+
+Điều khiển camera.
+
+Không biết UI.
+
+ProjectionBridge
+
+Chỉ điều khiển progress.
+
+PanoramaViewer
+
+Không biết Intro.
+
+Chỉ render.
+
+14. Forbidden
+
+Không sửa
+
+Builder
+
+POI
+
+Area
+
+Transition
+
+Audio
+
+BottomNav
+
+Gallery
+
+Import
+
+Export
+
+Marker
+
+Polygon
+
+CSS Global
+
+Business Logic
+
+15. Acceptance Criteria
+
+Animation chỉ được coi là hoàn thành nếu:
+
+✅ Little Planet đứng yên trước khi bấm.
+
+✅ Không tự chạy.
+
+✅ Người dùng phải chủ động bấm.
+
+✅ Camera là thứ chuyển động chính.
+
+✅ Không còn cảm giác zoom.
+
+✅ Projection chỉ mở sau khi camera đã tiến gần.
+
+✅ Không teleport.
+
+✅ Không reset.
+
+✅ Không flicker.
+
+✅ Không pop.
+
+✅ Không jump.
+
+✅ Không ảnh hưởng bất kỳ module nào khác.
+
+16. Quality Target
+
+Nếu so với video mẫu:
+
+Mức độ giống về cảm giác (perceived motion): ≥ 90%
+Mức độ giống về timeline: ≥ 95%
+Không chấp nhận các giải pháp chỉ thay đổi FOV hoặc easing để "giả" chuyển động camera.cho

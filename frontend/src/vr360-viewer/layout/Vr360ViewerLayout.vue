@@ -10,6 +10,7 @@ import {
 } from "vue";
 
 import PanoramaViewer from "../components/PanoramaViewer.vue";
+import IntroOverlay from "../components/IntroOverlay.vue";
 import ScenesSidebar from "../components/ScenesSidebar.vue";
 import ViewerPill from "../components/ViewerPill.vue";
 import ViewerTopBar from "../components/ViewerTopBar.vue";
@@ -21,6 +22,7 @@ import { createPoiAudioController } from "../common/controllers/PoiAudioControll
 import { createTourAudioController } from "../common/controllers/TourAudioController.js";
 import { createFullscreenController } from "../common/controllers/fullscreen.js";
 import { createViewerIntroController, INTRO_PHASE } from "../common/controllers/ViewerIntroController.js";
+import { createIntroCameraAdapter } from "../common/intro/IntroCameraAdapter.js";
 import { createViewModeManager, VIEW_MODE } from "../common/controllers/viewModeManager.js";
 import {
   normalizeTour,
@@ -32,6 +34,7 @@ import InfoPoiPopup from '../components/popups/InfoPoiPopup.vue';
 import ImageViewerPopup from '../components/popups/ImageViewerPopup.vue';
 import VideoPoiPopup from '../components/popups/VideoPoiPopup.vue';
 import "../assets/viewer.css";
+import "../assets/intro.css";
 
 const props = defineProps({
   tour: { type: Object, default: null },
@@ -67,8 +70,7 @@ const viewState = ref({ lon: 0, lat: 0, fov: 75 });
 const autoRotate = ref(props.options.autoRotate ?? true);
 const hasEmittedReady = ref(false);
 const isFullscreen = ref(false);
-const introState = ref({ overlayOpacity: 0 });
-const introPhase = ref(INTRO_PHASE.INTRO_ANIMATING);
+const introPhase = ref(INTRO_PHASE.WAITING_TO_START);
 const introPlayed = ref(false);
 const hasCompletedInitialIntro = ref(false);
 let navigationGeneration = 0;
@@ -86,6 +88,7 @@ const tourAudioController = createTourAudioController({ manager: audioManager })
 
 const fullscreen = createFullscreenController(() => root.value);
 const intro = createViewerIntroController(props.options.introAnimation);
+const introCamera = createIntroCameraAdapter(() => panorama.value);
 const viewModeManager = createViewModeManager();
 const activeViewMode = ref(VIEW_MODE.NORMAL);
 const isViewModeSheetOpen = computed(() => activeBottomPanel.value === 'view');
@@ -151,12 +154,14 @@ async function applyTour(payload) {
   if (!hasCompletedInitialIntro.value) {
     panorama.value?.resetProjectionIntro?.();
     introPlayed.value = false;
-    introPhase.value = INTRO_PHASE.INTRO_ANIMATING;
-    introState.value = { overlayOpacity: intro.config.overlayOpacity };
+    introPhase.value = INTRO_PHASE.WAITING_TO_START;
   }
   visitedSceneIds.value = new Set();
   activePointPopup.value = null;
   await nextTick();
+  if (!hasCompletedInitialIntro.value) {
+    introCamera.prepare(intro.getInitialFrame(activeScene.value?.initialView || {}));
+  }
   preloadTourAudio();
   await playTourAudio();
   if (!hasEmittedReady.value) {
@@ -241,37 +246,13 @@ function onHotspotClick(hotspot, event) {
   });
 }
 
-function completeOnboarding() {
-  if (introPhase.value !== INTRO_PHASE.WAITING_FOR_FIRST_INTERACTION) return;
-  intro.unlock();
-}
-
-let onboardingPointer = null;
-function onOnboardingPointerDown(event) {
-  if (introPhase.value !== INTRO_PHASE.WAITING_FOR_FIRST_INTERACTION) return;
-  onboardingPointer = { id: event.pointerId, x: event.clientX, y: event.clientY };
-}
-
-function onOnboardingPointerMove(event) {
-  if (introPhase.value !== INTRO_PHASE.WAITING_FOR_FIRST_INTERACTION || !onboardingPointer || event.pointerId !== onboardingPointer.id) return;
-  if (Math.hypot(event.clientX - onboardingPointer.x, event.clientY - onboardingPointer.y) < 6) return;
-  onboardingPointer = null;
-  completeOnboarding();
-}
-
-function onOnboardingPointerEnd(event) {
-  if (event.pointerId === onboardingPointer?.id) onboardingPointer = null;
-}
-
 function onInteraction() {
-  if (introPhase.value === INTRO_PHASE.WAITING_FOR_FIRST_INTERACTION) return;
   if (!viewerUIReady.value) return;
 }
 
 function onOnboardingWheel(event) {
-  if (introPhase.value === INTRO_PHASE.WAITING_FOR_FIRST_INTERACTION) {
+  if (!viewerUIReady.value) {
     event.preventDefault();
-    completeOnboarding();
     return;
   }
   onInteraction();
@@ -286,33 +267,28 @@ function blockIntroKeyboard(event) {
 function startIntro() {
   if (hasCompletedInitialIntro.value || introPlayed.value || !activeScene.value) return;
   introPlayed.value = true;
-  introPhase.value = INTRO_PHASE.INTRO_ANIMATING;
-  introState.value = { overlayOpacity: intro.config.overlayOpacity };
+  introPhase.value = INTRO_PHASE.CAMERA_MOVE;
   intro.start({
     view: activeScene.value.initialView,
-    onFrame: ({ progress, fov, lon, lat, overlayOpacity }) => {
-      introState.value = { overlayOpacity };
-      panorama.value?.setIntroState?.({
-        fov,
-        lon,
-        lat,
-        progress,
-      });
-    },
-    onWelcome: () => {
-      introPhase.value = INTRO_PHASE.WAITING_FOR_FIRST_INTERACTION;
-      introState.value = { overlayOpacity: 0 };
-    },
+    onFrame: (frame) => introCamera.apply(frame),
+    onPhase: (phase) => { introPhase.value = phase; },
     onUnlock: () => {
-      introPhase.value = INTRO_PHASE.INTERACTIVE;
-      introState.value = { overlayOpacity: 0 };
-      hasCompletedInitialIntro.value = true;
+      introPhase.value = INTRO_PHASE.FINISHING;
     },
   });
 }
 
+function completeIntro() {
+  if (introPhase.value !== INTRO_PHASE.FINISHING) return;
+  intro.complete();
+  introCamera.complete();
+  introPhase.value = INTRO_PHASE.INTERACTIVE;
+  hasCompletedInitialIntro.value = true;
+}
+
 function onPanoramaTextureReady() {
-  startIntro();
+  if (hasCompletedInitialIntro.value || introPlayed.value) return;
+  introCamera.prepare(intro.getInitialFrame(activeScene.value?.initialView || {}));
 }
 
 function toggleAutorotate(force) {
@@ -392,7 +368,6 @@ function toggleFullscreen() {
 function dispose() {
   navigationGeneration += 1;
   intro.cancel();
-  onboardingPointer = null;
   mobileViewportQuery?.removeEventListener?.('change', updateMobileViewport);
   window.removeEventListener("keydown", blockIntroKeyboard, true);
   stopFullscreenSync();
@@ -440,10 +415,6 @@ defineExpose({
   <section
     ref="root"
     class="tour-viewer-page"
-    @pointerdown.capture="onOnboardingPointerDown"
-    @pointermove.capture="onOnboardingPointerMove"
-    @pointerup.capture="onOnboardingPointerEnd"
-    @pointercancel.capture="onOnboardingPointerEnd"
     @pointerdown="onInteraction"
     @wheel.capture="onOnboardingWheel"
     @contextmenu.capture="!viewerUIReady && $event.preventDefault()"
@@ -474,21 +445,15 @@ defineExpose({
       </main>
 
       <div class="viewer-overlay" aria-hidden="true"></div>
-      <div
-        v-if="introPhase === INTRO_PHASE.INTRO_ANIMATING"
-        class="viewer-intro-overlay"
-        :style="{ opacity: introState.overlayOpacity }"
-        aria-hidden="true"
-      ></div>
-      <div
-        v-if="introPhase === INTRO_PHASE.WAITING_FOR_FIRST_INTERACTION"
-        class="viewer-intro-welcome"
-        role="status"
-        aria-live="polite"
-      >
-        <span class="viewer-intro-welcome-arrow" aria-hidden="true">↑</span>
-        <strong>Kéo lên để khám phá</strong>
-      </div>
+      <Transition name="viewer-intro-fade" @after-leave="completeIntro">
+        <IntroOverlay
+          v-if="introPhase !== INTRO_PHASE.INTERACTIVE && introPhase !== INTRO_PHASE.FINISHING"
+          :title="runtimeTour.title"
+          :brand="options.brand || ''"
+          :starting="introPhase !== INTRO_PHASE.WAITING_TO_START"
+          @start="startIntro"
+        />
+      </Transition>
       <div class="viewer-transition-layer">
         <div
           class="viewer-transition-overlay"
@@ -528,6 +493,7 @@ defineExpose({
         :is-transitioning="isTransitioning"
         :audio-session="audioStore.state.activeSession"
         :audio-service="audioService"
+        :audio-tour="{ ...runtimeTour.narration, title: runtimeTour.title }"
         :active-view-mode="activeViewMode"
         @home="resetView"
         @prev="previousScene"
