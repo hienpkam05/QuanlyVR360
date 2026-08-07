@@ -1,6 +1,7 @@
 <script setup>
-import { onBeforeUnmount, ref } from 'vue';
+import { computed, onBeforeUnmount, ref } from 'vue';
 import AudioHoverControls from './audio/AudioHoverControls.vue';
+import { VIEW_MODE } from '../common/controllers/viewModeManager.js';
 
 const props = defineProps({
   sceneName: { type: String, default: '' },
@@ -12,12 +13,22 @@ const props = defineProps({
   isTransitioning: { type: Boolean, default: false },
   audioSession: { type: Object, default: () => ({}) },
   audioService: { type: Object, default: null },
+  activeViewMode: { type: String, default: VIEW_MODE.NORMAL },
 });
 
-const emit = defineEmits(['home', 'info', 'prev', 'next']);
+const emit = defineEmits(['home', 'info', 'prev', 'next', 'view-mode-change']);
 
 const collapsed = ref(false);
 const infoOpen = ref(false);
+
+const VIEW_MODE_ORDER = [VIEW_MODE.NORMAL, VIEW_MODE.FIT_EYES, VIEW_MODE.MEGA_VIEW];
+const VIEW_MODE_LABEL = {
+  [VIEW_MODE.NORMAL]: 'Normal',
+  [VIEW_MODE.FIT_EYES]: 'Fit Eyes',
+  [VIEW_MODE.MEGA_VIEW]: 'Mega View',
+};
+
+const currentViewModeLabel = computed(() => VIEW_MODE_LABEL[props.activeViewMode] || 'Normal');
 
 function toggleCollapse() {
   collapsed.value = !collapsed.value;
@@ -27,6 +38,12 @@ function toggleCollapse() {
 function toggleInfo() {
   infoOpen.value = !infoOpen.value;
   emit('info', { open: infoOpen.value });
+}
+
+function cycleViewMode() {
+  const idx = VIEW_MODE_ORDER.indexOf(props.activeViewMode);
+  const next = VIEW_MODE_ORDER[(idx + 1) % VIEW_MODE_ORDER.length];
+  emit('view-mode-change', next);
 }
 
 onBeforeUnmount(() => {});
@@ -39,27 +56,15 @@ onBeforeUnmount(() => {});
       class="viewer-pill-btn viewer-pill-arrow"
       :aria-label="collapsed ? 'Mở rộng' : 'Thu gọn'"
       :aria-expanded="!collapsed"
-      title="Thu gọn / Mở rộng"
+      :title="collapsed ? 'Mở rộng' : 'Thu gọn'"
       @click="toggleCollapse"
     >
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-        <polyline points="9 18 15 12 9 6" />
+      <span v-if="!collapsed" class="viewer-pill-arrow-label">Ẩn</span>
+      <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <polyline points="9 6 15 12 9 18" />
       </svg>
     </button>
     <div class="viewer-pill-cluster">
-      <button
-        v-if="hasMultipleScenes"
-        type="button"
-        class="viewer-pill-btn"
-        aria-label="Cảnh trước"
-        title="Cảnh trước"
-        :disabled="isFirstScene || isTransitioning"
-        @click="emit('prev')"
-      >
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <polyline points="15 18 9 12 15 6" />
-        </svg>
-      </button>
       <button
         type="button"
         class="viewer-pill-btn viewer-pill-home"
@@ -69,6 +74,56 @@ onBeforeUnmount(() => {});
       >
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <path d="M3 12l9-9 9 9M5 10v10a1 1 0 0 0 1 1h4v-6h4v6h4a1 1 0 0 0 1-1V10" />
+        </svg>
+      </button>
+      <button
+        type="button"
+        class="viewer-pill-btn viewer-pill-view-mode"
+        :aria-label="`Chế độ xem: ${currentViewModeLabel}`"
+        :title="`Chế độ xem: ${currentViewModeLabel} (bấm để đổi)`"
+        :data-mode="activeViewMode"
+        @click="cycleViewMode"
+      >
+        <svg
+          v-if="activeViewMode === VIEW_MODE.NORMAL"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          aria-hidden="true"
+        >
+          <circle cx="12" cy="12" r="9" />
+          <path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18" />
+        </svg>
+        <svg
+          v-else-if="activeViewMode === VIEW_MODE.FIT_EYES"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          aria-hidden="true"
+        >
+          <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z" />
+          <circle cx="12" cy="12" r="3" />
+        </svg>
+        <svg
+          v-else
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          aria-hidden="true"
+        >
+          <polyline points="15 3 21 3 21 9" />
+          <polyline points="9 21 3 21 3 15" />
+          <line x1="21" y1="3" x2="14" y2="10" />
+          <line x1="3" y1="21" x2="10" y2="14" />
         </svg>
       </button>
       <AudioHoverControls
@@ -95,6 +150,19 @@ onBeforeUnmount(() => {});
         v-if="hasMultipleScenes"
         type="button"
         class="viewer-pill-btn"
+        aria-label="Cảnh trước"
+        title="Cảnh trước"
+        :disabled="isFirstScene || isTransitioning"
+        @click="emit('prev')"
+      >
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <polyline points="15 18 9 12 15 6" />
+        </svg>
+      </button>
+      <button
+        v-if="hasMultipleScenes"
+        type="button"
+        class="viewer-pill-btn"
         aria-label="Cảnh tiếp theo"
         title="Cảnh tiếp theo"
         :disabled="isLastScene || isTransitioning"
@@ -109,6 +177,7 @@ onBeforeUnmount(() => {});
       <div v-if="infoOpen && !collapsed" class="viewer-pill-info-popup" role="status">
         <strong>{{ sceneName || 'Cảnh' }}</strong>
         <span v-if="sceneCount > 1 && sceneIndex >= 0">Cảnh {{ sceneIndex + 1 }} / {{ sceneCount }}</span>
+        <span class="viewer-pill-info-view-mode">Chế độ: {{ currentViewModeLabel }}</span>
       </div>
     </transition>
   </div>
@@ -131,7 +200,7 @@ onBeforeUnmount(() => {});
   z-index: 50;
   pointer-events: auto;
   transition: max-width 260ms cubic-bezier(0.22, 0.61, 0.36, 1), padding 260ms ease;
-  max-width: 320px;
+  max-width: 360px;
   overflow: visible;
 }
 
@@ -146,7 +215,7 @@ onBeforeUnmount(() => {});
   gap: 2px;
   overflow: hidden;
   transition: opacity 200ms ease, max-width 260ms cubic-bezier(0.22, 0.61, 0.36, 1), transform 260ms cubic-bezier(0.22, 0.61, 0.36, 1);
-  max-width: 260px;
+  max-width: 300px;
 }
 
 .viewer-pill.is-collapsed .viewer-pill-cluster {
@@ -182,9 +251,14 @@ onBeforeUnmount(() => {});
 }
 
 .viewer-pill-btn:disabled {
-  color: #999;
-  opacity: 0.5;
+  color: rgba(34, 34, 34, 0.35);
+  opacity: 1;
   cursor: not-allowed;
+}
+
+.viewer-pill-btn:disabled:hover {
+  background: transparent;
+  color: rgba(34, 34, 34, 0.35);
 }
 
 .viewer-pill-btn svg {
@@ -192,13 +266,43 @@ onBeforeUnmount(() => {});
   height: 14px;
 }
 
+.viewer-pill-arrow {
+  width: auto;
+  min-width: 26px;
+  padding: 0 6px;
+  gap: 3px;
+  border-radius: 13px;
+}
+
+.viewer-pill-arrow-label {
+  font-size: 10px;
+  line-height: 1;
+  font-weight: 500;
+  letter-spacing: 0.2px;
+  color: inherit;
+}
+
 .viewer-pill-arrow svg {
-  transform: rotate(180deg);
+  width: 10px;
+  height: 10px;
+  transform: rotate(0deg);
   transition: transform 240ms cubic-bezier(0.22, 0.61, 0.36, 1);
 }
 
+.viewer-pill.is-collapsed .viewer-pill-arrow {
+  padding: 0;
+  width: 26px;
+}
+
 .viewer-pill.is-collapsed .viewer-pill-arrow svg {
-  transform: rotate(0deg);
+  transform: rotate(180deg);
+  width: 14px;
+  height: 14px;
+}
+
+.viewer-pill-view-mode[data-mode="fit-eyes"],
+.viewer-pill-view-mode[data-mode="mega-view"] {
+  color: #D5001C;
 }
 
 .viewer-pill-audio :deep(.viewer-audio-hover-trigger) {
@@ -248,6 +352,11 @@ onBeforeUnmount(() => {});
 .viewer-pill-info-popup span {
   color: #666;
   font-size: 11px;
+}
+
+.viewer-pill-info-view-mode {
+  color: #D5001C !important;
+  font-weight: 500;
 }
 
 .viewer-pill-info-pop-enter-active,
