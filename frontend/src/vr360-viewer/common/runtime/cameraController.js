@@ -88,7 +88,7 @@ export function createCameraController(camera) {
   }
 
   function animateTo(next = {}, duration = 520) {
-    tween?.resolve?.();
+    tween?.resolve?.({ cancelled: true });
     return new Promise((resolve) => {
       const targetLon = Number(next.lon ?? lon);
       const targetLat = clampLat(next.lat ?? lat);
@@ -99,6 +99,13 @@ export function createCameraController(camera) {
         lonDelta: shortestLonDelta(lon, targetLon), resolve,
       };
     });
+  }
+
+  function cancelTween() {
+    if (!tween) return false;
+    tween.resolve({ cancelled: true });
+    tween = null;
+    return true;
   }
 
   function tick(now) {
@@ -112,7 +119,7 @@ export function createCameraController(camera) {
       lon = tween.to.lon;
       lat = tween.to.lat;
       fov = tween.to.fov;
-      tween.resolve();
+      tween.resolve({ cancelled: false });
       tween = null;
     }
     return true;
@@ -120,5 +127,5 @@ export function createCameraController(camera) {
 
   function isAnimating() { return Boolean(tween); }
 
-  return { getView, getRoundedView, updateCamera, setView, restoreView, setInitialView, dragBy, zoomBy, animateTo, tick, isAnimating, vectorToLonLat };
+  return { getView, getRoundedView, updateCamera, setView, restoreView, setInitialView, dragBy, zoomBy, animateTo, cancelTween, tick, isAnimating, vectorToLonLat };
 }

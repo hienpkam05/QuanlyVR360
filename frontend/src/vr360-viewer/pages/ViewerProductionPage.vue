@@ -1,7 +1,7 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import Vr360Viewer from '../components/Vr360Viewer.vue';
+import Vr360ViewerLayout from '../layout/Vr360ViewerLayout.vue';
 import { createTourServices } from '../services/createTourServices.js';
 import { apiBaseURL } from '../../api/http.js';
 import { listProjectLocations } from '../../api/locationsApi.js';
@@ -86,6 +86,6 @@ onBeforeUnmount(() => viewer.value?.dispose?.());
   <div class="vr360-production-page">
     <p v-if="loading" class="viewer-error">Loading tour…</p>
     <p v-else-if="errorMessage" class="viewer-error">{{ errorMessage }}</p>
-    <Vr360Viewer v-else ref="viewer" :tour="tour" :options="options" @back="goBack" @error="errorMessage = $event.message || 'The viewer could not render this tour.'" />
+    <Vr360ViewerLayout v-else ref="viewer" :tour="tour" :options="options" @back="goBack" @error="errorMessage = $event.message || 'The viewer could not render this tour.'" />
   </div>
 </template>

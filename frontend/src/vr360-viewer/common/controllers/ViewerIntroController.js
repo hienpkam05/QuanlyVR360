@@ -1,12 +1,12 @@
 const DEFAULT_CONFIG = Object.freeze({
   enabled: true,
-  duration: 1900,
+  duration: 2000,
   overlayOpacity: 0.15,
   startZoom: 0.94,
   endZoom: 1,
   startFov: null,
   endFov: null,
-  easing: 'easeOutQuart',
+  easing: 'easeInOutQuad',
 });
 
 export const INTRO_PHASE = Object.freeze({
@@ -19,8 +19,10 @@ function clamp(value, min, max) {
   return Math.min(max, Math.max(min, value));
 }
 
-function easeOutQuart(progress) {
-  return 1 - Math.pow(1 - progress, 4);
+function easeInOutQuad(progress) {
+  return progress < 0.5
+    ? 2 * progress * progress
+    : 1 - Math.pow(-2 * progress + 2, 2) / 2;
 }
 
 function reducedMotionEnabled() {
@@ -44,17 +46,19 @@ export function createViewerIntroController(overrides = {}) {
 
   function createFrameFor(view = {}) {
     const baseFov = Number(view.fov) || 75;
-    const endFov = Number(config.endFov ?? baseFov * config.endZoom);
+    const targetLat = Number(view.lat) || 0;
+    const targetLon = Number(view.lon) || 0;
+    const targetFov = Number(config.endFov ?? baseFov * config.endZoom);
+    const startLat = targetLat;
+    const startLon = targetLon;
     const startFov = Number(config.startFov ?? baseFov * config.startZoom);
-    const baseLon = Number(view.lon) || 0;
-    const baseLat = Number(view.lat) || 0;
     return (progress) => {
-      const eased = easeOutQuart(progress);
+      const eased = easeInOutQuad(progress);
       return {
         progress,
-        fov: startFov + (endFov - startFov) * eased,
-        lon: baseLon - 22 * (1 - eased),
-        lat: baseLat + 14 * (1 - eased),
+        lat: startLat + (targetLat - startLat) * eased,
+        lon: startLon + (targetLon - startLon) * eased,
+        fov: startFov + (targetFov - startFov) * eased,
         overlayOpacity: config.overlayOpacity * (1 - clamp(progress / 0.5, 0, 1)),
       };
     };

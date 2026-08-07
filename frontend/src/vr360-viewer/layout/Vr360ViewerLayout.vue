@@ -10,6 +10,8 @@ import {
 } from "vue";
 
 import PanoramaViewer from "../components/PanoramaViewer.vue";
+import ScenesSidebar from "../components/ScenesSidebar.vue";
+import ViewerPill from "../components/ViewerPill.vue";
 import ViewerTopBar from "../components/ViewerTopBar.vue";
 import AudioManager from "../common/audio/AudioManager.js";
 import { AUDIO_SCOPE } from "../common/audio/constants.js";
@@ -17,8 +19,6 @@ import { createAudioStore } from "../common/audio/AudioStore.js";
 import { createAudioService } from "../common/audio/audioService.js";
 import { createPoiAudioController } from "../common/controllers/PoiAudioController.js";
 import { createTourAudioController } from "../common/controllers/TourAudioController.js";
-import AudioOverlay from "../components/audio/AudioOverlay.vue";
-import AudioButton from "../components/audio/AudioButton.vue";
 import { createFullscreenController } from "../common/controllers/fullscreen.js";
 import { createViewerIntroController, INTRO_PHASE } from "../common/controllers/ViewerIntroController.js";
 import { createViewModeManager, VIEW_MODE } from "../common/controllers/viewModeManager.js";
@@ -27,6 +27,10 @@ import {
   runtimeHotspotForViewer,
 } from "../common/mapper/normalizeTour.js";
 import { youtubeEmbedUrl } from "../common/utils/media.js";
+import { dispatchPointInteraction } from '../common/registry/pointPluginRegistry.js';
+import InfoPoiPopup from '../components/popups/InfoPoiPopup.vue';
+import ImageViewerPopup from '../components/popups/ImageViewerPopup.vue';
+import VideoPoiPopup from '../components/popups/VideoPoiPopup.vue';
 import "../assets/viewer.css";
 
 const props = defineProps({
@@ -51,13 +55,12 @@ const emit = defineEmits([
 
 const root = ref(null);
 const panorama = ref(null);
-const sceneStrip = ref(null);
 const runtimeTour = ref(normalizeTour({}, props.options));
 const activeSceneId = ref("");
-const activeBottomPanel = ref('scenes');
+const activeBottomPanel = ref(null);
 const visitedSceneIds = ref(new Set());
-const isSceneStripDragging = ref(false);
-const selectedInfoHotspot = ref(null);
+const poiHidden = ref(false);
+const activePointPopup = ref(null);
 const isTransitioning = ref(false);
 const errorMessage = ref("");
 const viewState = ref({ lon: 0, lat: 0, fov: 75 });
@@ -70,7 +73,6 @@ const introPlayed = ref(false);
 const hasCompletedInitialIntro = ref(false);
 let navigationGeneration = 0;
 let stopFullscreenSync = () => {};
-let scenePointerSession = null;
 function handleAudioEvent(event) {
   emit(event.type, event);
   if (import.meta.env?.DEV) console.debug('[Audio Viewer]', event.type, event.scope || '', event.source || '');
@@ -81,14 +83,6 @@ const audioStore = createAudioStore(audioManager);
 const audioService = createAudioService(audioManager, audioStore);
 const poiAudioController = createPoiAudioController({ manager: audioManager });
 const tourAudioController = createTourAudioController({ manager: audioManager });
-const isAudioSheetOpen = computed(() => activeBottomPanel.value === 'audio');
-const hasPlayingAudio = computed(() => audioStore.state.activeSession.status === 'playing');
-
-function openAudioSheet(event) {
-  event?.stopPropagation?.();
-  if (import.meta.env?.DEV) console.debug('[BottomNav] Open Bottom Sheet');
-  activeBottomPanel.value = 'audio';
-}
 
 const fullscreen = createFullscreenController(() => root.value);
 const intro = createViewerIntroController(props.options.introAnimation);
@@ -117,6 +111,7 @@ const displayHotspots = computed(() =>
     runtimeHotspotForViewer(hotspot, scenes.value, activeScene.value),
   ),
 );
+const visibleHotspots = computed(() => (poiHidden.value ? [] : displayHotspots.value));
 const pointHotspotLogo = computed(() => runtimeTour.value.pointHotspotLogo);
 const activeAudioPoiId = computed(() => (
   audioStore.state.activeSession.sourceType === 'poi'
@@ -134,65 +129,6 @@ function error(phase, cause) {
 function markSceneVisited(sceneId) {
   if (!sceneId || visitedSceneIds.value.has(sceneId)) return;
   visitedSceneIds.value = new Set(visitedSceneIds.value).add(sceneId);
-}
-
-function centerActiveScene() {
-  const strip = sceneStrip.value;
-  if (!strip || !activeSceneId.value) return;
-  const item = [...strip.querySelectorAll("[data-scene-id]")]
-    .find((candidate) => candidate.dataset.sceneId === activeSceneId.value);
-  item?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
-}
-
-function scrollSceneStrip(event) {
-  const strip = sceneStrip.value;
-  if (!strip) return;
-  strip.scrollLeft += Math.abs(event.deltaX) > Math.abs(event.deltaY)
-    ? event.deltaX
-    : event.deltaY;
-}
-
-function onSceneStripPointerDown(event) {
-  if (event.pointerType !== "mouse" || event.button !== 0) return;
-  const strip = sceneStrip.value;
-  if (!strip) return;
-  scenePointerSession = {
-    pointerId: event.pointerId,
-    startX: event.clientX,
-    startY: event.clientY,
-    startScrollLeft: strip.scrollLeft,
-    dragStarted: false,
-    captured: false,
-    ended: false,
-  };
-}
-
-function onSceneStripPointerMove(event) {
-  if (!scenePointerSession || event.pointerId !== scenePointerSession.pointerId) return;
-  const strip = sceneStrip.value;
-  if (!strip) return;
-  const deltaX = event.clientX - scenePointerSession.startX;
-  const deltaY = event.clientY - scenePointerSession.startY;
-  const distance = Math.hypot(deltaX, deltaY);
-  if (!scenePointerSession.dragStarted && distance < 8) return;
-  if (!scenePointerSession.dragStarted) {
-    scenePointerSession.dragStarted = true;
-    strip.setPointerCapture?.(event.pointerId);
-    scenePointerSession.captured = true;
-  }
-  isSceneStripDragging.value = true;
-  strip.scrollLeft = scenePointerSession.startScrollLeft - deltaX;
-}
-
-function endSceneStripDrag(event) {
-  if (!scenePointerSession || event.pointerId !== scenePointerSession.pointerId) return;
-  const strip = sceneStrip.value;
-  scenePointerSession.ended = true;
-  isSceneStripDragging.value = false;
-  if (scenePointerSession.captured) {
-    strip?.releasePointerCapture?.(event.pointerId);
-  }
-  scenePointerSession = null;
 }
 
 function preloadTourAudio() {
@@ -219,7 +155,7 @@ async function applyTour(payload) {
     introState.value = { overlayOpacity: intro.config.overlayOpacity };
   }
   visitedSceneIds.value = new Set();
-  selectedInfoHotspot.value = null;
+  activePointPopup.value = null;
   await nextTick();
   preloadTourAudio();
   await playTourAudio();
@@ -241,7 +177,7 @@ async function goToScene(sceneId, options = {}) {
   const generation = ++navigationGeneration;
   const previousSceneId = activeSceneId.value;
   isTransitioning.value = true;
-  selectedInfoHotspot.value = null;
+  activePointPopup.value = null;
   if (activeBottomPanel.value === 'view') activeBottomPanel.value = null;
   try {
     emit("load-progress", { phase: "scene", sceneId: target.id });
@@ -292,25 +228,17 @@ function previousScene() {
 
 function onHotspotClick(hotspot, event) {
   if (!viewerUIReady.value) return;
-  if (import.meta.env?.DEV) console.debug('[Audio Viewer] Audio Hotspot Click', hotspot.id || 'unknown', hotspot.type);
   emit("hotspot-click", { hotspot, event });
-  if (hotspot.type === 'audio') {
-    if (import.meta.env?.DEV) console.debug('[Audio Viewer] Dispatch Controller', hotspot.id || 'unknown');
-    poiAudioController.play(hotspot);
-    if (activeBottomPanel.value === 'audio') activeBottomPanel.value = null;
-  }
-  if (["info", "gallery", "video", "info_area"].includes(hotspot.type)) {
-    selectedInfoHotspot.value = hotspot;
-    return;
-  }
-  if (
-    (hotspot.type === "nav" || hotspot.type === "area_landmark") &&
-    hotspot.target_scene_id
-  )
-    goToScene(hotspot.target_scene_id, {
-      targetView: hotspot.target_view,
-      source: "hotspot",
-    });
+  dispatchPointInteraction(hotspot, {
+    playAudio: (point) => {
+      poiAudioController.play(point);
+    },
+    navigate: (point) => {
+      if (!point.target_scene_id) return;
+      goToScene(point.target_scene_id, { targetView: point.target_view, source: 'hotspot' });
+    },
+    openPopup: (kind, point) => { activePointPopup.value = { kind, point }; },
+  });
 }
 
 function completeOnboarding() {
@@ -420,8 +348,8 @@ function closeViewModeSheet() {
   if (activeBottomPanel.value === 'view') activeBottomPanel.value = null;
 }
 
-function toggleScenesPanel() {
-  activeBottomPanel.value = activeBottomPanel.value === 'scenes' ? null : 'scenes';
+function togglePoi() {
+  poiHidden.value = !poiHidden.value;
 }
 
 function selectViewMode(mode) {
@@ -469,7 +397,6 @@ function dispose() {
   window.removeEventListener("keydown", blockIntroKeyboard, true);
   stopFullscreenSync();
   stopFullscreenSync = () => {};
-  scenePointerSession = null;
   audioManager.dispose();
   audioStore.dispose();
   panorama.value?.dispose?.();
@@ -489,7 +416,6 @@ onMounted(() => {
     isFullscreen.value = active;
   });
 });
-watch(activeSceneId, () => nextTick(centerActiveScene));
 onBeforeUnmount(dispose);
 onUpdated(() => {
   layoutUpdateCount += 1;
@@ -526,11 +452,11 @@ defineExpose({
       <main class="viewer-stage">
         <PanoramaViewer
           ref="panorama"
-          v-memo="[activeSceneId, activeSceneImageUrl, activeSceneFallbackImageUrls, displayHotspots, activeAudioPoiId, introInitialView, activeScene?.transition, pointHotspotLogo, viewerUIReady, autoRotate]"
+          v-memo="[activeSceneId, activeSceneImageUrl, activeSceneFallbackImageUrls, visibleHotspots, activeAudioPoiId, introInitialView, activeScene?.transition, pointHotspotLogo, viewerUIReady, autoRotate]"
           class="tour-panorama"
           :image-url="activeSceneImageUrl"
           :fallback-image-urls="activeSceneFallbackImageUrls"
-          :hotspots="displayHotspots"
+          :hotspots="visibleHotspots"
           :active-audio-poi-id="activeAudioPoiId"
           :initial-view="introInitialView"
           :transition="activeScene?.transition"
@@ -576,7 +502,7 @@ defineExpose({
 
       <div v-if="viewerUIReady" class="viewer-hud viewer-presentation-enter">
         <ViewerTopBar
-          v-if="options.showTopbar !== false"
+          v-if="options.showTopbar === true"
           :tour-title="runtimeTour.title"
           :scene-title="activeScene?.name || ''"
           :scene-index="activeSceneIndex"
@@ -590,62 +516,35 @@ defineExpose({
           @back="$emit('back')"
           ><slot name="topbar"
         /></ViewerTopBar>
-        <div class="viewer-bottom-bar viewer-bottom-bar-enter" aria-label="Viewer controls">
-          <button type="button" aria-label="Mở danh sách cảnh" title="Scenes" :aria-pressed="activeBottomPanel === 'scenes'" :disabled="!scenes.length" @click="toggleScenesPanel">▦</button>
-          <button v-if="hasMultipleScenes" type="button" aria-label="Previous scene" title="Previous scene" :disabled="isFirstScene || isTransitioning" @click="previousScene">‹</button>
-          <button type="button" :aria-label="autoRotate ? 'Disable auto rotate' : 'Enable auto rotate'" :title="autoRotate ? 'Auto rotate on' : 'Auto rotate off'" :aria-pressed="autoRotate" @click="toggleAutorotate">⟳</button>
-          <button v-if="isMobileViewport" class="viewer-view-mode-trigger" type="button" aria-label="Choose view mode" title="View mode" :aria-expanded="isViewModeSheetOpen" @click="openViewModeSheet">&#128065;</button>
-          <AudioButton
-            :active="audioStore.state.activeSession.status === 'playing' || isAudioSheetOpen"
-            @click="openAudioSheet"
-          />
-          <button v-if="hasMultipleScenes" type="button" aria-label="Next scene" title="Next scene" :disabled="isLastScene || isTransitioning" @click="nextScene">›</button>
-          <button type="button" :aria-label="isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'" :title="isFullscreen ? 'Exit fullscreen' : 'Fullscreen'" :aria-pressed="isFullscreen" @click="toggleFullscreen">⛶</button>
-        </div>
-        <div
-          ref="sceneStrip"
-          class="viewer-thumbs"
-          :class="{ show: activeBottomPanel === 'scenes' && scenes.length && !hasPlayingAudio, 'mini-player-active': hasPlayingAudio, dragging: isSceneStripDragging, 'viewer-thumbs-enter': activeBottomPanel === 'scenes' && scenes.length && !hasPlayingAudio }"
-          @wheel.prevent="scrollSceneStrip"
-          @pointerdown="onSceneStripPointerDown"
-          @pointermove="onSceneStripPointerMove"
-          @pointerup="endSceneStripDrag"
-          @pointercancel="endSceneStripDrag"
-        >
-          <div class="viewer-thumbs-track">
-            <button
-              v-for="scene in scenes"
-              :key="scene.id"
-              class="viewer-thumb-item"
-              :class="{ active: scene.id === activeSceneId, visited: visitedSceneIds.has(scene.id) }"
-              :data-scene-id="scene.id"
-              type="button"
-              :aria-current="scene.id === activeSceneId ? 'true' : undefined"
-              :aria-label="`${scene.name}${scene.id === activeSceneId ? ', current scene' : ''}${visitedSceneIds.has(scene.id) ? ', visited' : ''}`"
-              @click="goToScene(scene.id, { source: 'thumbnail' })"
-            >
-              <span
-                :style="
-                  scene.thumbnailSource
-                    ? { backgroundImage: `url(${scene.thumbnailSource})` }
-                    : {}
-                "
-              ></span
-              ><small>{{ scene.name }}</small><b v-if="visitedSceneIds.has(scene.id)" aria-hidden="true">✓</b>
-            </button>
-          </div>
-        </div>
       </div>
-      <AudioOverlay
-        :audio-store="audioStore"
+      <ViewerPill
+        v-if="viewerUIReady"
+        :scene-name="activeScene?.name || ''"
+        :scene-index="activeSceneIndex"
+        :scene-count="scenes.length"
+        :has-multiple-scenes="hasMultipleScenes"
+        :is-first-scene="isFirstScene"
+        :is-last-scene="isLastScene"
+        :is-transitioning="isTransitioning"
+        :audio-session="audioStore.state.activeSession"
         :audio-service="audioService"
-        :tour="runtimeTour.narration"
-        :open="isAudioSheetOpen"
-        @open="openAudioSheet"
-        @close="activeBottomPanel = null"
-        @play-tour="tourAudioController.play(runtimeTour.narration, runtimeTour.title)"
+        @home="resetView"
+        @prev="previousScene"
+        @next="nextScene"
       />
-
+      <ScenesSidebar
+        v-if="viewerUIReady && scenes.length"
+        :scenes="scenes"
+        :active-scene-id="activeSceneId"
+        :visited-scene-ids="visitedSceneIds"
+        :auto-rotate="autoRotate"
+        :is-fullscreen="isFullscreen"
+        :poi-hidden="poiHidden"
+        @select-scene="goToScene($event, { source: 'sidebar' })"
+        @toggle-autorotate="toggleAutorotate()"
+        @toggle-fullscreen="toggleFullscreen()"
+        @toggle-poi="togglePoi"
+      />
       <div class="viewer-modal-layer">
         <div
           v-if="viewerUIReady && isMobileViewport && isViewModeSheetOpen"
@@ -674,59 +573,9 @@ defineExpose({
             </button>
           </section>
         </div>
-        <div
-          v-if="viewerUIReady && selectedInfoHotspot"
-          class="viewer-info-modal-backdrop"
-          @click.self="selectedInfoHotspot = null"
-        >
-          <article class="viewer-info-modal">
-            <button
-              class="viewer-info-close"
-              type="button"
-              @click="selectedInfoHotspot = null"
-            >
-              ×
-            </button>
-            <div
-              v-if="youtubeEmbedUrl(selectedInfoHotspot.info?.youtube_url)"
-              class="viewer-info-media"
-            >
-              <iframe
-                :src="youtubeEmbedUrl(selectedInfoHotspot.info.youtube_url)"
-                title="YouTube video"
-                allow="
-                  accelerometer;
-                  autoplay;
-                  clipboard-write;
-                  encrypted-media;
-                  gyroscope;
-                  picture-in-picture;
-                  web-share;
-                "
-                allowfullscreen
-              ></iframe>
-            </div>
-            <video
-              v-else-if="selectedInfoHotspot.info?.video_url"
-              class="viewer-info-video"
-              :src="selectedInfoHotspot.info.video_url"
-              controls
-              playsinline
-            ></video
-            ><span
-              v-else-if="selectedInfoHotspot.info?.image_url"
-              class="viewer-info-image"
-              :style="{
-                backgroundImage: `url(${selectedInfoHotspot.info.image_url})`,
-              }"
-            ></span
-            ><small>INFO HOTSPOT</small>
-            <h2>
-              {{ selectedInfoHotspot.info?.title || selectedInfoHotspot.label }}
-            </h2>
-            <p>{{ selectedInfoHotspot.info?.description }}</p>
-          </article>
-        </div>
+        <InfoPoiPopup v-if="viewerUIReady && activePointPopup?.kind === 'info'" :point="activePointPopup.point" @close="activePointPopup = null" />
+        <ImageViewerPopup v-if="viewerUIReady && activePointPopup?.kind === 'image'" :point="activePointPopup.point" @close="activePointPopup = null" />
+        <VideoPoiPopup v-if="viewerUIReady && activePointPopup?.kind === 'video'" :point="activePointPopup.point" @close="activePointPopup = null" />
       </div>
       <div class="viewer-notification-layer" aria-live="polite">
         <p v-if="errorMessage" class="viewer-error">{{ errorMessage }}</p>

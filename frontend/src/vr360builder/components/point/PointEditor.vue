@@ -19,7 +19,7 @@ const emit = defineEmits([
   'update', 'update:hover', 'update:content',
   'toggle-lock', 'duplicate', 'remove',
   'preview-target', 'save-entry-view', 'clear-entry-view',
-  'toggle-acc', 'select-info-image', 'select-gallery-images', 'select-video',
+  'toggle-acc', 'select-info-image', 'select-gallery-images', 'select-video', 'select-area-media',
   'pick-audio', 'clear-audio', 'update-audio',
   'select-audio',
 ]);
@@ -47,11 +47,19 @@ const poiEditor = computed(() => resolvePointEditor(props.hotspot));
 const hasContent = computed(() => ['info', 'gallery', 'video'].includes(pointKind.value));
 const isPinMarker = computed(() => pointKind.value === 'pin');
 const isAreaLandmark = computed(() => pointKind.value === 'area_landmark');
+const isArea = computed(() => pointKind.value === 'area');
 const isAudio = computed(() => pointKind.value === 'audio');
+
+if (import.meta.env?.DEV) {
+  // This is intentionally keyed by canonical kind, never by a shared
+  // reactive `selectedPoint` object or a loose `loai_poi` predicate.
+  console.debug('[POI Editor] render type:', props.hotspot?.id, pointKind.value, poiEditor.value?.name || 'none');
+}
 
 const typeLabel = computed(() => {
   if (isAudio.value) return 'Audio';
   if (isAreaLandmark.value) return 'Địa danh';
+  if (isArea.value) return 'Vùng ảnh';
   if (poiType.value && POI_TYPES[poiType.value]) return POI_TYPES[poiType.value].label;
   return isNav.value ? 'Chỉ đường' : 'POI';
 });
@@ -95,7 +103,7 @@ const typeLabel = computed(() => {
     <template v-if="isPoi">
       <component v-if="isAudio && poiEditor" :is="poiEditor" :hotspot="hotspot" @update="forwardUpdate" @select-audio="emit('pick-audio')" @clear-audio="emit('clear-audio')" />
       <!-- Accordion: Thông tin chung -->
-      <BaseAccordion v-if="!isAudio" title="Thông tin chung" :open="accOpen.chung" @toggle="emit('toggle-acc', 'chung')">
+      <BaseAccordion v-if="!isAudio && !isArea" title="Thông tin chung" :open="accOpen.chung" @toggle="emit('toggle-acc', 'chung')">
         <template #icon>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" /></svg>
         </template>
@@ -123,7 +131,7 @@ const typeLabel = computed(() => {
       </BaseAccordion>
 
       <BaseAccordion
-        v-if="!hotspot.loai_poi && !isAudio"
+        v-if="!hotspot.loai_poi && !isAudio && !isArea"
         title="Cảnh đích & góc nhìn"
         :open="accOpen.navTarget"
         @toggle="emit('toggle-acc', 'navTarget')"
@@ -191,6 +199,10 @@ const typeLabel = computed(() => {
         <component :is="poiEditor" :hotspot="hotspot" :scenes="scenes" @update="forwardUpdate" />
       </BaseAccordion>
 
+      <BaseAccordion v-if="isArea && !isAudio" title="General & Media" :open="accOpen.noiDung" @toggle="emit('toggle-acc', 'noiDung')">
+        <component :is="poiEditor" :hotspot="hotspot" @update="forwardUpdate" @select-media="emit('select-area-media', $event)" />
+      </BaseAccordion>
+
       <!-- Accordion: Ghim địa danh -->
       <BaseAccordion v-if="isPinMarker && !isAudio" title="Cấu hình ghim" :open="accOpen.noiDung" @toggle="emit('toggle-acc', 'noiDung')">
         <template #icon>
@@ -200,7 +212,7 @@ const typeLabel = computed(() => {
       </BaseAccordion>
 
       <!-- Accordion: Hover -->
-      <BaseAccordion v-if="!isAudio" title="Hiệu ứng di chuột" :open="accOpen.hover" @toggle="emit('toggle-acc', 'hover')">
+      <BaseAccordion v-if="!isAudio && !isArea" title="Hiệu ứng di chuột" :open="accOpen.hover" @toggle="emit('toggle-acc', 'hover')">
         <template #icon>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><path d="M18 11V6a2 2 0 00-2-2h-1M10 4H7a2 2 0 00-2 2v11a8 8 0 0016 0v-5" /><path d="M14 8l2-2-2-2" /></svg>
         </template>

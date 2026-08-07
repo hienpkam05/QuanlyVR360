@@ -2,11 +2,11 @@
 import { ref } from 'vue';
 
 import fixture from '../assets/demo-tour.json';
-import Vr360Viewer from '../components/Vr360Viewer.vue';
+import Vr360ViewerLayout from '../layout/Vr360ViewerLayout.vue';
 
 const tour = ref(fixture);
 </script>
 
 <template>
-  <Vr360Viewer :tour="tour" :options="{ brand: 'VR360 DEMO', autoRotate: false }" />
+  <Vr360ViewerLayout :tour="tour" :options="{ brand: 'VR360 DEMO', autoRotate: false }" />
 </template>

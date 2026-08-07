@@ -1,3 +1,5 @@
+import { isNavigationPoint } from '../../../common/vr360/pointRendererRegistry.js';
+
 const warned = new Set();
 
 function warnOnce(code, message) {
@@ -15,10 +17,6 @@ function invalidUrl(value) {
   if (value.startsWith('blob:')) return true;
   if (value.startsWith('data:')) return !/^data:image\/(?:jpeg|jpg|png|webp);base64,/i.test(value);
   return !/^(https?:\/\/|\/|\.\/|\.\.\/)/.test(value);
-}
-
-function isNavigation(raw = {}) {
-  return raw.type === 'nav' || raw.type === 'navigate' || raw.type === 'chuyen_canh' || raw.loai_poi === 'chuyen_canh';
 }
 
 export function validateTourPayload(source = {}, scenes = []) {
@@ -44,7 +42,7 @@ export function validateTourPayload(source = {}, scenes = []) {
     if (!hotspot.raw?.type) warnOnce(`hotspot-type-${scene.id}-${index}`, `hotspot "${hotspot.id}" is missing type.`);
     const position = hotspot.type === 'area_landmark' ? hotspot.position : hotspot.raw;
     if (!isFiniteNumber(position?.lon) || !isFiniteNumber(position?.lat)) warnOnce(`hotspot-position-${scene.id}-${hotspot.id}`, `hotspot "${hotspot.id}" has invalid lon/lat.`);
-    if (isNavigation(hotspot.raw) && !sceneIds.has(hotspot.targetSceneId)) warnOnce(`target-${scene.id}-${hotspot.id}`, `NAV hotspot "${hotspot.id}" targets a missing scene and is disabled.`);
+    if (isNavigationPoint(hotspot) && !sceneIds.has(hotspot.targetSceneId)) warnOnce(`target-${scene.id}-${hotspot.id}`, `Navigation point "${hotspot.id}" targets a missing scene and is disabled.`);
     if (hotspot.raw?.navStyle && hotspot.navStyle !== hotspot.raw.navStyle && hotspot.raw.navStyle !== 'arrow') warnOnce(`nav-style-${hotspot.raw.navStyle}`, `unsupported navStyle "${hotspot.raw.navStyle}" falls back to default.`);
   }));
 }
