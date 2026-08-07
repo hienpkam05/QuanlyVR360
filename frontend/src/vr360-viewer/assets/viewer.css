@@ -33,10 +33,14 @@
   width: 100%;
 }
 
-.tour-viewer-page,
-.tour-viewer-page .viewer-shell,
 .vr360-production-page {
+  display: flex;
+  flex-direction: column;
   min-height: 100vh;
+}
+
+.vr360-production-page > .tour-viewer-page {
+  flex: 1;
 }
 
 .tour-viewer-page .viewer-shell,
@@ -71,7 +75,7 @@
 .tour-viewer-page .viewer-modal-layer > * { pointer-events: auto; }
 .tour-viewer-page .viewer-notification-layer { pointer-events: none; z-index: var(--viewer-z-toast); }
 
-.tour-viewer-page .panorama-viewer {
+.panorama-viewer {
   background:
     linear-gradient(90deg, rgba(255, 255, 255, 0.07) 1px, transparent 1px),
     linear-gradient(rgba(255, 255, 255, 0.07) 1px, transparent 1px),
@@ -83,8 +87,8 @@
   width: 100%;
 }
 
-.tour-viewer-page .panorama-viewer canvas,
-.tour-viewer-page .panorama-canvas {
+.panorama-viewer canvas,
+.panorama-canvas {
   display: block;
   height: 100%;
   inset: 0;
@@ -128,17 +132,17 @@
   50% { opacity: 1; transform: translateY(-4px); }
 }
 
-.tour-viewer-page .panorama-viewer.empty {
+.panorama-viewer.empty {
   align-items: center;
   display: flex;
   justify-content: center;
 }
 
-.tour-viewer-page .panorama-hotspot {
+.panorama-viewer .panorama-hotspot {
   z-index: var(--viewer-z-polygon);
 }
 
-.tour-viewer-page .panorama-viewer {
+.panorama-viewer {
   height: 100%;
 }
 
@@ -507,11 +511,11 @@
   z-index: var(--viewer-z-hud);
 }
 
-.tour-viewer-page .viewer-hotspot-audio .viewer-audio-poi-icon { align-items: center; background: radial-gradient(circle at 34% 30%, #fef3c7, #f59e0b 68%); border: 2px solid rgba(255,255,255,.96); border-radius: 50%; box-shadow: 0 4px 17px rgba(245,158,11,.48); color: #362400; display: inline-flex; height: 43px; justify-content: center; position: relative; transition: transform .18s ease, box-shadow .18s ease; width: 43px; }
-.tour-viewer-page .viewer-audio-poi-icon svg { fill: none; height: 22px; stroke: currentColor; stroke-linecap: round; stroke-width: 1.8; width: 22px; }
-.tour-viewer-page .viewer-audio-poi-icon i { border: 1px solid rgba(253,230,138,.7); border-radius: 50%; inset: -6px; opacity: 0; position: absolute; }
-.tour-viewer-page .viewer-hotspot-audio:hover .viewer-audio-poi-icon, .tour-viewer-page .viewer-hotspot-audio.active .viewer-audio-poi-icon { box-shadow: 0 0 0 6px rgba(250,204,21,.19), 0 6px 22px rgba(245,158,11,.6); transform: scale(1.1); }
-.tour-viewer-page .viewer-hotspot-audio.playing .viewer-audio-poi-icon i { animation: viewer-audio-ring 1.55s ease-out infinite; opacity: 1; }
+.panorama-viewer .viewer-hotspot-audio .viewer-audio-poi-icon { align-items: center; background: radial-gradient(circle at 34% 30%, #fef3c7, #f59e0b 68%); border: 2px solid rgba(255,255,255,.96); border-radius: 50%; box-shadow: 0 4px 17px rgba(245,158,11,.48); color: #362400; display: inline-flex; height: 43px; justify-content: center; position: relative; transition: transform .18s ease, box-shadow .18s ease; width: 43px; }
+.panorama-viewer .viewer-audio-poi-icon svg { fill: none; height: 22px; stroke: currentColor; stroke-linecap: round; stroke-width: 1.8; width: 22px; }
+.panorama-viewer .viewer-audio-poi-icon i { border: 1px solid rgba(253,230,138,.7); border-radius: 50%; inset: -6px; opacity: 0; position: absolute; }
+.panorama-viewer .viewer-hotspot-audio:hover .viewer-audio-poi-icon, .panorama-viewer .viewer-hotspot-audio.active .viewer-audio-poi-icon { box-shadow: 0 0 0 6px rgba(250,204,21,.19), 0 6px 22px rgba(245,158,11,.6); transform: scale(1.1); }
+.panorama-viewer .viewer-hotspot-audio.playing .viewer-audio-poi-icon i { animation: viewer-audio-ring 1.55s ease-out infinite; opacity: 1; }
 @keyframes viewer-audio-ring { from { opacity: .85; transform: scale(.8); } to { opacity: 0; transform: scale(1.55); } }
 
 .tour-viewer-page .viewer-bottom-bar-enter {
@@ -720,7 +724,7 @@
   white-space: nowrap;
 }
 
-.tour-viewer-page .viewer-hotspot {
+.panorama-viewer .viewer-hotspot {
   align-items: center;
   background: transparent;
   border: 0;
@@ -735,21 +739,32 @@
   z-index: var(--viewer-z-hotspot);
 }
 
-.tour-viewer-page .area-landmark polygon {
+.panorama-viewer .area-landmark-layer {
+  inset: 0;
+  overflow: visible;
+  pointer-events: none;
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  z-index: var(--viewer-z-polygon);
+}
+
+.panorama-viewer .area-landmark polygon {
   cursor: pointer;
+  fill-opacity: 0.3;
   opacity: 1;
   pointer-events: auto;
   z-index: var(--viewer-z-polygon);
-  transition: fill 190ms ease, stroke 190ms ease, stroke-width 190ms ease;
+  transition: fill 190ms ease, stroke 190ms ease, stroke-width 190ms ease, filter 190ms ease;
 }
 
-.tour-viewer-page .area-landmark line {
+.panorama-viewer .area-landmark line {
   pointer-events: none;
   stroke: #fff;
   stroke-linecap: round;
 }
 
-.tour-viewer-page .area-landmark circle {
+.panorama-viewer .area-landmark circle:not(.area-landmark-vertex) {
   pointer-events: auto;
   animation: area-landmark-anchor-pulse 2.2s ease-in-out infinite;
   filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.5));
@@ -760,13 +775,30 @@
   50% { filter: drop-shadow(0 0 8px rgba(255, 90, 31, 0.85)) drop-shadow(0 2px 4px rgba(0, 0, 0, 0.5)); }
 }
 
-.tour-viewer-page .area-landmark.is-hovered polygon {
+.panorama-viewer .area-landmark.is-hovered polygon {
   fill: rgba(255, 255, 255, 0.12);
   stroke: #ffd84d;
   stroke-width: 1.5;
 }
 
-.tour-viewer-page .area-landmark-label {
+.panorama-viewer .area-landmark.is-selected polygon {
+  filter: drop-shadow(0 0 10px rgba(253, 224, 71, 0.78));
+  stroke: #fde047;
+  stroke-width: 1.5;
+}
+
+.panorama-viewer .area-landmark-vertex {
+  pointer-events: auto;
+  filter: drop-shadow(0 0 4px rgba(251, 191, 36, 0.96));
+  transition: r 160ms ease, stroke 160ms ease;
+}
+
+.panorama-viewer .area-landmark.is-selected .area-landmark-vertex {
+  r: 6px;
+  stroke: #fde047;
+}
+
+.panorama-viewer .area-landmark-label {
   align-items: center;
   background: linear-gradient(135deg, #ff8a2b 0%, #e0301b 100%);
   border: 1.5px solid rgba(255, 255, 255, 0.92);
@@ -791,13 +823,21 @@
   z-index: var(--viewer-z-label);
 }
 
-.tour-viewer-page .area-landmark-label:hover,
-.tour-viewer-page .area-landmark-label.is-hovered {
+.panorama-viewer .area-landmark-label:hover,
+.panorama-viewer .area-landmark-label.is-hovered {
   filter: brightness(1.08) drop-shadow(0 4px 12px rgba(224, 48, 27, 0.55));
   transform: translate3d(0, -1px, 0) translateX(-50%);
 }
 
-.tour-viewer-page .panorama-info-area-layer {
+.panorama-viewer .area-landmark.is-editor .area-landmark-label {
+  cursor: grab;
+}
+
+.panorama-viewer .area-landmark.is-editor .area-landmark-label:active {
+  cursor: grabbing;
+}
+
+.panorama-viewer .panorama-info-area-layer {
   inset: 0;
   overflow: visible;
   pointer-events: none;
@@ -805,7 +845,7 @@
   z-index: var(--viewer-z-polygon);
 }
 
-.tour-viewer-page .panorama-info-area {
+.panorama-viewer .panorama-info-area {
   cursor: pointer;
   fill: transparent;
   pointer-events: auto;
@@ -820,13 +860,13 @@
     stroke-width 0.18s ease;
 }
 
-.tour-viewer-page .panorama-info-area:hover {
+.panorama-viewer .panorama-info-area:hover {
   fill: rgba(255, 255, 255, 0.12);
   stroke: #ffd84d;
   stroke-width: 1.5;
 }
 
-.tour-viewer-page .panorama-info-area.draft {
+.panorama-viewer .panorama-info-area.draft {
   fill: none;
   pointer-events: none;
   stroke: #ffd84d;
@@ -842,7 +882,7 @@
   }
 }
 
-.tour-viewer-page .viewer-point-dot {
+.panorama-viewer .viewer-point-dot {
   align-items: center;
   background: #7658f4;
   border: 3px solid #ffd84d;
@@ -861,7 +901,7 @@
   width: 36px;
 }
 
-.tour-viewer-page .viewer-point-logo {
+.panorama-viewer .viewer-point-logo {
   background: rgba(255, 255, 255, 0.92) center/contain no-repeat;
   border: 3px solid #ffd84d;
   border-radius: 999px;
@@ -875,8 +915,8 @@
   width: 38px;
 }
 
-.tour-viewer-page .viewer-point-dot::before,
-.tour-viewer-page .viewer-point-logo::before {
+.panorama-viewer .viewer-point-dot::before,
+.panorama-viewer .viewer-point-logo::before {
   animation: point-orbit-spin 2.6s linear infinite;
   border: 2px dashed rgba(255, 216, 77, 0.88);
   border-left-color: rgba(80, 231, 255, 0.95);
@@ -888,8 +928,8 @@
   position: absolute;
 }
 
-.tour-viewer-page .viewer-point-dot::after,
-.tour-viewer-page .viewer-point-logo::after {
+.panorama-viewer .viewer-point-dot::after,
+.panorama-viewer .viewer-point-logo::after {
   animation: point-soft-pulse 1.8s ease-in-out infinite;
   border: 1px solid rgba(255, 216, 77, 0.38);
   border-radius: 999px;
@@ -900,16 +940,16 @@
   position: absolute;
 }
 
-.tour-viewer-page .viewer-hotspot-point:hover .viewer-point-dot,
-.tour-viewer-page .viewer-hotspot-point:hover .viewer-point-logo {
+.panorama-viewer .viewer-hotspot-point:hover .viewer-point-dot,
+.panorama-viewer .viewer-hotspot-point:hover .viewer-point-logo {
   box-shadow:
     0 12px 32px rgba(0, 0, 0, 0.48),
     0 0 18px rgba(255, 216, 77, 0.42);
   transform: scale(1.14);
 }
 
-.tour-viewer-page .viewer-hotspot-point:hover .viewer-point-dot::before,
-.tour-viewer-page .viewer-hotspot-point:hover .viewer-point-logo::before {
+.panorama-viewer .viewer-hotspot-point:hover .viewer-point-dot::before,
+.panorama-viewer .viewer-hotspot-point:hover .viewer-point-logo::before {
   animation-duration: 1.25s;
   opacity: 1;
 }
@@ -932,7 +972,7 @@
   }
 }
 
-.tour-viewer-page .viewer-info-dot {
+.panorama-viewer .viewer-info-dot {
   align-items: center;
   animation: info-hotspot-glow 1.6s ease-in-out infinite;
   background: radial-gradient(circle at 35% 30%, #ffffff, #50e7ff 28%, #155dfc 72%);
@@ -951,7 +991,7 @@
   width: 44px;
 }
 
-.tour-viewer-page .viewer-hotspot-info:hover .viewer-info-dot {
+.panorama-viewer .viewer-hotspot-info:hover .viewer-info-dot {
   box-shadow:
     0 0 0 12px rgba(80, 231, 255, 0.22),
     0 14px 34px rgba(0, 0, 0, 0.5);
@@ -968,7 +1008,7 @@
   }
 }
 
-.tour-viewer-page .viewer-hotspot .hotspot-label {
+.panorama-viewer .viewer-hotspot .hotspot-label {
   background: rgba(8, 8, 14, 0.88);
   border-radius: 6px;
   bottom: auto;
@@ -981,14 +1021,14 @@
   transform: none;
 }
 
-.tour-viewer-page .viewer-hotspot-nav {
+.panorama-viewer .viewer-hotspot-nav {
   background: transparent;
   height: 70px;
   justify-content: center;
   width: 86px;
 }
 
-.tour-viewer-page .viewer-nav-default {
+.panorama-viewer .viewer-nav-default {
   align-items: center;
   display: inline-flex;
   justify-content: center;
@@ -996,11 +1036,11 @@
   position: relative;
 }
 
-.tour-viewer-page .viewer-nav-default-arrow {
+.panorama-viewer .viewer-nav-default-arrow {
   display: inline-flex;
 }
 
-.tour-viewer-page .viewer-nav-default-arrow img {
+.panorama-viewer .viewer-nav-default-arrow img {
   animation: nav-arrow-walk-bob 1.6s ease-in-out infinite;
   display: block;
   filter: drop-shadow(0 3px 6px rgba(0, 0, 0, 0.55));
@@ -1011,7 +1051,7 @@
   width: 58px;
 }
 
-.tour-viewer-page .viewer-hotspot-nav:hover .viewer-nav-default-arrow img {
+.panorama-viewer .viewer-hotspot-nav:hover .viewer-nav-default-arrow img {
   filter: drop-shadow(0 5px 12px rgba(0, 0, 0, 0.6)) brightness(1.25);
 }
 
@@ -1020,7 +1060,7 @@
   50% { transform: translateY(-4px); opacity: 1; }
 }
 
-.tour-viewer-page .viewer-nav-default-preview {
+.panorama-viewer .viewer-nav-default-preview {
   background: rgba(10, 12, 20, 0.86);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
@@ -1039,14 +1079,14 @@
   z-index: var(--viewer-z-label);
 }
 
-.tour-viewer-page .viewer-nav-default-preview img {
+.panorama-viewer .viewer-nav-default-preview img {
   display: block;
   height: 100px;
   object-fit: cover;
   width: 100%;
 }
 
-.tour-viewer-page .viewer-nav-default-preview-name {
+.panorama-viewer .viewer-nav-default-preview-name {
   color: #fff;
   display: block;
   font-size: 12px;
@@ -1054,13 +1094,13 @@
   padding: 8px 10px;
 }
 
-.tour-viewer-page .viewer-hotspot-nav:hover .viewer-nav-default-preview,
-.tour-viewer-page .viewer-hotspot-nav:focus-visible .viewer-nav-default-preview {
+.panorama-viewer .viewer-hotspot-nav:hover .viewer-nav-default-preview,
+.panorama-viewer .viewer-hotspot-nav:focus-visible .viewer-nav-default-preview {
   opacity: 1;
   transform: translate(-50%, calc(-100% - 20px));
 }
 
-.tour-viewer-page .viewer-hotspot-preview {
+.panorama-viewer .viewer-hotspot-preview {
   background: #171827 center/cover;
   border: 2px solid rgba(255, 255, 255, 0.95);
   border-radius: 4px;
@@ -1075,8 +1115,8 @@
   width: 112px;
 }
 
-.tour-viewer-page .viewer-hotspot-tooltip,
-.tour-viewer-page .viewer-hotspot-image-preview {
+.panorama-viewer .viewer-hotspot-tooltip,
+.panorama-viewer .viewer-hotspot-image-preview {
   background: rgba(12, 15, 26, 0.92);
   border: 1px solid rgba(255, 255, 255, 0.2);
   border-radius: 12px;
@@ -1090,13 +1130,13 @@
   transition: opacity 0.18s ease, transform 0.18s ease;
 }
 
-.tour-viewer-page .viewer-hotspot-video { height: 48px; width: 48px; }
-.tour-viewer-page .viewer-video-poi-marker { align-items: center; background: linear-gradient(145deg, rgba(14,116,144,.98), rgba(8,47,73,.98)); border: 2px solid rgba(207,250,254,.92); border-radius: 50%; box-shadow: 0 9px 24px rgba(8,47,73,.5); display: inline-flex; height: 42px; justify-content: center; overflow: hidden; position: relative; transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease; width: 42px; }
-.tour-viewer-page .viewer-video-poi-marker.has-poster::after { background: rgba(8,47,73,.38); content: ''; inset: 0; position: absolute; }
-.tour-viewer-page .viewer-video-poi-poster { background: center / cover no-repeat; inset: 0; position: absolute; }
-.tour-viewer-page .viewer-video-poi-marker svg { fill: none; filter: drop-shadow(0 2px 4px rgba(0,0,0,.38)); height: 27px; position: relative; stroke: #fff; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.8; width: 27px; z-index: 1; }
-.tour-viewer-page .viewer-video-poi-marker .viewer-video-poi-play { fill: #fff; stroke: none; }
-.tour-viewer-page .viewer-hotspot-video:hover .viewer-video-poi-marker, .tour-viewer-page .viewer-hotspot-video:focus-visible .viewer-video-poi-marker { border-color: #fff; box-shadow: 0 0 0 5px rgba(103,232,249,.2), 0 14px 30px rgba(8,47,73,.65); transform: translateY(-2px) scale(1.08); }
+.panorama-viewer .viewer-hotspot-video { height: 48px; width: 48px; }
+.panorama-viewer .viewer-video-poi-marker { align-items: center; background: linear-gradient(145deg, rgba(14,116,144,.98), rgba(8,47,73,.98)); border: 2px solid rgba(207,250,254,.92); border-radius: 50%; box-shadow: 0 9px 24px rgba(8,47,73,.5); display: inline-flex; height: 42px; justify-content: center; overflow: hidden; position: relative; transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease; width: 42px; }
+.panorama-viewer .viewer-video-poi-marker.has-poster::after { background: rgba(8,47,73,.38); content: ''; inset: 0; position: absolute; }
+.panorama-viewer .viewer-video-poi-poster { background: center / cover no-repeat; inset: 0; position: absolute; }
+.panorama-viewer .viewer-video-poi-marker svg { fill: none; filter: drop-shadow(0 2px 4px rgba(0,0,0,.38)); height: 27px; position: relative; stroke: #fff; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.8; width: 27px; z-index: 1; }
+.panorama-viewer .viewer-video-poi-marker .viewer-video-poi-play { fill: #fff; stroke: none; }
+.panorama-viewer .viewer-hotspot-video:hover .viewer-video-poi-marker, .panorama-viewer .viewer-hotspot-video:focus-visible .viewer-video-poi-marker { border-color: #fff; box-shadow: 0 0 0 5px rgba(103,232,249,.2), 0 14px 30px rgba(8,47,73,.65); transform: translateY(-2px) scale(1.08); }
 
 .tour-viewer-page .viewer-video-modal-backdrop { align-items: center; animation: viewer-video-backdrop-in .2s ease-out; background: rgba(2,4,12,.58); backdrop-filter: blur(7px); display: flex; inset: 0; justify-content: center; padding: 24px; position: absolute; }
 .tour-viewer-page .viewer-video-modal { animation: viewer-video-modal-in .22s ease-out both; background: rgba(14,17,29,.96); border: 1px solid rgba(255,255,255,.16); border-radius: 20px; box-shadow: 0 32px 96px rgba(0,0,0,.62); color: #fff; display: flex; flex-direction: column; max-height: 80vh; overflow: hidden; width: min(1040px, 90vw); }
@@ -1113,23 +1153,23 @@
 @keyframes viewer-video-backdrop-in { from { opacity: 0; } to { opacity: 1; } }
 @keyframes viewer-video-modal-in { from { opacity: 0; transform: translateY(18px) scale(.97); } to { opacity: 1; transform: translateY(0) scale(1); } }
 
-.tour-viewer-page .viewer-hotspot-tooltip {
+.panorama-viewer .viewer-hotspot-tooltip {
   max-width: 220px;
   padding: 8px 11px;
   white-space: normal;
 }
 
-.tour-viewer-page .viewer-hotspot-image-preview {
+.panorama-viewer .viewer-hotspot-image-preview {
   background-position: center;
   background-size: cover;
   height: 112px;
   width: 160px;
 }
 
-.tour-viewer-page .viewer-hotspot:hover .viewer-hotspot-tooltip,
-.tour-viewer-page .viewer-hotspot:hover .viewer-hotspot-image-preview,
-.tour-viewer-page .viewer-hotspot:focus-visible .viewer-hotspot-tooltip,
-.tour-viewer-page .viewer-hotspot:focus-visible .viewer-hotspot-image-preview {
+.panorama-viewer .viewer-hotspot:hover .viewer-hotspot-tooltip,
+.panorama-viewer .viewer-hotspot:hover .viewer-hotspot-image-preview,
+.panorama-viewer .viewer-hotspot:focus-visible .viewer-hotspot-tooltip,
+.panorama-viewer .viewer-hotspot:focus-visible .viewer-hotspot-image-preview {
   opacity: 1;
   transform: translateY(0) scale(1);
 }
@@ -1206,17 +1246,17 @@
 .tour-viewer-page .poi-image-next { right: 12px; }
 @keyframes poi-popup-in { from { opacity: 0; transform: translateY(12px) scale(.97); } to { opacity: 1; transform: translateY(0) scale(1); } }
 
-.tour-viewer-page .viewer-hotspot:hover .viewer-hotspot-preview {
+.panorama-viewer .viewer-hotspot:hover .viewer-hotspot-preview {
   opacity: 1;
   transform: translateY(0) scale(1);
 }
 
-.tour-viewer-page .viewer-hotspot-nav:has(.nav-preview-expand-marker) {
+.panorama-viewer .viewer-hotspot-nav:has(.nav-preview-expand-marker) {
   height: 126px;
   width: 126px;
 }
 
-.tour-viewer-page .nav-preview-expand-marker {
+.panorama-viewer .nav-preview-expand-marker {
   align-items: center;
   display: grid;
   height: 126px;
@@ -1226,7 +1266,7 @@
   width: 126px;
 }
 
-.tour-viewer-page .nav-preview-expand-marker::before {
+.panorama-viewer .nav-preview-expand-marker::before {
   background: rgba(9, 13, 22, 0.16);
   border: 2px solid rgba(255, 255, 255, 0.98);
   border-radius: 50%;
@@ -1241,7 +1281,7 @@
   z-index: 2;
 }
 
-.tour-viewer-page .nav-preview-expand-media {
+.panorama-viewer .nav-preview-expand-media {
   background: rgba(6, 10, 18, 0.84);
   border: 2px solid rgba(255, 255, 255, 0.96);
   border-radius: 50%;
@@ -1255,7 +1295,7 @@
   will-change: transform, opacity;
 }
 
-.tour-viewer-page .nav-preview-expand-media img {
+.panorama-viewer .nav-preview-expand-media img {
   height: 100%;
   object-fit: cover;
   transform: scale(1.05);
@@ -1263,7 +1303,7 @@
   width: 100%;
 }
 
-.tour-viewer-page .nav-preview-expand-name {
+.panorama-viewer .nav-preview-expand-name {
   color: #ffffff;
   font-size: 11px;
   font-weight: 800;
@@ -1282,25 +1322,25 @@
   will-change: transform, opacity;
 }
 
-.tour-viewer-page .nav-preview-expand-marker.is-expanded::before,
-.tour-viewer-page .viewer-hotspot-nav:focus-visible .nav-preview-expand-marker::before {
+.panorama-viewer .nav-preview-expand-marker.is-expanded::before,
+.panorama-viewer .viewer-hotspot-nav:focus-visible .nav-preview-expand-marker::before {
   opacity: 0;
   transform: scale(3.7);
 }
 
-.tour-viewer-page .nav-preview-expand-marker.is-expanded .nav-preview-expand-media,
-.tour-viewer-page .viewer-hotspot-nav:focus-visible .nav-preview-expand-media {
+.panorama-viewer .nav-preview-expand-marker.is-expanded .nav-preview-expand-media,
+.panorama-viewer .viewer-hotspot-nav:focus-visible .nav-preview-expand-media {
   opacity: 1;
   transform: scale(1);
 }
 
-.tour-viewer-page .nav-preview-expand-marker.is-expanded .nav-preview-expand-media img,
-.tour-viewer-page .viewer-hotspot-nav:focus-visible .nav-preview-expand-media img {
+.panorama-viewer .nav-preview-expand-marker.is-expanded .nav-preview-expand-media img,
+.panorama-viewer .viewer-hotspot-nav:focus-visible .nav-preview-expand-media img {
   transform: scale(1);
 }
 
-.tour-viewer-page .nav-preview-expand-marker.is-expanded .nav-preview-expand-name,
-.tour-viewer-page .viewer-hotspot-nav:focus-visible .nav-preview-expand-name {
+.panorama-viewer .nav-preview-expand-marker.is-expanded .nav-preview-expand-name,
+.panorama-viewer .viewer-hotspot-nav:focus-visible .nav-preview-expand-name {
   opacity: 1;
   transform: translate(-50%, 0);
 }
@@ -1572,13 +1612,22 @@
     to { opacity: 1; transform: translateY(0); }
   }
 
-  .tour-viewer-page .area-landmark polygon,
-  .tour-viewer-page .area-landmark circle {
+  .panorama-viewer .area-landmark polygon,
+  .panorama-viewer .area-landmark circle,
+  .panorama-viewer .area-landmark-vertex {
     touch-action: manipulation;
   }
 
-  .tour-viewer-page .area-landmark polygon {
+  .panorama-viewer .area-landmark polygon {
     pointer-events: auto;
+  }
+
+  .panorama-viewer .area-landmark-vertex {
+    r: 5;
+  }
+
+  .panorama-viewer .area-landmark.is-selected .area-landmark-vertex {
+    r: 7;
   }
 
   .tour-viewer-page .viewer-thumbs {
