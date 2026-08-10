@@ -93,17 +93,26 @@ const router = createRouter({
   routes,
 });
 
-router.beforeEach((to) => {
+router.beforeEach(async (to) => {
   const auth = useAuthStore();
-  if (!to.meta.public && !auth.isAuthenticated) {
-    return '/login';
+
+  if (to.path === '/login') {
+    if (!auth.isAuthenticated) return true;
+    const validSession = await auth.ensureSession();
+    return validSession ? '/' : true;
   }
-  if (to.path === '/login' && auth.isAuthenticated) {
-    return '/';
+
+  if (!to.meta.public) {
+    const validSession = await auth.ensureSession();
+    if (!validSession) {
+      return { path: '/login', query: { redirect: to.fullPath } };
+    }
   }
+
   if (to.meta.staffOnly && auth.isGuest) {
     return '/';
   }
+
   return true;
 });
 

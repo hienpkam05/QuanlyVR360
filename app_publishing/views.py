@@ -10,7 +10,7 @@ from app_dashboard.models import ActivityLog
 from app_locations.models import Location
 from app_tours.models import TourVersion
 
-from .filters import WhitelistDomainFilter
+from .filters import PublishConfigFilter, WhitelistDomainFilter
 from .models import PublishConfig, WhitelistDomain
 from .serializers import (
     PublishActionSerializer,
@@ -180,6 +180,7 @@ class PublishedTourListView(generics.ListAPIView):
     serializer_class = PublishedTourCardSerializer
     permission_classes = [AllowAny]
     authentication_classes = []
+    filterset_class = PublishConfigFilter
     search_fields = (
         "location__name",
         "location__description",
