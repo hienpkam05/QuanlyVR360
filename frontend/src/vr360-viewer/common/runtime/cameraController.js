@@ -2,8 +2,9 @@ import * as THREE from 'three';
 
 const MIN_LAT = -58;
 const MAX_LAT = 82;
-const MIN_FOV = 35;
-const MAX_FOV = 100;
+// Builder persists scene FOV in degrees within this same range.
+const MIN_FOV = 30;
+const MAX_FOV = 120;
 
 function clamp(value, min, max) {
   return Math.min(max, Math.max(min, value));
@@ -70,15 +71,13 @@ export function createCameraController(camera) {
   function restoreView(next = {}) {
     lon = Number(next.lon ?? lon);
     lat = clampLat(next.lat ?? lat);
-    fov = Number(next.fov ?? fov);
+    fov = clamp(Number(next.fov ?? fov), MIN_FOV, MAX_FOV);
   }
 
   function setInitialView(next = {}) {
     lon = Number(next.lon ?? 0);
     lat = clampLat(next.lat ?? 0);
-    // Preserves the pre-refactor initial-view behavior: initial FOV is not
-    // clamped until a caller changes it through setView/zoom.
-    fov = Number(next.fov ?? 75);
+    fov = clamp(Number(next.fov ?? 75), MIN_FOV, MAX_FOV);
   }
 
   function setIntroDistance(distance = 0) {
