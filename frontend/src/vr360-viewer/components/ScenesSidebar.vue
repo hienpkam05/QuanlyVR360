@@ -291,8 +291,8 @@ function toggle() {
 }
 
 .scenes-sidebar-thumb {
-  width: 52px;
-  height: 36px;
+  width: 100px;
+  height: 70px;
   background-color: #d5d5d5;
   background-position: center;
   background-size: cover;
