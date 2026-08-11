@@ -1,614 +1,769 @@
-Technical Design Document
-VR360 Viewer Intro Experience v2.0
+# TASK — REUSE CORE EYES MODE / VIEW MODE IN V2 BOTTOM NAV
 
-Version: 2.0
+Project:
+D:\Metatwin\QuanlyVR360\frontend\vr360-viewer-v2
 
-Status: Approved Design
+Đọc frontend/PROMPT.md trước khi thực hiện.
 
-Priority: Critical
+==================================================
+1. MỤC TIÊU
+==================================================
 
-1. Design Goal
+Hiện tại V2 Bottom Navigation bên phải CHƯA CÓ chức năng
+điều chỉnh chế độ góc nhìn.
 
-Intro không phải là một animation.
+Tôi muốn tái sử dụng CHÍNH XÁC chức năng đã tồn tại trong:
 
-Intro là một trải nghiệm dẫn người dùng từ thế giới bên ngoài bước vào thế giới VR.
+frontend/src/vr360-viewer
 
-Người dùng phải có cảm giác:
+Core hiện đang có các chế độ:
 
-"Tôi đang đứng trước một mô hình thu nhỏ của cả thế giới."
+- Fit Eyes
+- Normal
+- Mega View
 
-↓
+Trong UI V2, chức năng này phải được đặt trong:
 
-"Tôi quyết định bước vào."
+BOTTOM NAV — RIGHT GROUP
 
-↓
+Không được tự viết lại logic FOV.
 
-"Tôi tiến lại gần."
+Không được tạo một hệ thống View Mode thứ hai.
 
-↓
+==================================================
+2. QUAN TRỌNG — "EYES MODE"
+==================================================
 
-"Tôi bước vào bên trong."
+"Eyes Mode" ở đây là chức năng điều chỉnh góc nhìn
+đã tồn tại trong VR360 Viewer Core.
 
-↓
+PHẢI kiểm tra implementation thực tế trong core trước.
 
-"Tôi đang ở trong không gian VR."
+Không được mặc định rằng:
 
-Tuyệt đối KHÔNG được tạo cảm giác:
+Eyes Mode = FOV cố định.
 
-"Một quả cầu đang zoom."
+Không được tự suy luận.
 
-2. UX Goal
+==================================================
+3. CORE AUDIT — BẮT BUỘC
+==================================================
 
-Người dùng phải trải nghiệm theo đúng thứ tự sau.
+Đọc và audit:
 
-Stage 1
+frontend/src/vr360-viewer/common/controllers/
+viewModeManager.js
 
-Loading
+frontend/src/vr360-viewer/layout/
+Vr360ViewerLayout.vue
 
-↓
+frontend/src/vr360-viewer/components/
+ViewerPill.vue
 
-Hiển thị Little Planet
+và tìm toàn bộ:
 
-↓
+- Fit Eyes
+- fit-eyes
+- FitEyes
+- Mega View
+- mega-view
+- Normal
+- normal
+- viewMode
+- view-mode
+- eyes
+- FOV
+- fov
 
-Không có animation.
+Xác định chính xác:
 
-Không xoay.
+1. Core định nghĩa mode ở đâu?
+2. Core lưu current mode ở đâu?
+3. Core thay đổi mode bằng function nào?
+4. Core UI gọi function nào?
+5. Core có public API nào?
+6. Core có event nào?
+7. Fit Eyes thực hiện điều gì?
+8. Normal thực hiện điều gì?
+9. Mega View thực hiện điều gì?
+10. Desktop/mobile có khác nhau không?
 
-Không zoom.
+==================================================
+4. SOURCE OF TRUTH
+==================================================
 
-Không chuyển projection.
+SOURCE OF TRUTH DUY NHẤT:
 
-Không tự chạy.
+frontend/src/vr360-viewer
 
-Stage 2
+V2 chỉ là UI consumer.
 
-Hiển thị UI Intro
+Kiến trúc bắt buộc:
+
+V2 Bottom Nav
+      ↓
+ViewerAdapter
+      ↓
+ViewerCoreFacade
+      ↓
+Core Public View Mode API
+      ↓
+existing Core View Mode implementation
+
+KHÔNG:
+
+V2
+ ↓
+viewModeManager.js
+
+==================================================
+5. KHÔNG HARD-CODE FOV
+==================================================
+
+TUYỆT ĐỐI KHÔNG viết:
+
+Fit Eyes = 70
+Normal = 75
+Mega View = 100
+
+trong V2.
+
+Nếu Core hiện tại sử dụng các giá trị đó thì vẫn phải
+delegate tới Core.
+
+Không được copy logic FOV sang V2.
+
+Đặc biệt Normal phải tiếp tục sử dụng FOV thực tế của
+scene hiện tại.
+
+==================================================
+6. KIỂM TRA PUBLIC API
+==================================================
+
+Kiểm tra:
+
+frontend/src/vr360-viewer/facade/ViewerCoreFacade.js
+
+và:
+
+frontend/vr360-viewer-v2/src/adapters/ViewerAdapter.js
+
+Xác định hiện tại đã có:
+
+getViewMode()
+setViewMode()
+getAvailableViewModes()
+
+hay chưa.
+
+Nếu ĐÃ CÓ:
+
+→ REUSE NGAY.
+
+Nếu CHƯA CÓ:
+
+→ kiểm tra owner surface của Core.
+
+Nếu Core đã expose API tương đương:
+
+→ dùng API đó.
+
+Nếu Core CHƯA expose:
+
+→ chỉ bổ sung public bridge tối thiểu theo architecture
+hiện tại.
+
+KHÔNG import internal controller trực tiếp vào V2.
+
+==================================================
+7. CORE API EXPECTATION
+==================================================
+
+V2 cần có khả năng:
+
+viewerAdapter.getViewMode()
+
+viewerAdapter.setViewMode(mode)
+
+viewerAdapter.getAvailableViewModes()
+
+Các mode phải là canonical mode của Core.
+
+Ví dụ nếu Core đang dùng:
+
+"normal"
+"fit-eyes"
+"mega-view"
+
+thì giữ nguyên.
+
+Không tạo:
+
+"eyes"
+"fit"
+"wide"
+
+nếu Core không sử dụng.
+
+==================================================
+8. BOTTOM NAV
+==================================================
+
+Đưa View Mode vào nhóm bên phải.
 
 Ví dụ:
 
-Đình Chùa Tây Phương
+LEFT:
 
-Khám phá không gian di sản bằng công nghệ VR360
+[Previous] [Scene List] [Next]
 
-────────────────────────
+RIGHT:
 
-      [ BẮT ĐẦU KHÁM PHÁ ]
+[View Mode] [Rotation] [Home] [Audio] [Fullscreen]
 
-UI phải cực kỳ tối giản.
+View Mode nằm trong Bottom Nav bên phải.
 
-Không:
+Không tạo floating control riêng.
 
-overlay đen
-blur
-vignette
-opacity layer
-Stage 3
+Không đặt giữa màn hình.
 
-Người dùng bấm
+==================================================
+9. VIEW MODE BUTTON
+==================================================
 
-"Bắt đầu khám phá"
+Button phải tái sử dụng icon/style phù hợp với Core nếu
+Core đã có.
 
-Sau đó
+Không import thêm icon library nếu không cần.
 
-chờ khoảng
+Button hiển thị trạng thái hiện tại nếu UI architecture
+đang hỗ trợ.
 
-200~300ms
+Ví dụ:
 
-để người dùng có phản hồi.
+[View]
 
-Stage 4
+Click:
 
-Camera bắt đầu tiến.
+[ Fit Eyes ]
+[ Normal ✓ ]
+[ Mega View ]
 
-Lưu ý:
+==================================================
+10. POPUP / SHEET
+==================================================
 
-KHÔNG phải quả cầu phóng to.
+Có thể dùng:
 
-Camera mới là thứ di chuyển.
+- dropdown
+- popover
+- compact menu
+- bottom sheet trên mobile
 
-Little Planet gần như đứng yên.
+Nhưng phải phù hợp với Bottom Nav hiện tại.
 
-3. Core Principle
+Không tạo modal fullscreen.
 
-Đây là nguyên lý quan trọng nhất.
+Không tạo backdrop che toàn bộ viewer.
 
-Animation phải được chia thành hai phần.
+==================================================
+11. CURRENT MODE
+==================================================
 
-Camera Motion
+Current mode phải lấy từ Core.
 
-chịu trách nhiệm
+Không tạo state độc lập kiểu:
 
-đưa người xem tiến vào.
+const currentMode = ref("normal")
 
-Projection Transition
+nếu state đó không đồng bộ với Core.
 
-chịu trách nhiệm
+Nếu cần local UI state:
 
-biến Little Planet thành Panorama.
+→ chỉ mirror Core state.
 
-Hai thứ này KHÔNG bắt đầu cùng lúc.
+Core là source of truth.
 
-4. Timeline
+==================================================
+12. VIEW MODE CHANGE
+==================================================
 
-Tổng thời gian
+Khi user chọn:
 
-≈ 3.5~4 giây
+Fit Eyes
 
-Phase A
+phải gọi:
 
-Idle
+ViewerAdapter.setViewMode("fit-eyes")
 
-0%
+Sau đó:
 
-Little Planet
+Core xử lý FOV/animation.
 
-100%
+Không xử lý FOV trong V2.
 
-Projection
+Tương tự:
 
-Camera đứng rất xa.
+Normal
+Mega View.
 
-Không chuyển động.
+==================================================
+13. EVENT SYNC
+==================================================
 
-Phase B
+Nếu Core có event:
 
-User Click
+view-mode-change
 
-0.2s
+→ facade/adapter phải subscribe.
 
-Không animation.
+Khi Core thay đổi mode từ nơi khác:
 
-Chỉ tạo cảm giác
+V2 phải cập nhật selected/current state.
 
-"Tôi vừa bấm."
+Không để:
 
-Phase C
+Core = Mega View
+V2 UI = Normal.
 
-Camera Move
+==================================================
+14. CORE UI REGRESSION
+==================================================
 
-1.2s
+Không được phá ViewerPill hiện tại.
 
-Camera bắt đầu tiến.
+Không remove:
 
-Projection
+Fit Eyes
+Normal
+Mega View
 
-gần như giữ nguyên.
+khỏi Core UI.
 
-Little Planet
+Không thay đổi behavior của Core.
 
-vẫn là Little Planet.
+==================================================
+15. SCENE LIST
+==================================================
 
-Khoảng
+Không sửa Scene List.
 
-70%
+Không sửa:
 
-chuyển động ở Intro
+- visited checked
+- active scene
+- scroll
+- scene navigation.
 
-đến từ Camera.
+View Mode chỉ thêm vào Bottom Nav.
 
-Chỉ
+==================================================
+16. AUDIO
+==================================================
 
-30%
+Không được làm mất Audio.
 
-đến từ Projection.
+Sau khi thêm View Mode:
 
-Phase D
+Right Nav vẫn phải có:
 
-Projection Relax
+View Mode
+Rotation
+Home
+Audio
+Fullscreen
 
-1.3s
+Audio behavior phải giữ nguyên.
 
-Camera vẫn tiếp tục tiến.
+==================================================
+17. ROTATION
+==================================================
 
-Projection mới bắt đầu mở.
+Không sửa logic rotation.
 
-Không được mở ngay.
+View Mode không được ảnh hưởng:
 
-Projection chỉ nên bắt đầu khi camera đã đi khoảng
+autorotation state.
 
-50~60%
+==================================================
+18. FULLSCREEN
+==================================================
 
-quãng đường.
+Không sửa fullscreen implementation ngoài phạm vi cần thiết.
 
-Phase E
+View Mode phải tiếp tục hoạt động khi fullscreen.
 
-Enter World
+Bottom Nav vẫn visible.
 
-0.6s
+==================================================
+19. INTRO
+==================================================
 
-Camera tiến vào.
+Không bypass Intro.
 
-Projection gần hoàn tất.
+Trước intro complete:
 
-Người dùng bắt đầu cảm thấy
+View Mode phải tuân theo trạng thái lock hiện tại.
 
-"Tôi đã ở bên trong."
+Sau intro complete:
 
-Phase F
+View Mode usable.
 
-Settle
+==================================================
+20. MOBILE
+==================================================
 
-0.5s
+Trên mobile:
 
-Camera dừng.
+View Mode phải có hit area đủ lớn.
 
-Projection hoàn tất.
+Có thể dùng compact popover/sheet.
 
-Không mở interaction ngay.
+Không dựa vào hover.
 
-Giữ frame ổn định.
+Touch phải hoạt động.
 
-Sau đó
+Không phá:
 
-enable controls.
+- rotate
+- pinch zoom
+- fullscreen
+- audio.
 
-5. Motion Curve
+==================================================
+21. MOBILE FOV POLICY
+==================================================
 
-Camera
+Nếu Core có:
 
-easeInOutCubic
+mobileFovPolicy.js
 
-Projection
+→ View Mode phải đi qua Core.
 
-easeOutSine
+Không tạo mobile FOV riêng trong V2.
 
-Opacity UI
+Không override:
 
-easeOutQuad
+fit-eyes
+normal
+mega-view
 
-Không dùng
+bằng giá trị desktop.
 
-bounce
-elastic
-back
-6. Camera Behaviour
+==================================================
+22. EYES MODE / VIEW MODE DISTINCTION
+==================================================
 
-Camera là nhân vật chính.
+Nếu audit cho thấy "Eyes Mode" thực tế có tên khác
+trong Core:
 
-Không phải FOV.
+PHẢI ghi rõ:
 
-Không phải Projection.
+"Eyes Mode" của user tương ứng với:
 
-Camera cần:
+<CORE FEATURE NAME>
 
-distance
+Không được tạo feature mới chỉ vì tên gọi khác nhau.
 
-8
+==================================================
+23. TEST
+==================================================
 
-↓
+Phải test:
 
-7
+1. getAvailableViewModes()
 
-↓
+2. getViewMode()
 
-6
+3. setViewMode("fit-eyes")
 
-↓
+4. setViewMode("normal")
 
-5
+5. setViewMode("mega-view")
 
-↓
+6. UI selected state.
 
-4
+7. Core event sync.
 
-↓
+==================================================
+24. ACCEPTANCE TEST — DESKTOP
+==================================================
 
-3
+Sau Intro:
 
-↓
+Bottom Nav visible.
 
-2
+Click View Mode.
 
-Tiến đều.
+Expected:
 
-Không giật.
+Fit Eyes
+Normal
+Mega View
 
-Không reset.
+Click Fit Eyes:
 
-7. FOV
+Expected:
 
-FOV chỉ dùng để
+Core Fit Eyes hoạt động.
 
-điều chỉnh cảm giác.
+Click Normal:
 
-Không dùng để giả lập chuyển động.
+Expected:
 
-Ví dụ
+Core Normal hoạt động.
 
-60°
+Click Mega View:
 
-↓
+Expected:
 
-63°
+Core Mega View hoạt động.
 
-↓
+==================================================
+25. ACCEPTANCE TEST — MOBILE
+==================================================
 
-66°
+Mobile:
 
-↓
+Bottom Nav visible.
 
-70°
+Tap View Mode.
 
-↓
+Expected:
 
-73°
+3 modes có thể thao tác bằng touch.
 
-↓
+Tap:
 
-75°
+Fit Eyes
+Normal
+Mega View
+
+Expected:
+
+Core thay đổi view mode đúng.
+
+Không phá touch viewer.
+
+==================================================
+26. ACCEPTANCE TEST — CURRENT STATE
+==================================================
+
+Nếu Core đang:
+
+Mega View
+
+V2 phải hiển thị:
+
+Mega View ✓
 
 Không được:
 
-60
+Normal ✓.
 
-↓
+==================================================
+27. ACCEPTANCE TEST — EXTERNAL CHANGE
+==================================================
 
-100
-8. Projection Behaviour
+Nếu user thay đổi View Mode từ Core UI:
 
-Projection không được
+V2 phải đồng bộ.
 
-0%
+Nếu Core hỗ trợ event:
 
-↓
+view-mode-change
 
-100%
+→ dùng event đó.
 
-một mạch.
+Không polling liên tục.
 
-Projection nên giữ
+==================================================
+28. KHÔNG TẠO LOGIC FOV
+==================================================
 
-100%
+Search V2:
 
-trong khoảng
+setFov(
+getFov(
+fov =
+normalFov
+fitEyesFov
+megaViewFov
 
-30%
+Nếu những thứ này được tạo chỉ để phục vụ View Mode:
 
-thời gian đầu.
+→ REMOVE.
 
-Sau đó
+V2 không được sở hữu View Mode FOV logic.
 
-mới bắt đầu relax.
+==================================================
+29. KHÔNG IMPORT INTERNAL CORE
+==================================================
 
-Ví dụ
+Search:
 
-100
+frontend/vr360-viewer-v2/**
 
-100
+Không được có:
 
-100
+import viewModeManager
+import cameraController
+import mobileFovPolicy
 
-95
+hoặc import internal runtime/controller khác.
 
-90
+V2 chỉ:
 
-80
+Adapter
+→ Facade
+→ Public Core API.
 
-70
+==================================================
+30. BUILD
+==================================================
 
-60
+Chạy:
 
-50
+npm.cmd run build
 
-40
+Sau đó:
 
-30
+git diff --check
 
-20
+==================================================
+31. BOUNDARY
+==================================================
 
-10
+CHỈ được sửa:
 
-0
-9. Sphere Behaviour
+frontend/vr360-viewer-v2/**
 
-Little Planet
+và public facade/bridge tối thiểu nếu cần theo
+PROMPT.md.
 
-KHÔNG được
+Không sửa:
 
-scale.
+- cameraController
+- projection
+- AudioManager
+- IntroController
+- IntroCameraAdapter
+- Scene List
+- touch
+- existing FOV implementation.
 
-Nếu cần
+Không git reset.
 
-chỉ
+Không git restore.
 
-1
+Không revert thay đổi cũ.
 
-↓
+==================================================
+32. FINAL REPORT
+==================================================
 
-1.03
+## CORE AUDIT
 
-Tối đa
+Core View Mode implementation:
+...
 
-1.05
+Core controller:
+...
 
-10. Intro UI
+Core UI:
+...
 
-Không cần nhiều.
+Canonical modes:
+...
 
-Tên tour
+Core API:
+...
 
-Subtitle
+## PUBLIC API
 
-Button
+getViewMode:
+FILE + LINE
 
-[BẮT ĐẦU KHÁM PHÁ]
+setViewMode:
+FILE + LINE
 
-Button
+getAvailableViewModes:
+FILE + LINE
 
-hover
+## V2
 
-↓
+ViewerCoreFacade:
+...
 
-phóng nhẹ
+ViewerAdapter:
+...
 
-↓
+Bottom Nav:
+...
 
-shadow nhẹ
+View Mode UI:
+...
 
-↓
+## TEST
 
-cursor pointer
+Fit Eyes:
+PASS/FAIL
 
-11. State Machine
-Idle
+Normal:
+PASS/FAIL
 
-↓
+Mega View:
+PASS/FAIL
 
-WaitingForUser
+Current mode:
+PASS/FAIL
 
-↓
+Event sync:
+PASS/FAIL
 
-DelayAfterClick
+Desktop:
+PASS/FAIL
 
-↓
+Mobile:
+PASS/FAIL
 
-CameraMove
+Touch:
+PASS/FAIL
 
-↓
+Audio:
+PASS/FAIL
 
-ProjectionRelax
+Fullscreen:
+PASS/FAIL
 
-↓
+Intro:
+PASS/FAIL
 
-EnterWorld
+## FILES MODIFIED
 
-↓
+...
 
-Settle
+## CORE FILES MODIFIED
 
-↓
+...
 
-Completed
+## BUILD
 
-Không được bỏ qua state.
+PASS/FAIL
 
-12. Architecture
-IntroOverlay
+## GIT DIFF CHECK
 
-↓
+PASS/FAIL
 
-ViewerIntroController
+## FINAL STATUS
 
-↓
+DONE
 
-IntroCameraAdapter
+chỉ khi V2 thực sự gọi được implementation View Mode
+của Core.
 
-↓
+Nếu Core chưa có public API cần thiết:
 
-CameraController
+BLOCKED
 
-↓
-
-ProjectionBridge
-
-↓
-
-PanoramaViewer
-
-Không được để
-
-PanoramaViewer
-
-chứa logic Intro.
-
-13. Runtime Responsibility
-IntroOverlay
-
-UI
-
-Button
-
-Fade
-
-Không animation camera.
-
-ViewerIntroController
-
-Timeline.
-
-State Machine.
-
-Synchronization.
-
-IntroCameraAdapter
-
-Điều khiển camera.
-
-Không biết UI.
-
-ProjectionBridge
-
-Chỉ điều khiển progress.
-
-PanoramaViewer
-
-Không biết Intro.
-
-Chỉ render.
-
-14. Forbidden
-
-Không sửa
-
-Builder
-
-POI
-
-Area
-
-Transition
-
-Audio
-
-BottomNav
-
-Gallery
-
-Import
-
-Export
-
-Marker
-
-Polygon
-
-CSS Global
-
-Business Logic
-
-15. Acceptance Criteria
-
-Animation chỉ được coi là hoàn thành nếu:
-
-✅ Little Planet đứng yên trước khi bấm.
-
-✅ Không tự chạy.
-
-✅ Người dùng phải chủ động bấm.
-
-✅ Camera là thứ chuyển động chính.
-
-✅ Không còn cảm giác zoom.
-
-✅ Projection chỉ mở sau khi camera đã tiến gần.
-
-✅ Không teleport.
-
-✅ Không reset.
-
-✅ Không flicker.
-
-✅ Không pop.
-
-✅ Không jump.
-
-✅ Không ảnh hưởng bất kỳ module nào khác.
-
-16. Quality Target
-
-Nếu so với video mẫu:
-
-Mức độ giống về cảm giác (perceived motion): ≥ 90%
-Mức độ giống về timeline: ≥ 95%
-Không chấp nhận các giải pháp chỉ thay đổi FOV hoặc easing để "giả" chuyển động camera.cho
+và KHÔNG được tạo workaround bằng FOV.

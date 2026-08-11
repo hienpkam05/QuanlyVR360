@@ -36,3 +36,6 @@ dist
 .check-*
 .temp-*
 .tmp-*
+
+# file .md
+*.md

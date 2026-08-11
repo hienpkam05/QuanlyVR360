@@ -9,6 +9,7 @@ defineProps({
   autoRotate: { type: Boolean, default: false },
   isFullscreen: { type: Boolean, default: false },
   poiHidden: { type: Boolean, default: false },
+  controlsOnly: { type: Boolean, default: false },
 });
 
 const emit = defineEmits([
@@ -30,20 +31,21 @@ function toggle() {
 </script>
 
 <template>
-  <div class="scenes-sidebar-root">
+  <div class="scenes-sidebar-root" :class="{ 'controls-only': controlsOnly }">
     <div
+      v-if="!controlsOnly"
       class="scenes-sidebar-trigger"
       aria-hidden="true"
       @mouseenter="open"
     ></div>
     <aside
       class="scenes-sidebar"
-      :class="{ open: expanded }"
-      role="navigation"
-      aria-label="Scene list"
+      :class="{ open: expanded || controlsOnly }"
+      :role="controlsOnly ? 'toolbar' : 'navigation'"
+      :aria-label="controlsOnly ? 'Viewer controls' : 'Scene list'"
     >
-      <header class="scenes-sidebar-header">Scenes</header>
-      <div class="scenes-sidebar-list">
+      <header v-if="!controlsOnly" class="scenes-sidebar-header">Scenes</header>
+      <div v-if="!controlsOnly" class="scenes-sidebar-list">
         <button
           v-for="scene in scenes"
           :key="scene.id"
@@ -120,6 +122,7 @@ function toggle() {
 
         <!-- POI Button -->
         <button
+          v-if="!controlsOnly"
           type="button"
           :class="{ active: poiHidden }"
           :aria-label="poiHidden ? 'Show POI icons' : 'Hide POI icons'"
@@ -187,7 +190,7 @@ function toggle() {
         </button>
       </footer>
     </aside>
-    <SidebarToggleTab :expanded="expanded" @toggle="toggle" />
+    <SidebarToggleTab v-if="!controlsOnly" :expanded="expanded" @toggle="toggle" />
   </div>
 </template>
 
@@ -350,5 +353,41 @@ function toggle() {
 
 .scenes-sidebar-controls button.active {
   color: #d5001c;
+}
+
+.scenes-sidebar-root.controls-only {
+  height: auto;
+  inset: auto;
+  position: static;
+  width: auto;
+}
+
+.scenes-sidebar-root.controls-only .scenes-sidebar {
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  height: auto;
+  position: static;
+  transform: none;
+  width: auto;
+}
+
+.scenes-sidebar-root.controls-only .scenes-sidebar-controls {
+  box-sizing: border-box;
+  border: 0;
+  flex-direction: column;
+  gap: 4px;
+  padding: 3px;
+}
+
+.scenes-sidebar-root.controls-only .scenes-sidebar-controls button {
+  flex: 0 0 44px;
+  height: 44px;
+  width: 44px;
+}
+
+.scenes-sidebar-root.controls-only .scenes-sidebar-controls svg {
+  height: 24px;
+  width: 24px;
 }
 </style>

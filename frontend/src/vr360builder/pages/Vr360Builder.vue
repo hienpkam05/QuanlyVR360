@@ -1071,6 +1071,11 @@ function saveCurrentView() {
   scenes[activeSceneIndex.value].initialView = v;
   showToast("success", `✅ lon=${v.lon}° lat=${v.lat}° fov=${v.fov}°`);
 }
+
+function saveBuilderCameraState(view) {
+  if (previewMode.active || activeSceneIndex.value < 0) return;
+  scenes[activeSceneIndex.value].initialView = { ...view };
+}
 function replaceImage() {
   if (activeSceneIndex.value < 0) return;
   replaceImageInputRef.value?.click();
@@ -2346,6 +2351,7 @@ onMounted(() => {
       hud.lat = h.lat;
       hud.fov = h.fov;
     },
+    onCameraCommit: saveBuilderCameraState,
     onFrame: () => requestAreaOverlayUpdate(),
     onHotspotPlace: (lon, lat) => placeNewHotspot(lon, lat),
     onHotspotDblClick: (lon, lat, sx, sy) => openQuickMenu(lon, lat, sx, sy),

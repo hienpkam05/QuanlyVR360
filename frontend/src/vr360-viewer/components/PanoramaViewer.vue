@@ -94,6 +94,11 @@ let pointer;
 let isDragging = false;
 let isPointerOver = false;
 let pointerDown = null;
+const activePointers = new Map();
+const TAP_MOVEMENT_THRESHOLD = 7;
+let gestureMode = 'idle';
+let pinchDistance = 0;
+let gestureHadMultiplePointers = false;
 let lastInteractionAt = 0;
 let lastFrameAt = 0;
 let needsProjection = true;
@@ -294,6 +299,7 @@ function dispose() {
   }
   renderer?.dispose();
   renderer = null;
+  resetPointerGesture();
 }
 
 function resize() {
@@ -385,53 +391,146 @@ function onPointerEnter() {
 
 function onPointerLeave(event) {
   isPointerOver = false;
-  onPointerUp(event);
 }
 
-function onPointerDown(event) {
-  if (!props.interactive || !hasImage.value) return;
-  markInteraction();
-  cameraController.cancelTween();
-  isDragging = true;
+function isViewerControlTarget(target) {
+  return target instanceof Element && Boolean(target.closest(
+    '.panorama-hotspot, .panorama-info-area, .area-landmark, .area-landmark-label',
+  ));
+}
+
+function pointerDistance() {
+  const [first, second] = [...activePointers.values()];
+  return first && second ? Math.hypot(second.x - first.x, second.y - first.y) : 0;
+}
+
+function beginSinglePointerGesture(pointerState) {
+  gestureMode = 'rotate';
   pointerDown = {
-    x: event.clientX,
-    y: event.clientY,
-    view: cameraController.getView(),
+    id: pointerState.id,
+    startX: pointerState.x,
+    startY: pointerState.y,
+    moved: false,
   };
 }
 
-function onPointerMove(event) {
-  if (!props.interactive || !isDragging || !pointerDown) return;
+function beginPinchGesture() {
+  gestureMode = 'pinch';
+  pointerDown = null;
+  pinchDistance = pointerDistance();
+  gestureHadMultiplePointers = true;
+}
+
+function resetPointerGesture() {
+  activePointers.clear();
+  isDragging = false;
+  pointerDown = null;
+  gestureMode = 'idle';
+  pinchDistance = 0;
+  gestureHadMultiplePointers = false;
+}
+
+function emitPanoramaClick(event) {
+  const rect = container.value?.getBoundingClientRect();
+  if (!rect || !raycaster || !pointer || !mesh) return;
+  pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+  pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+  raycaster.setFromCamera(pointer, camera);
+  const intersection = raycaster.intersectObject(mesh, false)[0];
+  const sphericalPoint = intersection ? cameraController.vectorToLonLat(intersection.point) : cameraController.getView();
+
+  emit('panorama-click', {
+    x: ((event.clientX - rect.left) / (container.value?.clientWidth || 1)) * 100,
+    y: ((event.clientY - rect.top) / (container.value?.clientHeight || 1)) * 100,
+    lon: sphericalPoint.lon,
+    lat: sphericalPoint.lat,
+  });
+}
+
+function onPointerDown(event) {
+  if (
+    !props.interactive
+    || !hasImage.value
+    || (event.pointerType === 'mouse' && event.button !== 0)
+    || isViewerControlTarget(event.target)
+  ) return;
   markInteraction();
-  const deltaX = event.clientX - pointerDown.x;
-  const deltaY = event.clientY - pointerDown.y;
-  cameraController.restoreView(pointerDown.view);
-  cameraController.dragBy(deltaX, deltaY);
+  cameraController.cancelTween();
+  isDragging = true;
+  const pointerState = {
+    id: event.pointerId,
+    x: event.clientX,
+    y: event.clientY,
+    previousX: event.clientX,
+    previousY: event.clientY,
+  };
+  activePointers.set(event.pointerId, pointerState);
+  container.value?.setPointerCapture?.(event.pointerId);
+  if (activePointers.size === 1) beginSinglePointerGesture(pointerState);
+  else if (activePointers.size === 2) beginPinchGesture();
+}
+
+function onPointerMove(event) {
+  const pointerState = activePointers.get(event.pointerId);
+  if (!props.interactive || !isDragging || !pointerState) return;
+  markInteraction();
+  pointerState.x = event.clientX;
+  pointerState.y = event.clientY;
+  if (activePointers.size === 1 && gestureMode === 'rotate' && pointerDown) {
+    const deltaX = event.clientX - pointerState.previousX;
+    const deltaY = event.clientY - pointerState.previousY;
+    pointerDown.moved ||= Math.hypot(
+      event.clientX - pointerDown.startX,
+      event.clientY - pointerDown.startY,
+    ) >= TAP_MOVEMENT_THRESHOLD;
+    cameraController.dragBy(deltaX, deltaY);
+  } else if (activePointers.size >= 2) {
+    const currentDistance = pointerDistance();
+    if (pinchDistance) cameraController.zoomBy(pinchDistance - currentDistance);
+    pinchDistance = currentDistance;
+  }
+  pointerState.previousX = event.clientX;
+  pointerState.previousY = event.clientY;
   emitViewChange();
 }
 
-function onPointerUp(event) {
-  if (!props.interactive || !isDragging || !pointerDown) return;
+function finishPointerGesture(event, { cancelled = false } = {}) {
+  if (!activePointers.has(event.pointerId)) return;
   markInteraction();
-  const moved = Math.hypot(event.clientX - pointerDown.x, event.clientY - pointerDown.y);
-  isDragging = false;
-  pointerDown = null;
-  if (moved < 5 && hasImage.value) {
-    const rect = container.value?.getBoundingClientRect();
-    if (!rect || !raycaster || !pointer || !mesh) return;
-    pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
-    pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
-    raycaster.setFromCamera(pointer, camera);
-    const intersection = raycaster.intersectObject(mesh, false)[0];
-    const sphericalPoint = intersection ? cameraController.vectorToLonLat(intersection.point) : cameraController.getView();
+  const finishedPointerDown = pointerDown;
+  activePointers.delete(event.pointerId);
+  container.value?.releasePointerCapture?.(event.pointerId);
 
-    emit('panorama-click', {
-      x: ((event.offsetX || 0) / (container.value?.clientWidth || 1)) * 100,
-      y: ((event.offsetY || 0) / (container.value?.clientHeight || 1)) * 100,
-      lon: sphericalPoint.lon,
-      lat: sphericalPoint.lat,
-    });
+  if (activePointers.size >= 2) {
+    beginPinchGesture();
+    return;
   }
+  if (activePointers.size === 1) {
+    beginSinglePointerGesture(activePointers.values().next().value);
+    return;
+  }
+
+  isDragging = false;
+  gestureMode = 'idle';
+  pinchDistance = 0;
+  pointerDown = null;
+  if (!cancelled && !gestureHadMultiplePointers && finishedPointerDown && !finishedPointerDown.moved && hasImage.value) {
+    emitPanoramaClick(event);
+  }
+  gestureHadMultiplePointers = false;
+}
+
+function onPointerUp(event) {
+  finishPointerGesture(event);
+}
+
+function onPointerCancel(event) {
+  finishPointerGesture(event, { cancelled: true });
+}
+
+function onLostPointerCapture(event) {
+  if (event.pointerType === 'mouse') return;
+  onPointerCancel(event);
 }
 
 function onHotspotClick(hotspot, event) {
@@ -521,6 +620,8 @@ defineExpose({
     @pointerdown="onPointerDown"
     @pointermove="onPointerMove"
     @pointerup="onPointerUp"
+    @pointercancel="onPointerCancel"
+    @lostpointercapture="onLostPointerCapture"
     @pointerenter="onPointerEnter"
     @pointerleave="onPointerLeave"
     @wheel="onWheel"

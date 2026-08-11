@@ -10,7 +10,7 @@ const MODE_FOV = Object.freeze({
 });
 
 function clampFov(value) {
-  return Math.min(100, Math.max(35, Number(value) || 75));
+  return Math.min(120, Math.max(30, Number(value) || 75));
 }
 
 export function createViewModeManager(initialNormalFov = 75) {

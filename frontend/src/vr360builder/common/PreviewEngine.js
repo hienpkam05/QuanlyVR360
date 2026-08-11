@@ -165,6 +165,7 @@ export class PreviewEngine {
     this.isInteracting = false;
     this.pointerStart = { x: 0, y: 0 };
     this.pointerDelta = { lon: 0, lat: 0 };
+    this._cameraCommitTimer = 0;
     this.hasTexture = false;
     this.placingHotspot = false;
     this.editMode = true; // Builder always in edit mode
@@ -371,6 +372,14 @@ export class PreviewEngine {
     };
   }
 
+  _commitCameraState() {
+    this.callbacks.onCameraCommit?.({
+      lon: Math.round(this.targetLon * 10) / 10,
+      lat: Math.round(this.targetLat * 10) / 10,
+      fov: Math.round(this.targetFov * 10) / 10,
+    });
+  }
+
   requestRender() {
     this._needsRender = true;
     if (!this._animating) {
@@ -509,7 +518,9 @@ export class PreviewEngine {
       this.requestRender();
     });
     c.addEventListener("pointerup", () => {
+      if (!this.isInteracting) return;
       this.isInteracting = false;
+      this._commitCameraState();
       this.requestRender();
     });
     c.addEventListener(
@@ -517,6 +528,8 @@ export class PreviewEngine {
       (e) => {
         e.preventDefault();
         this.targetFov = Math.max(30, Math.min(120, this.targetFov + e.deltaY * 0.05));
+        clearTimeout(this._cameraCommitTimer);
+        this._cameraCommitTimer = window.setTimeout(() => this._commitCameraState(), 160);
         this.requestRender();
       },
       { passive: false }
@@ -548,6 +561,7 @@ export class PreviewEngine {
   dispose() {
     if (this._rafId) cancelAnimationFrame(this._rafId);
     if (this._loadAbort) this._loadAbort.abort();
+    clearTimeout(this._cameraCommitTimer);
     window.removeEventListener("resize", this._onResize);
     window.removeEventListener("keydown", this._onKeydown);
     this.hotspotRenderer?.dispose();

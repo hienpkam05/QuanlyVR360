@@ -1,0 +1,562 @@
+.vr360-v2-layout {
+  background: #090b10;
+  color: #f7f8fa;
+  min-height: 100dvh;
+  width: 100%;
+}
+
+.vr360-v2-viewer {
+  min-height: 100dvh;
+  width: 100%;
+}
+
+.vr360-v2-viewer-host {
+  --vr360-v2-bottom-nav-bottom: max(0.75rem, calc(0.5rem + env(safe-area-inset-bottom)));
+  --vr360-v2-bottom-nav-height: 2.6rem;
+  background: #050609;
+  height: 100dvh;
+  isolation: isolate;
+  min-height: 280px;
+  overflow: hidden;
+  position: relative;
+  width: 100%;
+}
+
+.vr360-v2-viewer-host > :first-child:not(.vr360-v2-bottom-nav) {
+  height: 100%;
+  width: 100%;
+}
+
+/* The production owner remains mounted for runtime ownership. Its legacy
+ * navigation is visually suppressed only inside the V2 host. */
+.vr360-v2-viewer-host .viewer-pill,
+.vr360-v2-viewer-host .scenes-sidebar-root {
+  display: none !important;
+}
+
+/* Player-style overlay. Two light clusters, no full-width bar, and the wrapper
+ * itself never captures pointer events so panorama drag/pinch stays intact. */
+.vr360-v2-bottom-nav {
+  --vr360-v2-bottom-nav-bottom: max(0.75rem, calc(0.5rem + env(safe-area-inset-bottom)));
+  --vr360-v2-bottom-nav-height: 2.6rem;
+  align-items: center;
+  animation: vr360-v2-nav-reveal 240ms ease-out both;
+  bottom: var(--vr360-v2-bottom-nav-bottom);
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 0.5rem;
+  justify-content: space-between;
+  left: max(0.75rem, env(safe-area-inset-left));
+  pointer-events: none;
+  position: absolute;
+  right: max(0.75rem, env(safe-area-inset-right));
+  /* The slotted production owner is not a stacking-context root, so its
+   * legacy HUD can otherwise paint over V2's sibling navigation. */
+  z-index: 35;
+}
+
+@keyframes vr360-v2-nav-reveal {
+  from { opacity: 0; transform: translateY(0.5rem); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.vr360-v2-nav-group {
+  align-items: center;
+  background: transparent;
+  border-radius: 0.85rem;
+  display: inline-flex;
+  flex-wrap: nowrap;
+  gap: 0.375rem;
+  pointer-events: auto;
+  position: relative;
+}
+
+.vr360-v2-nav-group--right {
+  margin-left: auto;
+}
+
+.vr360-v2-nav-button {
+  align-items: center;
+  appearance: none;
+  background: transparent;
+  border: 0;
+  border-radius: 0.7rem;
+  color: rgba(255, 255, 255, 0.9);
+  cursor: pointer;
+  display: inline-flex;
+  flex: 0 0 auto;
+  height: 2.6rem;
+  justify-content: center;
+  padding: 0;
+  transition: background-color 160ms ease, color 160ms ease, transform 160ms ease;
+  width: 2.6rem;
+}
+
+.vr360-v2-nav-button svg {
+  fill: none;
+  height: 1.45rem;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+  width: 1.45rem;
+}
+
+.vr360-v2-nav-button:hover:not(:disabled),
+.vr360-v2-nav-button:focus-visible,
+.vr360-v2-nav-button.is-active {
+  background: rgba(255, 255, 255, 0.14);
+  color: #fff;
+}
+
+.vr360-v2-nav-button:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 2px;
+}
+
+.vr360-v2-nav-button:active:not(:disabled) {
+  transform: scale(0.94);
+}
+
+.vr360-v2-nav-button:disabled {
+  color: rgba(255, 255, 255, 0.3);
+  cursor: not-allowed;
+}
+
+.vr360-v2-view-mode-control {
+  position: relative;
+}
+
+.vr360-v2-view-mode-menu {
+  background: rgba(15, 17, 24, 0.96);
+  border: 1px solid rgba(255, 255, 255, 0.13);
+  border-radius: 0.7rem;
+  bottom: calc(100% + 0.5rem);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+  display: grid;
+  gap: 0.125rem;
+  min-width: 8.75rem;
+  padding: 0.35rem;
+  position: absolute;
+  right: 0;
+  z-index: 6;
+}
+
+.vr360-v2-view-mode-menu__item {
+  align-items: center;
+  appearance: none;
+  background: transparent;
+  border: 0;
+  border-radius: 0.45rem;
+  color: rgba(255, 255, 255, 0.88);
+  cursor: pointer;
+  display: flex;
+  font: inherit;
+  font-size: 0.75rem;
+  gap: 0.75rem;
+  justify-content: space-between;
+  min-height: 2.25rem;
+  padding: 0.375rem 0.5rem;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.vr360-v2-view-mode-menu__item:hover:not(:disabled),
+.vr360-v2-view-mode-menu__item:focus-visible,
+.vr360-v2-view-mode-menu__item.is-current {
+  background: rgba(255, 255, 255, 0.14);
+  color: #fff;
+}
+
+.vr360-v2-view-mode-menu__item:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 1px;
+}
+
+.vr360-v2-view-mode-menu__item:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.vr360-v2-audio-control {
+  align-items: center;
+  display: inline-flex;
+  flex: 0 0 auto;
+  height: 2.6rem;
+  justify-content: center;
+  position: relative;
+  width: 2.6rem;
+}
+
+/* Keep the hover state active while the pointer travels from the icon to the
+ * floating progress panel. The bridge fills the visual gap without adding a
+ * visible layer over the viewer. */
+.vr360-v2-audio-control::after {
+  content: '';
+  height: 0.75rem;
+  left: 0;
+  pointer-events: auto;
+  position: absolute;
+  right: 0;
+  top: -0.75rem;
+}
+
+/* Scene list presentation. Data and switching stay owned by the core viewer.
+ * The panel is a full-height sidebar anchored to the viewer host, matching the
+ * core ScenesSidebar visual system. */
+.vr360-v2-scene-panel {
+  --vr360-v2-bottom-nav-bottom: max(0.75rem, calc(0.5rem + env(safe-area-inset-bottom)));
+  --vr360-v2-bottom-nav-height: 2.6rem;
+  backdrop-filter: blur(12px) saturate(140%);
+  -webkit-backdrop-filter: blur(12px) saturate(140%);
+  background: rgba(255, 255, 255, 0.75);
+  border-right: 1px solid rgba(0, 0, 0, 0.08);
+  /* End exactly at the top edge of the left Bottom Navigation controls. */
+  bottom: calc(var(--vr360-v2-bottom-nav-bottom) + var(--vr360-v2-bottom-nav-height));
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.08);
+  color: #222;
+  display: flex;
+  flex-direction: column;
+  left: 0;
+  min-height: 0;
+  overflow: hidden;
+  padding: 0;
+  pointer-events: auto;
+  position: absolute;
+  top: 0;
+  width: 18.75rem;
+  /* Above the legacy core HUD layer, below the V2 bottom navigation. */
+  z-index: 34;
+}
+
+.vr360-v2-scene-panel__header {
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+  flex: 0 0 auto;
+  padding: 1.25rem 1.25rem 0.875rem;
+}
+
+.vr360-v2-scene-panel__title {
+  color: #333;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  margin: 0;
+  text-transform: uppercase;
+}
+
+/* Short accent rule under the title, not a full-width divider. */
+.vr360-v2-scene-panel__accent {
+  background: #d5001c;
+  border-radius: 1px;
+  display: block;
+  height: 2px;
+  margin-top: 0.5rem;
+  width: 2.5rem;
+}
+
+.vr360-v2-scene-panel__list {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  /* A zero flex basis and min-height: 0 make this the only scroll region.
+   * Without them, the list's content-sized flex minimum can leave a phantom
+   * scroll range above and below its actual rows. */
+  flex: 1 1 0;
+  gap: 0.125rem;
+  list-style: none;
+  margin: 0;
+  min-height: 0;
+  overflow-x: hidden;
+  overscroll-behavior-y: none;
+  overflow-y: auto;
+  /* Explicitly reset browser/global list and scroll offsets so the first and
+   * final location sit at the real limits of the scroller. */
+  padding: 0 !important;
+  scroll-padding-block: 0;
+}
+
+.vr360-v2-scene-panel__list > li {
+  flex: 0 0 auto;
+  margin: 0;
+  padding: 0;
+}
+
+.vr360-v2-scene-panel__list::-webkit-scrollbar {
+  width: 0.375rem;
+}
+
+.vr360-v2-scene-panel__list::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.15);
+  border-radius: 0.1875rem;
+}
+
+.vr360-v2-scene-panel__item {
+  align-items: center;
+  appearance: none;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  color: #222;
+  cursor: pointer;
+  display: flex;
+  gap: 0.75rem;
+  padding: 0.625rem 1.25rem;
+  text-align: left;
+  width: 100%;
+}
+
+.vr360-v2-scene-panel__item:hover:not(:disabled),
+.vr360-v2-scene-panel__item:focus-visible,
+.vr360-v2-scene-panel__item.is-current {
+  background: rgba(213, 0, 28, 0.06);
+  color: #d5001c;
+}
+
+.vr360-v2-scene-panel__item:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 2px;
+}
+
+.vr360-v2-scene-panel__item:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.vr360-v2-scene-panel__thumb {
+  background-color: #d5d5d5;
+  background-position: center;
+  background-size: cover;
+  border: 2px solid transparent;
+  border-radius: 0.25rem;
+  flex: 0 0 auto;
+  height: 3rem;
+  width: 4.25rem;
+}
+
+.vr360-v2-scene-panel__item.is-current .vr360-v2-scene-panel__thumb {
+  border-color: #d5001c;
+}
+
+.vr360-v2-scene-panel__name {
+  flex: 1 1 auto;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Checked indicator mirrors the core scene list marker. */
+.vr360-v2-scene-panel__check {
+  color: #d5001c;
+  flex: 0 0 auto;
+  font-size: 0.75rem;
+  line-height: 1;
+}
+
+.vr360-v2-audio-panel {
+  background: rgba(15, 17, 24, 0.96);
+  border: 1px solid rgba(255, 255, 255, 0.13);
+  border-radius: 0.7rem;
+  /* Slight overlap with the hover bridge prevents the panel from closing
+   * between leaving the icon and reaching the range input. */
+  bottom: calc(100% - 0.25rem);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+  display: grid;
+  gap: 0.35rem;
+  left: 50%;
+  min-width: 10.5rem;
+  opacity: 0;
+  padding: 0.55rem 0.65rem;
+  pointer-events: none;
+  position: absolute;
+  transform: translate(-50%, 0.25rem) scale(0.98);
+  transform-origin: center bottom;
+  transition: opacity 180ms ease, transform 180ms ease;
+  visibility: hidden;
+  z-index: 5;
+}
+
+.vr360-v2-audio-control.is-open .vr360-v2-audio-panel {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translate(-50%, 0) scale(1);
+  visibility: visible;
+}
+
+.vr360-v2-audio-panel__label {
+  color: rgba(255, 255, 255, 0.78);
+  font-size: 0.68rem;
+  white-space: nowrap;
+}
+
+.vr360-v2-audio-panel__progress {
+  accent-color: #d9e5ff;
+  cursor: pointer;
+  margin: 0;
+  width: 100%;
+}
+
+.vr360-v2-audio-icon.is-playing .vr360-v2-audio-wave {
+  animation: vr360-v2-audio-wave 1.05s ease-in-out infinite;
+}
+
+.vr360-v2-audio-icon.is-playing .vr360-v2-audio-wave--two {
+  animation-delay: -0.35s;
+}
+
+.vr360-v2-audio-icon.is-muted .vr360-v2-audio-wave {
+  display: none;
+}
+
+@keyframes vr360-v2-audio-wave {
+  0%, 100% { opacity: 0.42; transform: scaleY(0.72); transform-origin: center; }
+  50% { opacity: 1; transform: scaleY(1.08); transform-origin: center; }
+}
+
+.vr360-v2-viewer-loading,
+.vr360-v2-viewer-error {
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border-radius: 0.55rem;
+  font-size: 0.74rem;
+  left: 50%;
+  margin: 0;
+  max-width: min(24rem, calc(100% - 2rem));
+  padding: 0.45rem 0.7rem;
+  position: absolute;
+  text-align: center;
+  top: 3rem;
+  transform: translateX(-50%);
+  z-index: 4;
+}
+
+.vr360-v2-viewer-loading {
+  background: rgba(9, 11, 16, 0.68);
+  color: rgba(255, 255, 255, 0.88);
+}
+
+.vr360-v2-viewer-error {
+  background: rgba(98, 18, 28, 0.82);
+  border: 1px solid rgba(255, 221, 225, 0.25);
+  color: #fff;
+}
+
+@media (max-width: 768px) {
+  .vr360-v2-bottom-nav,
+  .vr360-v2-scene-panel {
+    --vr360-v2-bottom-nav-bottom: max(0.75rem, calc(0.45rem + env(safe-area-inset-bottom)));
+    --vr360-v2-bottom-nav-height: 2.75rem;
+  }
+
+  .vr360-v2-viewer-host {
+    --vr360-v2-bottom-nav-bottom: max(0.75rem, calc(0.45rem + env(safe-area-inset-bottom)));
+    --vr360-v2-bottom-nav-height: 2.75rem;
+    height: 100dvh;
+    min-height: 100dvh;
+  }
+
+  .vr360-v2-bottom-nav {
+    gap: 0.25rem;
+    left: max(0.75rem, env(safe-area-inset-left));
+    right: max(0.75rem, env(safe-area-inset-right));
+  }
+
+  .vr360-v2-nav-group {
+    gap: 0.125rem;
+  }
+
+  .vr360-v2-nav-group--right {
+    flex-wrap: nowrap;
+  }
+
+  .vr360-v2-nav-button {
+    height: 2.75rem;
+    width: 2.75rem;
+  }
+
+  .vr360-v2-nav-button svg {
+    height: 1.5rem;
+    width: 1.5rem;
+  }
+
+  .vr360-v2-audio-panel {
+    display: none;
+  }
+
+  .vr360-v2-scene-panel {
+    max-width: 82vw;
+    width: 16.5rem;
+  }
+
+  .vr360-v2-scene-panel__item {
+    padding: 0.625rem 1rem;
+  }
+
+  .vr360-v2-scene-panel__thumb {
+    height: 2.75rem;
+    width: 4rem;
+  }
+}
+
+@media (max-height: 520px) and (orientation: landscape) {
+  .vr360-v2-layout,
+  .vr360-v2-viewer,
+  .vr360-v2-viewer-host {
+    min-height: 100dvh;
+  }
+
+  .vr360-v2-scene-panel__header {
+    padding: 0.75rem 1rem 0.625rem;
+  }
+
+  .vr360-v2-scene-panel__item {
+    padding: 0.375rem 1rem;
+  }
+
+  .vr360-v2-scene-panel__thumb {
+    height: 2.25rem;
+    width: 3.25rem;
+  }
+}
+
+@media (max-width: 380px) {
+  .vr360-v2-bottom-nav,
+  .vr360-v2-scene-panel {
+    --vr360-v2-bottom-nav-height: 2.6rem;
+  }
+
+  .vr360-v2-viewer-host {
+    --vr360-v2-bottom-nav-height: 2.6rem;
+  }
+
+  .vr360-v2-bottom-nav {
+    left: max(0.5rem, env(safe-area-inset-left));
+    right: max(0.5rem, env(safe-area-inset-right));
+  }
+
+  .vr360-v2-nav-group {
+    gap: 0;
+  }
+
+  .vr360-v2-nav-button {
+    height: 2.6rem;
+    width: 2.6rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .vr360-v2-bottom-nav {
+    animation: none;
+  }
+
+  .vr360-v2-nav-button,
+  .vr360-v2-scene-panel__item,
+  .vr360-v2-audio-panel {
+    transition: none;
+  }
+
+  .vr360-v2-audio-icon.is-playing .vr360-v2-audio-wave {
+    animation: none;
+  }
+}

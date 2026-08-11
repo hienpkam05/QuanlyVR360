@@ -175,6 +175,11 @@ onBeforeUnmount(() => {});
         </svg>
       </button>
     </div>
+    <Transition name="viewer-pill-mobile-controls">
+      <div v-if="!collapsed" class="viewer-pill-mobile-controls">
+        <slot name="mobile-controls" />
+      </div>
+    </Transition>
     <transition name="viewer-pill-info-pop">
       <div v-if="infoOpen && !collapsed" class="viewer-pill-info-popup" role="status">
         <strong>{{ sceneName || 'Cảnh' }}</strong>
@@ -187,50 +192,73 @@ onBeforeUnmount(() => {});
 
 <style scoped>
 .viewer-pill {
+  box-sizing: border-box;
   position: absolute;
-  right: 10px;
-  bottom: calc(24px + env(safe-area-inset-bottom));
-  height: 35px;
-  background: rgba(218, 218, 218, 0.59);
-  backdrop-filter: blur(4px);
-  -webkit-backdrop-filter: blur(4px);
-  border-radius: 18px;
+  left: auto;
+  right: 16px;
+  bottom: 16px;
+  height: 40px;
+  background: rgba(255, 255, 255, 0.26);
+  backdrop-filter: blur(14px) saturate(155%);
+  -webkit-backdrop-filter: blur(14px) saturate(155%);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  border-radius: 20px;
   display: flex;
   align-items: center;
-  padding: 0 6px;
-  gap: 2px;
+  padding: 0 12px;
+  gap: 16px;
   z-index: 50;
   pointer-events: auto;
-  transition: max-width 260ms cubic-bezier(0.22, 0.61, 0.36, 1), padding 260ms ease;
-  max-width: 360px;
+  transform: none;
+  transition: background 360ms cubic-bezier(0.16, 1, 0.3, 1), border-color 360ms cubic-bezier(0.16, 1, 0.3, 1), box-shadow 360ms cubic-bezier(0.16, 1, 0.3, 1);
+  animation: viewer-pill-enter 420ms cubic-bezier(0.16, 1, 0.3, 1) both;
   overflow: visible;
 }
 
 .viewer-pill.is-collapsed {
-  max-width: 34px;
-  padding: 0 4px;
+  width: 40px;
+  padding: 0;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.32);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.11), inset 0 1px 0 rgba(255, 255, 255, 0.24);
 }
 
 .viewer-pill-cluster {
   display: flex;
   align-items: center;
-  gap: 2px;
+  gap: 16px;
   overflow: visible;
-  transition: opacity 200ms ease, max-width 260ms cubic-bezier(0.22, 0.61, 0.36, 1), transform 260ms cubic-bezier(0.22, 0.61, 0.36, 1);
-  max-width: 300px;
+  transition: opacity 320ms cubic-bezier(0.16, 1, 0.3, 1), transform 360ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .viewer-pill.is-collapsed .viewer-pill-cluster {
+  position: absolute;
   opacity: 0;
-  max-width: 0;
-  transform: translateX(-8px);
+  transform: scale(0.92);
   pointer-events: none;
+}
+
+.viewer-pill-mobile-controls {
+  display: none;
+}
+
+@keyframes viewer-pill-enter {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.94);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
 
 .viewer-pill-btn {
   box-sizing: border-box;
-  width: 26px;
-  height: 26px;
+  width: 40px;
+  height: 40px;
   border-radius: 50%;
   border: 0;
   background: transparent;
@@ -267,16 +295,16 @@ onBeforeUnmount(() => {});
 
 .viewer-pill-btn svg {
   display: block;
-  width: 14px;
-  height: 14px;
+  width: 20px;
+  height: 20px;
 }
 
 .viewer-pill-arrow {
   width: auto;
-  min-width: 26px;
+  min-width: 40px;
   padding: 0 6px;
-  gap: 3px;
-  border-radius: 13px;
+  gap: 4px;
+  border-radius: 20px;
 }
 
 .viewer-pill-arrow-label {
@@ -288,21 +316,21 @@ onBeforeUnmount(() => {});
 }
 
 .viewer-pill-arrow svg {
-  width: 10px;
-  height: 10px;
+  width: 20px;
+  height: 20px;
   transform: rotate(0deg);
   transition: transform 240ms cubic-bezier(0.22, 0.61, 0.36, 1);
 }
 
 .viewer-pill.is-collapsed .viewer-pill-arrow {
   padding: 0;
-  width: 26px;
+  width: 40px;
 }
 
 .viewer-pill.is-collapsed .viewer-pill-arrow svg {
   transform: rotate(180deg);
-  width: 14px;
-  height: 14px;
+  width: 20px;
+  height: 20px;
 }
 
 .viewer-pill-view-mode[data-mode="fit-eyes"],
@@ -311,28 +339,28 @@ onBeforeUnmount(() => {});
 }
 
 .viewer-pill-audio {
-  --viewer-audio-control-size: 26px;
-  --viewer-audio-icon-size: 14px;
+  --viewer-audio-control-size: 40px;
+  --viewer-audio-icon-size: 20px;
   align-items: center;
   display: inline-flex;
-  flex: 0 0 26px;
-  height: 26px;
+  flex: 0 0 40px;
+  height: 40px;
   justify-content: center;
-  width: 26px;
+  width: 40px;
 }
 
 .viewer-pill-audio :deep(.viewer-audio-hover) {
   align-items: center;
   display: inline-flex;
-  height: 26px;
+  height: 40px;
   justify-content: center;
-  width: 26px;
+  width: 40px;
 }
 
 .viewer-pill-audio :deep(.viewer-audio-hover-trigger) {
   box-sizing: border-box;
-  width: 26px;
-  height: 26px;
+  width: 40px;
+  height: 40px;
   border-radius: 50%;
   color: #222;
 }
@@ -344,8 +372,8 @@ onBeforeUnmount(() => {});
 }
 
 .viewer-pill-audio :deep(.viewer-audio-icon) {
-  width: 14px;
-  height: 14px;
+  width: 20px;
+  height: 20px;
 }
 
 .viewer-pill-info-popup {
@@ -392,5 +420,148 @@ onBeforeUnmount(() => {});
 .viewer-pill-info-pop-leave-to {
   opacity: 0;
   transform: translateY(6px);
+}
+
+@media (max-width: 768px), (max-height: 520px) and (pointer: coarse) {
+  .viewer-pill {
+    --viewer-pill-mobile-glass: rgba(255, 255, 255, 0.22);
+    --viewer-pill-mobile-border: rgba(255, 255, 255, 0.3);
+    --viewer-pill-mobile-shadow: 0 8px 24px rgba(0, 0, 0, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+    bottom: calc(8px + env(safe-area-inset-bottom));
+    height: 48px;
+    padding: 2px 12px;
+    gap: 12px;
+    background: var(--viewer-pill-mobile-glass);
+    backdrop-filter: blur(16px) saturate(160%);
+    -webkit-backdrop-filter: blur(16px) saturate(160%);
+    border-radius: 24px;
+  }
+
+  .viewer-pill:not(.is-collapsed) {
+    animation-name: viewer-pill-mobile-expanded-enter;
+    left: max(12px, env(safe-area-inset-left));
+    right: max(12px, env(safe-area-inset-right));
+    width: auto;
+    justify-content: center;
+    transform: none;
+  }
+
+  .viewer-pill.is-collapsed {
+    left: auto;
+    right: max(12px, env(safe-area-inset-right));
+    width: 48px;
+    padding: 2px;
+    gap: 0;
+    transform: none;
+    animation-name: viewer-pill-mobile-collapsed-enter;
+  }
+
+  .viewer-pill-cluster {
+    gap: 12px;
+  }
+
+  .viewer-pill-mobile-controls {
+    align-items: center;
+    box-sizing: border-box;
+    background: var(--viewer-pill-mobile-glass);
+    backdrop-filter: blur(16px) saturate(160%);
+    -webkit-backdrop-filter: blur(16px) saturate(160%);
+    border: 1px solid var(--viewer-pill-mobile-border);
+    border-radius: 24px;
+    bottom: calc(100% + 6px);
+    box-shadow: var(--viewer-pill-mobile-shadow);
+    display: flex;
+    justify-content: center;
+    pointer-events: auto;
+    position: absolute;
+    right: 0;
+    width: 52px;
+  }
+
+  .viewer-pill-btn,
+  .viewer-pill.is-collapsed .viewer-pill-arrow {
+    height: 44px;
+    width: 44px;
+  }
+
+  .viewer-pill-arrow {
+    min-width: 44px;
+    border-radius: 22px;
+    padding: 0 6px;
+    gap: 4px;
+  }
+
+  .viewer-pill-btn svg,
+  .viewer-pill-arrow svg,
+  .viewer-pill.is-collapsed .viewer-pill-arrow svg {
+    width: 24px;
+    height: 24px;
+  }
+
+  .viewer-pill-audio,
+  .viewer-pill-audio :deep(.viewer-audio-hover),
+  .viewer-pill-audio :deep(.viewer-audio-hover-trigger) {
+    height: 44px;
+    width: 44px;
+  }
+
+  .viewer-pill-audio {
+    flex-basis: 44px;
+  }
+
+  .viewer-pill-audio {
+    --viewer-audio-control-size: 44px;
+    --viewer-audio-icon-size: 24px;
+  }
+
+  .viewer-pill-audio :deep(.viewer-audio-icon) {
+    width: 24px;
+    height: 24px;
+  }
+}
+
+@keyframes viewer-pill-mobile-expanded-enter {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.94);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.viewer-pill-mobile-controls-enter-active,
+.viewer-pill-mobile-controls-leave-active {
+  transition: opacity 320ms cubic-bezier(0.16, 1, 0.3, 1), transform 360ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.viewer-pill-mobile-controls-enter-from,
+.viewer-pill-mobile-controls-leave-to {
+  opacity: 0;
+  transform: translateY(8px) scale(0.92);
+}
+
+@keyframes viewer-pill-mobile-collapsed-enter {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.92);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .viewer-pill,
+  .viewer-pill-cluster,
+  .viewer-pill-mobile-controls,
+  .viewer-pill-arrow svg {
+    animation: none;
+    transition: none;
+  }
 }
 </style>

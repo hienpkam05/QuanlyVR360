@@ -84,6 +84,7 @@
   height: 100%;
   overflow: hidden;
   position: relative;
+  touch-action: none;
   width: 100%;
 }
 
@@ -1632,6 +1633,18 @@
 
   .tour-viewer-page .viewer-thumbs {
     max-width: min(406px, calc(100% - 2 * var(--viewer-spacing)));
+  }
+
+  .panorama-viewer .viewer-hotspot-nav:hover .viewer-nav-default-arrow img {
+    filter: drop-shadow(0 3px 6px rgba(0, 0, 0, 0.55));
+  }
+
+  .panorama-viewer .viewer-hotspot-nav:hover .viewer-nav-default-preview,
+  .panorama-viewer .viewer-hotspot-nav:focus-visible .viewer-nav-default-preview,
+  .panorama-viewer .viewer-hotspot-nav:focus-visible .nav-preview-expand-media,
+  .panorama-viewer .viewer-hotspot-nav:focus-visible .nav-preview-expand-name {
+    opacity: 0;
+    visibility: hidden;
   }
 
   .tour-viewer-page .viewer-info-modal-backdrop {
