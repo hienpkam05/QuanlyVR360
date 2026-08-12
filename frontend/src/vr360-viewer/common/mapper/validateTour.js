@@ -1,4 +1,4 @@
-import { isNavigationPoint } from '../../../common/vr360/pointRendererRegistry.js';
+import { isNavigationPoint } from '../vr360/pointRendererRegistry.js';
 
 const warned = new Set();
 

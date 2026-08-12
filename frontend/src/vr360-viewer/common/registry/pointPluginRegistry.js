@@ -1,4 +1,4 @@
-import { resolvePointKind } from '../../../common/vr360/pointSchema.js';
+import { resolvePointKind } from '../vr360/pointSchema.js';
 
 const tooltip = (point) => ({ kind: 'tooltip', text: point.hover?.text || point.content?.title || point.label || '' });
 const noPreview = () => ({ kind: 'none' });

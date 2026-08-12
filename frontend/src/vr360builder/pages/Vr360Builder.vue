@@ -1071,6 +1071,7 @@ function saveCurrentView() {
   scenes[activeSceneIndex.value].initialView = v;
   showToast("success", `✅ lon=${v.lon}° lat=${v.lat}° fov=${v.fov}°`);
 }
+
 function replaceImage() {
   if (activeSceneIndex.value < 0) return;
   replaceImageInputRef.value?.click();

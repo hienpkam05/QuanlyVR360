@@ -3,7 +3,7 @@ import {
   isInfoAreaPoint,
   isMarkerPoint,
   resolvePointRenderer,
-} from '../../../common/vr360/pointRendererRegistry.js';
+} from '../vr360/pointRendererRegistry.js';
 
 function lonLatToVector(lon, lat, radius = 500) {
   const phi = THREE.MathUtils.degToRad(90 - Number(lat || 0));

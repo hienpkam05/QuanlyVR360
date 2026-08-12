@@ -10,6 +10,7 @@ import {
 } from "vue";
 
 import PanoramaViewer from "../components/PanoramaViewer.vue";
+import IntroOverlay from "../components/IntroOverlay.vue";
 import ScenesSidebar from "../components/ScenesSidebar.vue";
 import ViewerPill from "../components/ViewerPill.vue";
 import ViewerTopBar from "../components/ViewerTopBar.vue";
@@ -21,7 +22,9 @@ import { createPoiAudioController } from "../common/controllers/PoiAudioControll
 import { createTourAudioController } from "../common/controllers/TourAudioController.js";
 import { createFullscreenController } from "../common/controllers/fullscreen.js";
 import { createViewerIntroController, INTRO_PHASE } from "../common/controllers/ViewerIntroController.js";
+import { createIntroCameraAdapter } from "../common/intro/IntroCameraAdapter.js";
 import { createViewModeManager, VIEW_MODE } from "../common/controllers/viewModeManager.js";
+import { mobileInitialFovForAspect } from "../common/runtime/mobileFovPolicy.js";
 import {
   normalizeTour,
   runtimeHotspotForViewer,
@@ -32,6 +35,7 @@ import InfoPoiPopup from '../components/popups/InfoPoiPopup.vue';
 import ImageViewerPopup from '../components/popups/ImageViewerPopup.vue';
 import VideoPoiPopup from '../components/popups/VideoPoiPopup.vue';
 import "../assets/viewer.css";
+import "../assets/intro.css";
 
 const props = defineProps({
   tour: { type: Object, default: null },
@@ -67,29 +71,48 @@ const viewState = ref({ lon: 0, lat: 0, fov: 75 });
 const autoRotate = ref(props.options.autoRotate ?? true);
 const hasEmittedReady = ref(false);
 const isFullscreen = ref(false);
-const introState = ref({ overlayOpacity: 0 });
-const introPhase = ref(INTRO_PHASE.INTRO_ANIMATING);
+const introPhase = ref(INTRO_PHASE.WAITING_TO_START);
 const introPlayed = ref(false);
 const hasCompletedInitialIntro = ref(false);
+let hasStartedTourAudioForIntro = false;
 let navigationGeneration = 0;
 let stopFullscreenSync = () => {};
+let stopAudioFacadeSync = () => {};
+const coreEventListeners = new Set();
+
+function publishCoreEvent(type, payload) {
+  coreEventListeners.forEach((listener) => listener(type, payload));
+}
+
+function subscribeCoreEvents(listener) {
+  if (typeof listener !== 'function') return () => {};
+  coreEventListeners.add(listener);
+  return () => coreEventListeners.delete(listener);
+}
+
 function handleAudioEvent(event) {
   emit(event.type, event);
+  publishCoreEvent(event.type, event);
   if (import.meta.env?.DEV) console.debug('[Audio Viewer]', event.type, event.scope || '', event.source || '');
 }
 
 const audioManager = new AudioManager({ onEvent: handleAudioEvent });
 const audioStore = createAudioStore(audioManager);
 const audioService = createAudioService(audioManager, audioStore);
+stopAudioFacadeSync = audioManager.subscribe((event) => {
+  if (event.type === 'audio:state') publishCoreEvent(event.type, event.session);
+});
 const poiAudioController = createPoiAudioController({ manager: audioManager });
 const tourAudioController = createTourAudioController({ manager: audioManager });
 
 const fullscreen = createFullscreenController(() => root.value);
 const intro = createViewerIntroController(props.options.introAnimation);
+const introCamera = createIntroCameraAdapter(() => panorama.value);
 const viewModeManager = createViewModeManager();
 const activeViewMode = ref(VIEW_MODE.NORMAL);
 const isViewModeSheetOpen = computed(() => activeBottomPanel.value === 'view');
 const isMobileViewport = ref(false);
+const viewportSize = ref({ width: 1, height: 1 });
 let mobileViewportQuery;
 
 const scenes = computed(() => runtimeTour.value.scenes);
@@ -104,7 +127,7 @@ const activeSceneImageUrl = computed(() => activeScene.value?.imageSources?.[0] 
 const activeSceneFallbackImageUrls = computed(() => activeScene.value?.imageSources?.slice(1) || []);
 const isFirstScene = computed(() => activeSceneIndex.value <= 0);
 const isLastScene = computed(() => activeSceneIndex.value < 0 || activeSceneIndex.value >= scenes.value.length - 1);
-const introInitialView = computed(() => intro.getInitialFrame(activeScene.value?.initialView || {}));
+const introInitialView = computed(() => intro.getInitialFrame(sceneViewForViewer()));
 const viewerUIReady = computed(() => hasCompletedInitialIntro.value);
 const displayHotspots = computed(() =>
   (activeScene.value?.hotspots || []).map((hotspot) =>
@@ -123,12 +146,44 @@ let layoutUpdateCount = 0;
 
 function error(phase, cause) {
   errorMessage.value = cause?.message || String(cause || "Viewer error.");
-  emit("error", { phase, cause, message: errorMessage.value });
+  const payload = { phase, cause, message: errorMessage.value };
+  emit("error", payload);
+  publishCoreEvent("error", payload);
+}
+
+function setIntroPhase(phase) {
+  if (introPhase.value === phase) return;
+  introPhase.value = phase;
+  publishCoreEvent('intro-phase-change', getIntroState());
 }
 
 function markSceneVisited(sceneId) {
   if (!sceneId || visitedSceneIds.value.has(sceneId)) return;
   visitedSceneIds.value = new Set(visitedSceneIds.value).add(sceneId);
+}
+
+function viewForViewer(view = {}) {
+  const sceneView = view || {};
+  if (!isMobileViewport.value) return sceneView;
+  return {
+    ...sceneView,
+    fov: mobileInitialFovForAspect(
+      sceneView.fov,
+      viewportSize.value.width / viewportSize.value.height,
+    ),
+  };
+}
+
+function sceneViewForViewer(scene = activeScene.value) {
+  return viewForViewer(scene?.initialView || {});
+}
+
+function selectViewModeState(mode) {
+  const previousMode = viewModeManager.getCurrentMode();
+  const nextMode = viewModeManager.select(mode);
+  activeViewMode.value = nextMode;
+  if (nextMode !== previousMode) publishCoreEvent('view-mode-change', { mode: nextMode });
+  return nextMode;
 }
 
 function preloadTourAudio() {
@@ -137,6 +192,8 @@ function preloadTourAudio() {
 }
 
 async function playTourAudio() {
+  if (hasStartedTourAudioForIntro || !hasCompletedInitialIntro.value) return;
+  hasStartedTourAudioForIntro = true;
   const narration = runtimeTour.value.narration;
   if (!narration?.enabled || !narration.autoplay || !narration.url) return;
   await tourAudioController.play(narration, runtimeTour.value.title);
@@ -144,26 +201,35 @@ async function playTourAudio() {
 
 async function applyTour(payload) {
   audioManager.stop();
-  emit("load-progress", { phase: "normalize" });
+  const progressPayload = { phase: "normalize" };
+  emit("load-progress", progressPayload);
+  publishCoreEvent("load-progress", progressPayload);
   runtimeTour.value = normalizeTour(payload || {}, props.options);
   activeSceneId.value = runtimeTour.value.initialSceneId;
-  viewModeManager.setNormalFov(activeScene.value?.initialView?.fov);
+  viewModeManager.setNormalFov(sceneViewForViewer().fov);
+  selectViewModeState(VIEW_MODE.NORMAL);
   if (!hasCompletedInitialIntro.value) {
     panorama.value?.resetProjectionIntro?.();
     introPlayed.value = false;
-    introPhase.value = INTRO_PHASE.INTRO_ANIMATING;
-    introState.value = { overlayOpacity: intro.config.overlayOpacity };
+    setIntroPhase(INTRO_PHASE.WAITING_TO_START);
+    hasStartedTourAudioForIntro = false;
   }
   visitedSceneIds.value = new Set();
   activePointPopup.value = null;
   await nextTick();
+  if (!hasCompletedInitialIntro.value) {
+    introCamera.prepare(intro.getInitialFrame(sceneViewForViewer()));
+  }
   preloadTourAudio();
-  await playTourAudio();
   if (!hasEmittedReady.value) {
     hasEmittedReady.value = true;
-    emit("ready", { tour: runtimeTour.value });
+    const payload = { tour: runtimeTour.value };
+    emit("ready", payload);
+    publishCoreEvent("ready", payload);
   }
-  emit("load-complete", { scope: "tour", tour: runtimeTour.value });
+  const completePayload = { scope: "tour", tour: runtimeTour.value };
+  emit("load-complete", completePayload);
+  publishCoreEvent("load-complete", completePayload);
 }
 
 async function goToScene(sceneId, options = {}) {
@@ -180,17 +246,24 @@ async function goToScene(sceneId, options = {}) {
   activePointPopup.value = null;
   if (activeBottomPanel.value === 'view') activeBottomPanel.value = null;
   try {
-    emit("load-progress", { phase: "scene", sceneId: target.id });
+    const progressPayload = { phase: "scene", sceneId: target.id };
+    emit("load-progress", progressPayload);
+    publishCoreEvent("load-progress", progressPayload);
     audioManager.stop(AUDIO_SCOPE.POI);
     await panorama.value?.preloadTexture?.(target.imageSources?.[0]);
     if (generation !== navigationGeneration) return;
     markSceneVisited(previousSceneId);
     activeSceneId.value = target.id;
-    viewModeManager.setNormalFov(target.initialView?.fov);
+    const targetView = sceneViewForViewer(target);
+    const navigationView = options.targetView
+      ? viewForViewer(options.targetView)
+      : targetView;
+    viewModeManager.setNormalFov(targetView.fov);
+    selectViewModeState(VIEW_MODE.NORMAL);
     await nextTick();
     await panorama.value?.animateToView?.(
       {
-        ...(options.targetView || target.initialView),
+        ...navigationView,
         fov: viewModeManager.getTargetFov(),
       },
       target.transition?.rotation === false
@@ -203,12 +276,16 @@ async function goToScene(sceneId, options = {}) {
           ),
     );
     if (generation !== navigationGeneration) return;
-    emit("scene-change", {
+    const sceneChangePayload = {
       previousSceneId,
       sceneId: target.id,
       source: options.source || "api",
-    });
-    emit("load-complete", { scope: "scene", scene: target });
+    };
+    emit("scene-change", sceneChangePayload);
+    publishCoreEvent("scene-change", sceneChangePayload);
+    const completePayload = { scope: "scene", scene: target };
+    emit("load-complete", completePayload);
+    publishCoreEvent("load-complete", completePayload);
   } catch (cause) {
     error("scene-change", cause);
   } finally {
@@ -228,7 +305,9 @@ function previousScene() {
 
 function onHotspotClick(hotspot, event) {
   if (!viewerUIReady.value) return;
-  emit("hotspot-click", { hotspot, event });
+  const payload = { hotspot, event };
+  emit("hotspot-click", payload);
+  publishCoreEvent("hotspot-click", payload);
   dispatchPointInteraction(hotspot, {
     playAudio: (point) => {
       poiAudioController.play(point);
@@ -241,37 +320,13 @@ function onHotspotClick(hotspot, event) {
   });
 }
 
-function completeOnboarding() {
-  if (introPhase.value !== INTRO_PHASE.WAITING_FOR_FIRST_INTERACTION) return;
-  intro.unlock();
-}
-
-let onboardingPointer = null;
-function onOnboardingPointerDown(event) {
-  if (introPhase.value !== INTRO_PHASE.WAITING_FOR_FIRST_INTERACTION) return;
-  onboardingPointer = { id: event.pointerId, x: event.clientX, y: event.clientY };
-}
-
-function onOnboardingPointerMove(event) {
-  if (introPhase.value !== INTRO_PHASE.WAITING_FOR_FIRST_INTERACTION || !onboardingPointer || event.pointerId !== onboardingPointer.id) return;
-  if (Math.hypot(event.clientX - onboardingPointer.x, event.clientY - onboardingPointer.y) < 6) return;
-  onboardingPointer = null;
-  completeOnboarding();
-}
-
-function onOnboardingPointerEnd(event) {
-  if (event.pointerId === onboardingPointer?.id) onboardingPointer = null;
-}
-
 function onInteraction() {
-  if (introPhase.value === INTRO_PHASE.WAITING_FOR_FIRST_INTERACTION) return;
   if (!viewerUIReady.value) return;
 }
 
 function onOnboardingWheel(event) {
-  if (introPhase.value === INTRO_PHASE.WAITING_FOR_FIRST_INTERACTION) {
+  if (!viewerUIReady.value) {
     event.preventDefault();
-    completeOnboarding();
     return;
   }
   onInteraction();
@@ -286,52 +341,61 @@ function blockIntroKeyboard(event) {
 function startIntro() {
   if (hasCompletedInitialIntro.value || introPlayed.value || !activeScene.value) return;
   introPlayed.value = true;
-  introPhase.value = INTRO_PHASE.INTRO_ANIMATING;
-  introState.value = { overlayOpacity: intro.config.overlayOpacity };
+  publishCoreEvent('intro-start', getIntroState());
+  setIntroPhase(INTRO_PHASE.CAMERA_MOVE);
   intro.start({
-    view: activeScene.value.initialView,
-    onFrame: ({ progress, fov, lon, lat, overlayOpacity }) => {
-      introState.value = { overlayOpacity };
-      panorama.value?.setIntroState?.({
-        fov,
-        lon,
-        lat,
-        progress,
-      });
-    },
-    onWelcome: () => {
-      introPhase.value = INTRO_PHASE.WAITING_FOR_FIRST_INTERACTION;
-      introState.value = { overlayOpacity: 0 };
-    },
+    view: sceneViewForViewer(),
+    onFrame: (frame) => introCamera.apply(frame),
+    onPhase: setIntroPhase,
     onUnlock: () => {
-      introPhase.value = INTRO_PHASE.INTERACTIVE;
-      introState.value = { overlayOpacity: 0 };
-      hasCompletedInitialIntro.value = true;
+      setIntroPhase(INTRO_PHASE.FINISHING);
     },
   });
 }
 
+function completeIntro() {
+  if (introPhase.value !== INTRO_PHASE.FINISHING) return;
+  intro.complete();
+  introCamera.complete();
+  panorama.value?.setView?.(sceneViewForViewer());
+  hasCompletedInitialIntro.value = true;
+  setIntroPhase(INTRO_PHASE.INTERACTIVE);
+  publishCoreEvent('intro-complete', getIntroState());
+  void playTourAudio().catch((cause) => error("tour-audio-play", cause));
+}
+
 function onPanoramaTextureReady() {
-  startIntro();
+  if (hasCompletedInitialIntro.value || introPlayed.value) return;
+  introCamera.prepare(intro.getInitialFrame(sceneViewForViewer()));
 }
 
 function toggleAutorotate(force) {
   autoRotate.value = typeof force === "boolean" ? force : !autoRotate.value;
+  publishCoreEvent('autorotate-change', { enabled: autoRotate.value });
+  return autoRotate.value;
+}
+
+function getAutorotateState() {
   return autoRotate.value;
 }
 
 function resetView() {
   return panorama.value?.animateToView?.(
-    activeScene.value?.initialView || {},
+    sceneViewForViewer(),
     180,
   );
 }
 
 function setViewMode(mode) {
-  if (!viewerUIReady.value || !Object.values(VIEW_MODE).includes(mode)) return Promise.resolve();
+  if (!Object.values(VIEW_MODE).includes(mode)) {
+    throw new RangeError(`Unsupported view mode: ${String(mode)}`);
+  }
+  if (!viewerUIReady.value) return Promise.resolve();
   const currentView = panorama.value?.getView?.();
   if (!currentView) return Promise.resolve();
-  activeViewMode.value = viewModeManager.select(mode);
+  const previousMode = viewModeManager.getCurrentMode();
+  selectViewModeState(mode);
+  if (mode === previousMode) publishCoreEvent('view-mode-change', { mode });
   return panorama.value?.animateToView?.({
     lon: currentView.lon,
     lat: currentView.lat,
@@ -357,9 +421,23 @@ function selectViewMode(mode) {
   closeViewModeSheet();
 }
 
+function getViewMode() {
+  return viewModeManager.getCurrentMode();
+}
+
+function getAvailableViewModes() {
+  return Object.values(VIEW_MODE);
+}
+
 function updateMobileViewport(event) {
-  isMobileViewport.value = event.matches;
-  if (!event.matches) closeViewModeSheet();
+  isMobileViewport.value = typeof event?.matches === 'boolean'
+    ? event.matches
+    : Boolean(mobileViewportQuery?.matches);
+  viewportSize.value = {
+    width: root.value?.clientWidth || window.innerWidth || 1,
+    height: root.value?.clientHeight || window.innerHeight || 1,
+  };
+  if (!isMobileViewport.value) closeViewModeSheet();
 }
 
 let viewModeSheetTouchStartY = null;
@@ -380,6 +458,10 @@ function setView(view, options = {}) {
     ? panorama.value?.animateToView?.(view, options.duration)
     : panorama.value?.setView?.(view);
 }
+function onViewChange(view) {
+  viewState.value = view;
+  publishCoreEvent('view-change', view);
+}
 function enterFullscreen() {
   return fullscreen.enterFullscreen();
 }
@@ -389,14 +471,76 @@ function exitFullscreen() {
 function toggleFullscreen() {
   return fullscreen.isFullscreen() ? exitFullscreen() : enterFullscreen();
 }
+function getScenes() {
+  return scenes.value;
+}
+function getCurrentSceneId() {
+  return activeSceneId.value;
+}
+function getAudioState() {
+  return audioStore.state.activeSession;
+}
+function audioBlockedByIntro() {
+  return { ok: false, feature: 'audio', reason: 'INTRO_NOT_INTERACTIVE' };
+}
+function playAudio() {
+  if (!viewerUIReady.value) return audioBlockedByIntro();
+  const session = audioStore.state.activeSession;
+  if (session.status === 'playing') return { status: 'playing', source: session.url };
+  if (session.url) return audioService.resume();
+  const narration = runtimeTour.value.narration;
+  if (!narration?.enabled || !narration.url) {
+    return { ok: false, feature: 'audio.play', reason: 'NOT_AVAILABLE' };
+  }
+  return tourAudioController.play(narration, runtimeTour.value.title);
+}
+function pauseAudio() {
+  return audioService.pause();
+}
+function resumeAudio() {
+  return playAudio();
+}
+function toggleAudio() {
+  if (!viewerUIReady.value) return audioBlockedByIntro();
+  return audioStore.state.activeSession.url ? audioService.toggle() : playAudio();
+}
+function stopAudio() {
+  return audioService.stop();
+}
+function seekAudio(time) {
+  return audioService.seek(time);
+}
+function setAudioVolume(volume) {
+  const result = audioService.setVolume(volume);
+  publishCoreEvent('audio:volumechange', getAudioState());
+  return result;
+}
+function setAudioMuted(muted) {
+  const result = muted ? audioService.mute() : audioService.unmute();
+  publishCoreEvent('audio:volumechange', getAudioState());
+  return result;
+}
+function isFullscreenActive() {
+  return fullscreen.isFullscreen();
+}
+function getIntroState() {
+  return {
+    phase: introPhase.value,
+    completed: hasCompletedInitialIntro.value,
+    interactive: viewerUIReady.value,
+  };
+}
 function dispose() {
   navigationGeneration += 1;
   intro.cancel();
-  onboardingPointer = null;
   mobileViewportQuery?.removeEventListener?.('change', updateMobileViewport);
+  window.removeEventListener('resize', updateMobileViewport);
   window.removeEventListener("keydown", blockIntroKeyboard, true);
   stopFullscreenSync();
   stopFullscreenSync = () => {};
+  stopAudioFacadeSync();
+  stopAudioFacadeSync = () => {};
+  coreEventListeners.clear();
   audioManager.dispose();
   audioStore.dispose();
   panorama.value?.dispose?.();
@@ -409,11 +553,13 @@ watch(
 );
 onMounted(() => {
   window.addEventListener("keydown", blockIntroKeyboard, true);
-  mobileViewportQuery = window.matchMedia('(max-width: 768px)');
+  mobileViewportQuery = window.matchMedia('(max-width: 768px), (max-height: 520px) and (pointer: coarse)');
   updateMobileViewport(mobileViewportQuery);
   mobileViewportQuery.addEventListener?.('change', updateMobileViewport);
+  window.addEventListener('resize', updateMobileViewport);
   stopFullscreenSync = fullscreen.subscribe((active) => {
     isFullscreen.value = active;
+    publishCoreEvent('fullscreen-change', { active });
   });
 });
 onBeforeUnmount(dispose);
@@ -429,9 +575,29 @@ defineExpose({
   getView,
   setView,
   resetView,
+  getViewMode,
+  setViewMode,
+  getAvailableViewModes,
   toggleAutorotate,
+  getAutorotateState,
   enterFullscreen,
   exitFullscreen,
+  toggleFullscreen,
+  isFullscreen: isFullscreenActive,
+  getScenes,
+  getCurrentSceneId,
+  getAudioState,
+  playAudio,
+  pauseAudio,
+  resumeAudio,
+  toggleAudio,
+  stopAudio,
+  seekAudio,
+  setAudioVolume,
+  setAudioMuted,
+  getIntroState,
+  startIntro,
+  subscribeCoreEvents,
   dispose,
 });
 </script>
@@ -440,10 +606,6 @@ defineExpose({
   <section
     ref="root"
     class="tour-viewer-page"
-    @pointerdown.capture="onOnboardingPointerDown"
-    @pointermove.capture="onOnboardingPointerMove"
-    @pointerup.capture="onOnboardingPointerEnd"
-    @pointercancel.capture="onOnboardingPointerEnd"
     @pointerdown="onInteraction"
     @wheel.capture="onOnboardingWheel"
     @contextmenu.capture="!viewerUIReady && $event.preventDefault()"
@@ -469,26 +631,20 @@ defineExpose({
           hotspot-display-mode="viewer"
           @hotspot-click="onHotspotClick"
           @texture-ready="onPanoramaTextureReady"
-          @view-change="viewState = $event"
+          @view-change="onViewChange"
         />
       </main>
 
       <div class="viewer-overlay" aria-hidden="true"></div>
-      <div
-        v-if="introPhase === INTRO_PHASE.INTRO_ANIMATING"
-        class="viewer-intro-overlay"
-        :style="{ opacity: introState.overlayOpacity }"
-        aria-hidden="true"
-      ></div>
-      <div
-        v-if="introPhase === INTRO_PHASE.WAITING_FOR_FIRST_INTERACTION"
-        class="viewer-intro-welcome"
-        role="status"
-        aria-live="polite"
-      >
-        <span class="viewer-intro-welcome-arrow" aria-hidden="true">↑</span>
-        <strong>Kéo lên để khám phá</strong>
-      </div>
+      <Transition name="viewer-intro-fade" @after-leave="completeIntro">
+        <IntroOverlay
+          v-if="introPhase !== INTRO_PHASE.INTERACTIVE && introPhase !== INTRO_PHASE.FINISHING"
+          :title="runtimeTour.title"
+          :brand="options.brand || ''"
+          :starting="introPhase !== INTRO_PHASE.WAITING_TO_START"
+          @start="startIntro"
+        />
+      </Transition>
       <div class="viewer-transition-layer">
         <div
           class="viewer-transition-overlay"
@@ -528,14 +684,26 @@ defineExpose({
         :is-transitioning="isTransitioning"
         :audio-session="audioStore.state.activeSession"
         :audio-service="audioService"
+        :audio-tour="{ ...runtimeTour.narration, title: runtimeTour.title }"
         :active-view-mode="activeViewMode"
         @home="resetView"
         @prev="previousScene"
         @next="nextScene"
         @view-mode-change="setViewMode"
-      />
+      >
+        <template #mobile-controls>
+          <ScenesSidebar
+            v-if="isMobileViewport"
+            controls-only
+            :auto-rotate="autoRotate"
+            :is-fullscreen="isFullscreen"
+            @toggle-autorotate="toggleAutorotate()"
+            @toggle-fullscreen="toggleFullscreen()"
+          />
+        </template>
+      </ViewerPill>
       <ScenesSidebar
-        v-if="viewerUIReady && scenes.length"
+        v-if="viewerUIReady && scenes.length && !isMobileViewport"
         :scenes="scenes"
         :active-scene-id="activeSceneId"
         :visited-scene-ids="visitedSceneIds"

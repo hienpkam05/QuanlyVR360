@@ -24,13 +24,13 @@ const fragmentShader = `
     float aspect = max(resolution.x / max(resolution.y, 1.0), 0.001);
     vec2 centered = fragmentUv - vec2(0.5);
     centered.x *= aspect;
-    float radius = 0.48;
+    float radius = 1.1;
     float distanceFromCenter = length(centered) / radius;
     float polar = min(distanceFromCenter, 1.0) * PI;
     float azimuth = atan(centered.y, centered.x) + projectionRotation;
     vec3 direction = vec3(
       sin(polar) * cos(azimuth),
-      cos(polar),
+      -cos(polar),
       sin(polar) * sin(azimuth)
     );
     return vec2(
@@ -41,15 +41,15 @@ const fragmentShader = `
 
   void main() {
     vec2 planetUv = tinyPlanetUv(gl_FragCoord.xy / resolution);
-    vec2 sampleUv = mix(planetUv, vUv, projectionBlend);
-    vec4 color = texture2D(panoramaTexture, sampleUv);
+    vec4 planetColor = texture2D(panoramaTexture, planetUv);
+    vec4 panoramaSample = texture2D(panoramaTexture, vUv);
+    // Blend rendered projections, never their UV coordinate systems. Directly
+    // interpolating stereographic and equirectangular UVs folds the image and
+    // exposes a seam during the Intro transition.
+    float projectionMix = smoothstep(0.0, 1.0, projectionBlend);
+    vec4 color = mix(planetColor, panoramaSample, projectionMix);
     color.rgb *= panoramaColor;
-    float aspect = max(resolution.x / max(resolution.y, 1.0), 0.001);
-    vec2 centered = gl_FragCoord.xy / resolution - vec2(0.5);
-    centered.x *= aspect;
-    float edgeDistance = length(centered) / 0.48;
-    float diskMask = 1.0 - smoothstep(0.94, 1.0, edgeDistance);
-    color.a = mix(color.a, 1.0, fisheyeStrength * (1.0 - diskMask));
+    color.a = 1.0;
     gl_FragColor = color;
     #include <colorspace_fragment>
   }
@@ -81,9 +81,12 @@ export function createProjectionPanoramaMaterial() {
   });
   material.color = material.uniforms.panoramaColor.value;
 
-  material.setProjectionState = ({ projectionBlend = 1, fisheyeStrength = 0 } = {}) => {
+  material.setProjectionState = ({ projectionBlend = 1, fisheyeStrength = 0, projectionRotation } = {}) => {
     material.uniforms.projectionBlend.value = projectionBlend;
     material.uniforms.fisheyeStrength.value = fisheyeStrength;
+    if (Number.isFinite(Number(projectionRotation))) {
+      material.uniforms.projectionRotation.value = Number(projectionRotation);
+    }
   };
 
   material.setProjectionResolution = (width, height) => {

@@ -15,6 +15,7 @@ export function createAudioStore(manager) {
     Object.assign(state.activeSession, session || createAudioSession());
     state.masterVolume = manager?.getMasterVolume?.() ?? state.masterVolume;
     state.isMuted = Boolean(state.activeSession.muted);
+    if (import.meta.env?.DEV) console.debug('[Audio Store] sync', state.activeSession.sourceType || 'none', state.activeSession.status);
   };
 
   const unsubscribe = manager?.subscribe?.(() => sync()) || (() => {});

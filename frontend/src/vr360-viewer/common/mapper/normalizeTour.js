@@ -1,7 +1,7 @@
 import { normalizeNavStyle } from '../constants/nav.js';
 import { validateTourPayload } from './validateTour.js';
-import { normalizePoint } from '../../../common/vr360/pointSchema.js';
-import { isNavigationPoint } from '../../../common/vr360/pointRendererRegistry.js';
+import { normalizePoint } from '../vr360/pointSchema.js';
+import { isNavigationPoint } from '../vr360/pointRendererRegistry.js';
 
 const DEFAULT_VIEW = { lon: 0, lat: 0, fov: 75 };
 const DEFAULT_TRANSITION = { enabled: true, effect: 'fade', duration: 1200, speed: 10, rotation: true };
