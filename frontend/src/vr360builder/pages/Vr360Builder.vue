@@ -1730,8 +1730,6 @@ async function saveToServer() {
     audioDebug('Save Audio POI', c.flatMap((scene) => scene.hotspots).filter((hotspot) => hotspot.type === 'audio').map((hotspot) => hotspot.id));
     const pending = c.filter((x) => x._file && !x.exportUrl);
     if (pending.length) {
-      const preSave = await apiSaveTour(buildJson(c));
-      if (!preSave) return;
       showToast("info", `⏳ Upload ${pending.length} ảnh...`);
       const r = await uploadClone(c);
       if (!r.ok) {
@@ -2126,23 +2124,36 @@ async function uploadClone(c, prog) {
   if (!api.connected) return { ok: false, up: 0, fail: 0 };
   let up = 0,
     fail = 0;
-  for (let i = 0; i < pending.length; i++) {
-    if (prog) prog(i + 1, pending.length, pending[i].name);
+  let nextIndex = 0;
+  let done = 0;
+  const concurrency = Math.min(2, pending.length);
+
+  async function uploadNext() {
+    const i = nextIndex++;
+    if (i >= pending.length) return;
+    const item = pending[i];
+    if (prog) prog(done + 1, pending.length, item.name);
     try {
-      const r = await apiUpload(pending[i]._file, pending[i].id);
+      const r = await apiUpload(item._file, item.id);
       if (r) {
-        pending[i].exportUrl = r.image_url;
-        pending[i]._serverThumb = r.thumb_url;
-        pending[i].original_file = r.original_file || r.image_url || "";
-        pending[i].optimized_file = r.optimized_file || "";
-        pending[i].preview_file = r.preview_file || "";
-        pending[i].thumbnail_file = r.thumbnail_file || r.thumb_url || "";
+        item.exportUrl = r.image_url;
+        item._serverThumb = r.thumb_url;
+        item.original_file = r.original_file || r.image_url || "";
+        item.optimized_file = r.optimized_file || "";
+        item.preview_file = r.preview_file || "";
+        item.thumbnail_file = r.thumbnail_file || r.thumb_url || "";
         up++;
       } else fail++;
     } catch {
       fail++;
+    } finally {
+      done++;
+      if (prog) prog(done, pending.length, item.name);
     }
+    await uploadNext();
   }
+
+  await Promise.all(Array.from({ length: concurrency }, () => uploadNext()));
   return { ok: !fail, up, fail };
 }
 function syncBack(c) {

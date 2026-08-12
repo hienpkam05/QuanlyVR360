@@ -145,7 +145,6 @@ class SceneUploadView(APIView):
             if existing_asset:
                 existing_asset.delete()
             asset = create_reusable_scene_asset(validated, reusable_asset, uploaded_file)
-            asset = SceneAsset.objects.select_related("tour_version__location__project").get(pk=asset.pk)
             log_scene_activity(
                 request,
                 "scene_asset_reused",
@@ -158,8 +157,6 @@ class SceneUploadView(APIView):
             existing_asset.delete()
         asset = serializer.save()
 
-        create_optimized_scene_images(asset)
-
         asset.original_width = width
         asset.original_height = height
         asset.file_size = uploaded_file.size
@@ -169,12 +166,10 @@ class SceneUploadView(APIView):
         asset.error_message = ""
         asset.processed_at = timezone.now()
         asset.save(update_fields=[
-            "optimized_file", "preview_file", "thumbnail_file",
             "original_width", "original_height", "file_size", "checksum_sha256", "mime_type",
             "processing_status", "error_message", "processed_at", "updated_at"
         ])
 
-        asset = SceneAsset.objects.select_related("tour_version__location__project").get(pk=asset.pk)
         log_scene_activity(request, "scene_asset_uploaded", asset, f"Uploaded source image for scene '{asset.scene_key}'.")
         return Response(SceneAssetSerializer(asset, context={"request": request}).data, status=status.HTTP_201_CREATED)
 
