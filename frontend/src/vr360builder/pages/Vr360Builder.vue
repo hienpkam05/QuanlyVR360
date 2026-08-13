@@ -3813,7 +3813,7 @@ onBeforeUnmount(() => {
 }
 .vb-main {
   flex: 1;
-  display: flex;
+  position: relative;
   overflow: hidden;
 }
 .vb-brand {
@@ -3955,14 +3955,19 @@ onBeforeUnmount(() => {
   flex: 1;
 }
 .vb-left {
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: 0;
   width: 240px;
-  flex-shrink: 0;
+  z-index: 10;
   background: var(--vb-bg-1);
   border-right: 1px solid var(--vb-border);
   display: flex;
   flex-direction: column;
   overflow: hidden;
   transition: width 0.2s ease;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
 }
 .vb-left.collapsed {
   width: 40px;
@@ -4124,8 +4129,9 @@ onBeforeUnmount(() => {
   color: var(--vb-accent);
 }
 .vb-center {
-  flex: 1;
-  position: relative;
+  position: absolute;
+  inset: 0;
+  z-index: 0;
   background: var(--vb-bg-0);
   overflow: hidden;
 }
@@ -4519,14 +4525,19 @@ onBeforeUnmount(() => {
   margin: 0 2px;
 }
 .vb-right {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
   width: 300px;
-  flex-shrink: 0;
+  z-index: 10;
   background: var(--vb-bg-1);
   border-left: 1px solid var(--vb-border);
   display: flex;
   flex-direction: column;
   overflow: hidden;
   transition: width 0.2s ease;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
 }
 .vb-right.collapsed {
   width: 40px;
