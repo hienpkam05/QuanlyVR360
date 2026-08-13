@@ -288,8 +288,8 @@
   border: 2px solid transparent;
   border-radius: 0.25rem;
   flex: 0 0 auto;
-  height: 3rem;
-  width: 4.25rem;
+  height: 5rem;
+  width: 8.25rem;
 }
 
 .vr360-v2-scene-panel__item.is-current .vr360-v2-scene-panel__thumb {
