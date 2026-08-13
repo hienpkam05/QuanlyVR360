@@ -1726,6 +1726,8 @@ async function saveToServer() {
     audioDebug('Save Audio POI', c.flatMap((scene) => scene.hotspots).filter((hotspot) => hotspot.type === 'audio').map((hotspot) => hotspot.id));
     const pending = c.filter((x) => x._file && !x.exportUrl);
     if (pending.length) {
+      // Save tour data first so new scenes exist in backend before uploading images
+      await apiSaveTour(buildJson(c));
       showToast("info", `⏳ Upload ${pending.length} ảnh...`);
       const r = await uploadClone(c);
       if (!r.ok) {
@@ -2254,6 +2256,9 @@ async function exportJSON() {
     }
     exportJsonText.value = "⏳ Đang tải lên...";
     modals.export = true;
+    if (pending.length) {
+      await apiSaveTour(buildJson(c));
+    }
     const sceneUpload = await uploadClone(c, (i, t, n) => {
       exportJsonText.value = `⏳ ${i}/${t}: ${n}`;
     });
