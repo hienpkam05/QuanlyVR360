@@ -1,10 +1,11 @@
 <script setup>
 import { ref } from 'vue';
-import { useRouter } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 
 import { useAuthStore } from '../stores/authStore';
 
 const router = useRouter();
+const route = useRoute();
 const auth = useAuthStore();
 
 const username = ref('admin');
@@ -17,7 +18,7 @@ async function submit() {
   errorMessage.value = '';
   try {
     await auth.login(username.value, password.value);
-    router.push('/');
+    router.push(typeof route.query.redirect === 'string' ? route.query.redirect : '/');
   } catch (error) {
     const data = error.response?.data;
     errorMessage.value =
