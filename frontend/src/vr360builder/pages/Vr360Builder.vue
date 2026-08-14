@@ -85,28 +85,6 @@ function areaPointsToSvg(points) {
   return points.map((p) => `${p.x},${p.y}`).join(" ");
 }
 
-const infoAreaOverlays = computed(() => {
-  areaOverlayTick.value;
-  if (!activeScene.value) return [];
-  return activeScene.value.hotspots
-    .filter((hotspot) => hotspot.type === "info_area")
-    .map((hotspot) => {
-      const rawPoints = Array.isArray(hotspot.area_points)
-        ? hotspot.area_points
-        : [];
-      const points = rawPoints.map(projectAreaPoint).filter(Boolean);
-      if (points.length < 3) return null;
-      return {
-        index: activeScene.value.hotspots.indexOf(hotspot),
-        hotspot,
-        points,
-        svgPoints: areaPointsToSvg(points),
-        selected: index === selectedHotspotIndex.value,
-      };
-    })
-    .filter(Boolean);
-});
-
 const draftInfoAreaOverlay = computed(() => {
   areaOverlayTick.value;
   const points = infoAreaDraftPoints.value.map(projectAreaPoint).filter(Boolean);
@@ -319,6 +297,40 @@ function generateId(name) {
   );
 }
 
+function makeUniqueSceneId(name) {
+  const base = generateId(name);
+  const existing = new Set(scenes.map((s) => s.id));
+  if (!existing.has(base)) return base;
+  let n = 2;
+  while (existing.has(`${base}_${n}`)) n++;
+  return `${base}_${n}`;
+}
+
+function revokeIfBlob(url) {
+  if (typeof url === "string" && url.startsWith("blob:")) URL.revokeObjectURL(url);
+}
+
+function disposeScene(scene) {
+  if (!scene) return;
+  revokeIfBlob(scene.image);
+  revokeIfBlob(scene._audioLocalUrl);
+  (scene.hotspots || []).forEach((hotspot) => {
+    revokeIfBlob(hotspot._audioLocalUrl);
+    revokeIfBlob(hotspot._infoImagePreview);
+    revokeIfBlob(hotspot._videoPreview);
+    revokeIfBlob(hotspot._areaMediaPreview);
+    if (Array.isArray(hotspot._galleryImageFiles)) {
+      hotspot._galleryImageFiles.forEach((item) => {
+        if (item?.previewUrl) revokeIfBlob(item.previewUrl);
+      });
+    }
+  });
+}
+
+function disposeAllScenes() {
+  scenes.forEach(disposeScene);
+}
+
 function generateHotspotId(prefix = "hotspot") {
   return `${prefix}_${Date.now().toString(36)}_${Math.random()
     .toString(36)
@@ -381,7 +393,7 @@ async function addScene(file) {
   const rawName = file.name.replace(/\.[^.]+$/, "").replace(/[_-]+/g, " ");
   const name = rawName.charAt(0).toUpperCase() + rawName.slice(1);
   const scene = {
-    id: generateId(name) + "_" + scenes.length,
+    id: makeUniqueSceneId(name),
     name,
     group: "Mặc định",
     image: localUrl,
@@ -412,8 +424,7 @@ function removeScene(index) {
   if (!confirm(`Xóa scene "${scenes[index].name}"?`)) return;
   previewMode.active = false;
   const rem = scenes.splice(index, 1)[0];
-  if (rem.image?.startsWith("blob:")) URL.revokeObjectURL(rem.image);
-  if (rem._audioLocalUrl?.startsWith("blob:")) URL.revokeObjectURL(rem._audioLocalUrl);
+  disposeScene(rem);
   if (activeSceneIndex.value === index) {
     activeSceneIndex.value = -1;
     selectedHotspotIndex.value = -1;
@@ -1364,6 +1375,7 @@ async function handleVersionChange() {
   else clearTourCanvas();
 }
 function clearTourCanvas() {
+  disposeAllScenes();
   scenes.splice(0, scenes.length);
   activeSceneIndex.value = -1;
   selectedHotspotIndex.value = -1;
@@ -1776,6 +1788,7 @@ async function loadTourById(id) {
     normalizeScene(s, { generateId, resolveUrl }),
   );
   resetTourAudio(d.audio, resolveUrl(d.background_audio));
+  disposeAllScenes();
   scenes.splice(0, scenes.length, ...mapped);
   api.currentTourId = id;
   activeSceneIndex.value = -1;
@@ -2314,6 +2327,7 @@ function doImportJSON() {
     const mapped = sc.map((s) => normalizeScene(s, { generateId }));
     mapped.flatMap((scene) => scene.hotspots).forEach((hotspot) => debugPoint('Imported/Normalize type', hotspot));
     resetTourAudio(d.audio);
+    disposeAllScenes();
     scenes.splice(0, scenes.length, ...mapped);
     activeSceneIndex.value = -1;
     selectedHotspotIndex.value = -1;
@@ -2419,32 +2433,8 @@ onBeforeUnmount(() => {
   window.removeEventListener("keydown", onGlobalKeydown);
   if (areaOverlayRaf) cancelAnimationFrame(areaOverlayRaf);
   engine.value?.dispose();
-  if (tourAudio._localUrl?.startsWith("blob:")) {
-    URL.revokeObjectURL(tourAudio._localUrl);
-  }
-  scenes.forEach((s) => {
-    if (s.image?.startsWith("blob:")) URL.revokeObjectURL(s.image);
-    if (s._audioLocalUrl?.startsWith("blob:"))
-      URL.revokeObjectURL(s._audioLocalUrl);
-    s.hotspots?.forEach((hotspot) => {
-      if (hotspot._audioLocalUrl?.startsWith("blob:")) {
-        URL.revokeObjectURL(hotspot._audioLocalUrl);
-      }
-      if (hotspot._infoImagePreview?.startsWith("blob:")) {
-        URL.revokeObjectURL(hotspot._infoImagePreview);
-      }
-      if (Array.isArray(hotspot._galleryImageFiles)) {
-        hotspot._galleryImageFiles.forEach((item) => {
-          if (item?.previewUrl?.startsWith("blob:")) {
-            URL.revokeObjectURL(item.previewUrl);
-          }
-        });
-      }
-      if (hotspot._videoPreview?.startsWith("blob:")) {
-        URL.revokeObjectURL(hotspot._videoPreview);
-      }
-    });
-  });
+  revokeIfBlob(tourAudio._localUrl);
+  disposeAllScenes();
 });
 </script>
 
@@ -2758,22 +2748,6 @@ onBeforeUnmount(() => {
           :class="{ 'placing-hotspot': placingHotspot }"
         ></canvas>
         <svg class="vb-info-area-layer" aria-hidden="true">
-          <g
-            v-for="area in infoAreaOverlays"
-            :key="area.hotspot.id || area.index"
-            class="vb-info-area-group"
-            :class="{ selected: area.selected }"
-            @click.stop="selectHotspot(area.index)"
-          >
-            <polygon
-              class="vb-info-area-fill"
-              :points="area.svgPoints"
-            />
-            <polygon
-              class="vb-info-area-line"
-              :points="area.svgPoints"
-            />
-          </g>
           <g v-if="drawingInfoArea && draftInfoAreaOverlay.points.length">
             <polyline
               class="vb-info-area-draft-line"
