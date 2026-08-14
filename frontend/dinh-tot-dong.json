@@ -1,0 +1,1009 @@
+{
+  "title": "VR360 - ĐÌNH TỐT ĐỘNG",
+  "scenes": [
+    {
+      "id": "3",
+      "name": "Bắt đầu",
+      "group": "default",
+      "image": "https://api-dinhtotdong.ditich.metatwin.vn/media/images/IMG_20251226_092708_00_437.jpg",
+      "thumb": "https://api-dinhtotdong.ditich.metatwin.vn/media/images/Screenshot_2026-02-09_142607_xCJ4Thh.png",
+      "info": "",
+      "initialView": {
+        "lon": 179.6,
+        "lat": -4.8,
+        "fov": 106.7
+      },
+      "hotspots": [
+        {
+          "lon": 173.5,
+          "lat": -1.3,
+          "label": "Cổng vào",
+          "target": "4",
+          "type": "poi"
+        }
+      ]
+    },
+    {
+      "id": "4",
+      "name": "Cổng vào",
+      "group": "default",
+      "image": "https://api-dinhtotdong.ditich.metatwin.vn/media/images/IMG_20251226_092746_00_438.jpg",
+      "thumb": "https://api-dinhtotdong.ditich.metatwin.vn/media/images/Screenshot_2026-02-09_142739.png",
+      "info": "",
+      "initialView": {
+        "lon": 216.4,
+        "lat": -4.6,
+        "fov": 120
+      },
+      "hotspots": [
+        {
+          "lon": 173,
+          "lat": -1.7,
+          "label": "Cổng Thủy đình",
+          "target": "15",
+          "type": "poi"
+        },
+        {
+          "lon": -151.8,
+          "lat": -3.3,
+          "label": "Văn chỉ",
+          "target": "11",
+          "type": "poi"
+        },
+        {
+          "lon": -2.7,
+          "lat": -0.1,
+          "label": "Tổng quan",
+          "target": "3",
+          "type": "poi"
+        }
+      ]
+    },
+    {
+      "id": "11",
+      "name": "OV  Văn chỉ",
+      "group": "default",
+      "image": "https://api-dinhtotdong.ditich.metatwin.vn/media/images/IMG_20251226_093410_00_446.jpg",
+      "thumb": "https://api-dinhtotdong.ditich.metatwin.vn/media/images/Screenshot_2026-02-09_143536.png",
+      "info": "",
+      "initialView": {
+        "lon": -27.3,
+        "lat": 4.3,
+        "fov": 120
+      },
+      "hotspots": [
+        {
+          "lon": 20.5,
+          "lat": 0.3,
+          "label": "Cổng Văn chỉ",
+          "target": "8",
+          "type": "poi"
+        },
+        {
+          "lon": -66.1,
+          "lat": 0.3,
+          "label": "Cổng Văn chỉ",
+          "target": "14",
+          "type": "poi"
+        },
+        {
+          "lon": -149,
+          "lat": -3.2,
+          "label": "Cổng Thủy đình",
+          "target": "15",
+          "type": "poi"
+        },
+        {
+          "lon": 94.7,
+          "lat": -0.8,
+          "label": "Cổng vào",
+          "target": "4",
+          "type": "poi"
+        }
+      ]
+    },
+    {
+      "id": "8",
+      "name": "Cổng văn 1",
+      "group": "default",
+      "image": "https://api-dinhtotdong.ditich.metatwin.vn/media/images/IMG_20251226_093111_00_443_jwEkCZH.jpg",
+      "thumb": "https://api-dinhtotdong.ditich.metatwin.vn/media/images/Screenshot_2026-02-09_143045.png",
+      "info": "",
+      "initialView": {
+        "lon": 165.9,
+        "lat": -5.1,
+        "fov": 120
+      },
+      "hotspots": [
+        {
+          "lon": 162.4,
+          "lat": 5.7,
+          "label": "Khu Văn chỉ",
+          "target": "72",
+          "type": "poi"
+        },
+        {
+          "lon": 45,
+          "lat": 0.1,
+          "label": "Văn chỉ",
+          "target": "11",
+          "type": "poi"
+        },
+        {
+          "lon": -11.4,
+          "lat": 0.1,
+          "label": "Cổng vào",
+          "target": "4",
+          "type": "poi"
+        }
+      ]
+    },
+    {
+      "id": "14",
+      "name": "Cổng Văn 2",
+      "group": "default",
+      "image": "https://api-dinhtotdong.ditich.metatwin.vn/media/images/IMG_20251226_093813_00_449.jpg",
+      "thumb": "https://api-dinhtotdong.ditich.metatwin.vn/media/images/Screenshot_2026-02-09_144159.png",
+      "info": "",
+      "initialView": {
+        "lon": 172.2,
+        "lat": 4,
+        "fov": 120
+      },
+      "hotspots": [
+        {
+          "lon": 174.9,
+          "lat": -0.3,
+          "label": "Khu Văn chỉ",
+          "target": "72",
+          "type": "poi"
+        },
+        {
+          "lon": -50.6,
+          "lat": -4.1,
+          "label": "Văn chỉ",
+          "target": "11",
+          "type": "poi"
+        },
+        {
+          "lon": 4.7,
+          "lat": -3.5,
+          "label": "Cổng Thủy đình",
+          "target": "15",
+          "type": "poi"
+        }
+      ]
+    },
+    {
+      "id": "15",
+      "name": "Cổng Thủy đình",
+      "group": "default",
+      "image": "https://api-dinhtotdong.ditich.metatwin.vn/media/images/IMG_20251226_093901_00_450.jpg",
+      "thumb": "https://api-dinhtotdong.ditich.metatwin.vn/media/images/Screenshot_2026-02-09_144255.png",
+      "info": "",
+      "initialView": {
+        "lon": -180.9,
+        "lat": -1.3,
+        "fov": 120
+      },
+      "hotspots": [
+        {
+          "lon": 176.4,
+          "lat": 4.5,
+          "label": "Lối ra Thủy đình",
+          "target": "17",
+          "type": "poi"
+        },
+        {
+          "lon": -66.1,
+          "lat": 0.6,
+          "label": "Khu Đình chính",
+          "target": "26",
+          "type": "poi"
+        },
+        {
+          "lon": 83.3,
+          "lat": 0.3,
+          "label": "Cổng vào",
+          "target": "4",
+          "type": "poi"
+        },
+        {
+          "lon": 46,
+          "lat": 0.4,
+          "label": "Văn chỉ",
+          "target": "11",
+          "type": "poi"
+        }
+      ]
+    },
+    {
+      "id": "17",
+      "name": "Cầu Thủy đình 2",
+      "group": "default",
+      "image": "https://api-dinhtotdong.ditich.metatwin.vn/media/images/IMG_20251226_094301_00_452.jpg",
+      "thumb": "https://api-dinhtotdong.ditich.metatwin.vn/media/images/Screenshot_2026-02-09_144546.png",
+      "info": "",
+      "initialView": {
+        "lon": 170.1,
+        "lat": -1.6,
+        "fov": 106.7
+      },
+      "hotspots": [
+        {
+          "lon": 161.6,
+          "lat": 4.4,
+          "label": "Thủy đình",
+          "target": "21",
+          "type": "poi"
+        },
+        {
+          "lon": -20.2,
+          "lat": 4.5,
+          "label": "Cổng Thủy đình",
+          "target": "15",
+          "type": "poi"
+        }
+      ]
+    },
+    {
+      "id": "21",
+      "name": "Trong Thủy đình",
+      "group": "default",
+      "image": "https://api-dinhtotdong.ditich.metatwin.vn/media/images/IMG_20251226_094900_00_456_w2HrwAM.jpg",
+      "thumb": "https://api-dinhtotdong.ditich.metatwin.vn/media/images/Screenshot_2026-02-09_145129.png",
+      "info": "",
+      "initialView": {
+        "lon": -182.1,
+        "lat": -11.4,
+        "fov": 120
+      },
+      "hotspots": [
+        {
+          "lon": 173.7,
+          "lat": -20.6,
+          "label": "Lối ra Thủy đình",
+          "target": "17",
+          "type": "poi"
+        }
+      ]
+    },
+    {
+      "id": "26",
+      "name": "OV Đình chính - 2",
+      "group": "default",
+      "image": "https://api-dinhtotdong.ditich.metatwin.vn/media/images/IMG_20251226_095337_00_461_UvtRJTH.jpg",
+      "thumb": "https://api-dinhtotdong.ditich.metatwin.vn/media/images/Screenshot_2026-02-09_145715.png",
+      "info": "",
+      "initialView": {
+        "lon": 159.1,
+        "lat": 4.3,
+        "fov": 120
+      },
+      "hotspots": [
+        {
+          "lon": -75,
+          "lat": -0.5,
+          "label": "Cổng Thủy đình",
+          "target": "15",
+          "type": "poi"
+        },
+        {
+          "lon": 160.9,
+          "lat": 2.3,
+          "label": "Sân Đình",
+          "target": "27",
+          "type": "poi"
+        }
+      ]
+    },
+    {
+      "id": "27",
+      "name": "Sân Đình",
+      "group": "default",
+      "image": "https://api-dinhtotdong.ditich.metatwin.vn/media/images/IMG_20251226_095528_00_462_I4U8VPd.jpg",
+      "thumb": "https://api-dinhtotdong.ditich.metatwin.vn/media/images/Screenshot_2026-02-09_145802.png",
+      "info": "",
+      "initialView": {
+        "lon": 179,
+        "lat": 0.3,
+        "fov": 120
+      },
+      "hotspots": [
+        {
+          "lon": -1.1,
+          "lat": -8.6,
+          "label": "Khu Đình chính",
+          "target": "26",
+          "type": "poi"
+        },
+        {
+          "lon": 179.6,
+          "lat": 1.9,
+          "label": "Trong Đình",
+          "target": "37",
+          "type": "poi"
+        },
+        {
+          "lon": 122,
+          "lat": -0.5,
+          "label": "Gian trái",
+          "target": "32",
+          "type": "poi"
+        },
+        {
+          "lon": -123.5,
+          "lat": -0.1,
+          "label": "Gian phải",
+          "target": "35",
+          "type": "poi"
+        },
+        {
+          "lon": 177.6,
+          "lat": 56.2,
+          "label": "Tổng quan Đình chính",
+          "target": "dji_20250102014337_0029_d_34",
+          "type": "poi"
+        }
+      ]
+    },
+    {
+      "id": "23",
+      "name": "Overview Đình chính",
+      "group": "default",
+      "image": "https://api-dinhtotdong.ditich.metatwin.vn/media/images/IMG_20251226_095055_00_458_wVB86T9.jpg",
+      "thumb": "https://api-dinhtotdong.ditich.metatwin.vn/media/images/Screenshot_2026-02-09_145234.png",
+      "info": "",
+      "initialView": {
+        "lon": 166.7,
+        "lat": -6,
+        "fov": 120
+      },
+      "hotspots": []
+    },
+    {
+      "id": "25",
+      "name": "Overview Đình chính - 1",
+      "group": "default",
+      "image": "https://api-dinhtotdong.ditich.metatwin.vn/media/images/IMG_20251226_095247_00_460.jpg",
+      "thumb": "https://api-dinhtotdong.ditich.metatwin.vn/media/images/Screenshot_2026-02-09_145627.png",
+      "info": "",
+      "initialView": {
+        "lon": 174.4,
+        "lat": -6.2,
+        "fov": 120
+      },
+      "hotspots": []
+    },
+    {
+      "id": "32",
+      "name": "Gian trái Đình",
+      "group": "default",
+      "image": "https://api-dinhtotdong.ditich.metatwin.vn/media/images/IMG_20251226_101253_00_467_YQUdJnY.jpg",
+      "thumb": "__vue_devtool_undefined__",
+      "info": "",
+      "initialView": {
+        "lon": -189.9,
+        "lat": -4.2,
+        "fov": 120
+      },
+      "hotspots": [
+        {
+          "lon": -64,
+          "lat": -0.1,
+          "label": "Sân Đình",
+          "target": "27",
+          "type": "poi"
+        },
+        {
+          "lon": -127.5,
+          "lat": 1.5,
+          "label": "Trong Đình",
+          "target": "37",
+          "type": "poi"
+        }
+      ]
+    },
+    {
+      "id": "35",
+      "name": "Gian phải",
+      "group": "default",
+      "image": "https://api-dinhtotdong.ditich.metatwin.vn/media/images/IMG_20251226_101714_00_470_lIAvVAU.jpg",
+      "thumb": "__vue_devtool_undefined__",
+      "info": "",
+      "initialView": {
+        "lon": 169.1,
+        "lat": -2.2,
+        "fov": 110
+      },
+      "hotspots": [
+        {
+          "lon": 54.5,
+          "lat": -1.1,
+          "label": "Sân Đình",
+          "target": "27",
+          "type": "poi"
+        },
+        {
+          "lon": 113.9,
+          "lat": 0.5,
+          "label": "Trong Đình",
+          "target": "37",
+          "type": "poi"
+        }
+      ]
+    },
+    {
+      "id": "37",
+      "name": "In Đình chính",
+      "group": "default",
+      "image": "https://api-dinhtotdong.ditich.metatwin.vn/media/images/IMG_20251226_101954_00_472.jpg",
+      "thumb": "__vue_devtool_undefined__",
+      "info": "",
+      "initialView": {
+        "lon": -175.5,
+        "lat": 5.8,
+        "fov": 120
+      },
+      "hotspots": [
+        {
+          "lon": 0.4,
+          "lat": 1.8,
+          "label": "Sân Đình",
+          "target": "27",
+          "type": "poi"
+        },
+        {
+          "lon": 86.9,
+          "lat": 6.7,
+          "label": "Tranh tường",
+          "target": "39",
+          "type": "poi"
+        },
+        {
+          "lon": -83.9,
+          "lat": 6,
+          "label": "Tranh tường",
+          "target": "38",
+          "type": "poi"
+        },
+        {
+          "lon": -177.9,
+          "lat": 3.9,
+          "label": "Gian thờ",
+          "target": "42",
+          "type": "poi"
+        }
+      ]
+    },
+    {
+      "id": "38",
+      "name": "In ĐC - Phải",
+      "group": "default",
+      "image": "https://api-dinhtotdong.ditich.metatwin.vn/media/images/IMG_20251226_102121_00_473.jpg",
+      "thumb": "__vue_devtool_undefined__",
+      "info": "",
+      "initialView": {
+        "lon": 262.5,
+        "lat": -0.5,
+        "fov": 120
+      },
+      "hotspots": [
+        {
+          "lon": 76.7,
+          "lat": -1.7,
+          "label": "Đình chính",
+          "target": "37",
+          "type": "poi"
+        }
+      ]
+    },
+    {
+      "id": "39",
+      "name": "In ĐC - Trái",
+      "group": "default",
+      "image": "https://api-dinhtotdong.ditich.metatwin.vn/media/images/IMG_20251226_102226_00_474.jpg",
+      "thumb": "__vue_devtool_undefined__",
+      "info": "",
+      "initialView": {
+        "lon": 84.5,
+        "lat": -2.5,
+        "fov": 120
+      },
+      "hotspots": [
+        {
+          "lon": -97,
+          "lat": -1.9,
+          "label": "Đình chính",
+          "target": "37",
+          "type": "poi"
+        }
+      ]
+    },
+    {
+      "id": "42",
+      "name": "In ĐC - Gian thờ",
+      "group": "default",
+      "image": "https://api-dinhtotdong.ditich.metatwin.vn/media/images/IMG_20251226_102401_00_477.jpg",
+      "thumb": "__vue_devtool_undefined__",
+      "info": "",
+      "initialView": {
+        "lon": -185.2,
+        "lat": 1.4,
+        "fov": 120
+      },
+      "hotspots": [
+        {
+          "lon": -4.5,
+          "lat": 2.3,
+          "label": "Trong Đình",
+          "target": "37",
+          "type": "poi"
+        },
+        {
+          "lon": 173.3,
+          "lat": 8.5,
+          "label": "Gian thờ 2",
+          "target": "44",
+          "type": "poi"
+        },
+        {
+          "lon": 85.3,
+          "lat": -0.9,
+          "label": "Tổ Quốc ghi công",
+          "target": "41",
+          "type": "poi"
+        }
+      ]
+    },
+    {
+      "id": "41",
+      "name": "In ĐC - Tổ Quốc ghi công",
+      "group": "default",
+      "image": "https://api-dinhtotdong.ditich.metatwin.vn/media/images/IMG_20251226_102314_00_476.jpg",
+      "thumb": "__vue_devtool_undefined__",
+      "info": "",
+      "initialView": {
+        "lon": -181.9,
+        "lat": 1.1,
+        "fov": 120
+      },
+      "hotspots": [
+        {
+          "lon": -114.6,
+          "lat": -1.6,
+          "label": "Gian thờ",
+          "target": "42",
+          "type": "poi"
+        },
+        {
+          "lon": 51.7,
+          "lat": -7.7,
+          "label": "Sau Đình",
+          "target": "50",
+          "type": "poi"
+        }
+      ]
+    },
+    {
+      "id": "44",
+      "name": "In ĐC - Gian thờ 2",
+      "group": "default",
+      "image": "https://api-dinhtotdong.ditich.metatwin.vn/media/images/IMG_20251226_102615_00_479.jpg",
+      "thumb": "__vue_devtool_undefined__",
+      "info": "",
+      "initialView": {
+        "lon": 542.6,
+        "lat": -2.6,
+        "fov": 120
+      },
+      "hotspots": [
+        {
+          "lon": 1.1,
+          "lat": -2.2,
+          "label": "Gian thờ",
+          "target": "42",
+          "type": "poi"
+        },
+        {
+          "lon": -175.6,
+          "lat": 1.6,
+          "label": "Gian thờ 3",
+          "target": "47",
+          "type": "poi"
+        }
+      ]
+    },
+    {
+      "id": "47",
+      "name": "In ĐC - Gian thờ 3",
+      "group": "default",
+      "image": "https://api-dinhtotdong.ditich.metatwin.vn/media/images/IMG_20251226_102837_00_482.jpg",
+      "thumb": "__vue_devtool_undefined__",
+      "info": "",
+      "initialView": {
+        "lon": 174.5,
+        "lat": 0.2,
+        "fov": 120
+      },
+      "hotspots": [
+        {
+          "lon": 173.3,
+          "lat": -3,
+          "label": "Hậu viện",
+          "target": "51",
+          "type": "poi"
+        },
+        {
+          "lon": -3.7,
+          "lat": 8.3,
+          "label": "Gian thờ",
+          "target": "44",
+          "type": "poi"
+        }
+      ]
+    },
+    {
+      "id": "50",
+      "name": "Out ĐC - Trái",
+      "group": "default",
+      "image": "https://api-dinhtotdong.ditich.metatwin.vn/media/images/IMG_20251226_103543_00_485_lGo7WyO.jpg",
+      "thumb": "https://api-dinhtotdong.ditich.metatwin.vn/media/images/Screenshot_2026-02-09_153313.png",
+      "info": "",
+      "initialView": {
+        "lon": 240.7,
+        "lat": -7.7,
+        "fov": 120
+      },
+      "hotspots": [
+        {
+          "lon": -149.9,
+          "lat": 1.6,
+          "label": "Hậu viện",
+          "target": "51",
+          "type": "poi"
+        },
+        {
+          "lon": 1.5,
+          "lat": 2.3,
+          "label": "Đình chính",
+          "target": "37",
+          "type": "poi"
+        }
+      ]
+    },
+    {
+      "id": "51",
+      "name": "Out ĐC - Behind",
+      "group": "default",
+      "image": "https://api-dinhtotdong.ditich.metatwin.vn/media/images/IMG_20251226_103753_00_488_bCRILtA.jpg",
+      "thumb": "https://api-dinhtotdong.ditich.metatwin.vn/media/images/Screenshot_2026-02-09_153226.png",
+      "info": "",
+      "initialView": {
+        "lon": -194.7,
+        "lat": -1.9,
+        "fov": 120
+      },
+      "hotspots": [
+        {
+          "lon": 165.5,
+          "lat": 1.2,
+          "label": "Bia thờ",
+          "target": "52",
+          "type": "poi"
+        },
+        {
+          "lon": -24.3,
+          "lat": 8.6,
+          "label": "Đình chính",
+          "target": "37",
+          "type": "poi"
+        },
+        {
+          "lon": 28,
+          "lat": -0.5,
+          "label": "Sân sau",
+          "target": "50",
+          "type": "poi"
+        }
+      ]
+    },
+    {
+      "id": "52",
+      "name": "Out ĐC - Behind 1",
+      "group": "default",
+      "image": "https://api-dinhtotdong.ditich.metatwin.vn/media/images/IMG_20251226_103836_00_489_8B3JLTR.jpg",
+      "thumb": "https://api-dinhtotdong.ditich.metatwin.vn/media/images/Screenshot_2026-02-09_153128.png",
+      "info": "",
+      "initialView": {
+        "lon": 173,
+        "lat": -4.9,
+        "fov": 120
+      },
+      "hotspots": [
+        {
+          "lon": -9.3,
+          "lat": -2.8,
+          "label": "Hậu viện",
+          "target": "51",
+          "type": "poi"
+        }
+      ]
+    },
+    {
+      "id": "72",
+      "name": "Khu Văn chỉ",
+      "group": "Văn chỉ",
+      "image": "https://api-dinhtotdong.ditich.metatwin.vn/media/images/IMG_20251226_110815_00_517_SiH2htf.jpg",
+      "thumb": "https://api-dinhtotdong.ditich.metatwin.vn/media/images/Screenshot_2026-02-09_151451.png",
+      "info": "",
+      "initialView": {
+        "lon": 183.9,
+        "lat": -2.1,
+        "fov": 120
+      },
+      "hotspots": [
+        {
+          "lon": 178.9,
+          "lat": 2.2,
+          "label": "Sân Văn chỉ",
+          "target": "57",
+          "type": "poi"
+        },
+        {
+          "lon": -5.7,
+          "lat": 3.6,
+          "label": "Văn chỉ",
+          "target": "11",
+          "type": "poi"
+        },
+        {
+          "lon": 120.7,
+          "lat": 19.9,
+          "label": "Tổng quan Văn chỉ",
+          "target": "dji_20250102015101_0032_d_33",
+          "type": "poi"
+        }
+      ]
+    },
+    {
+      "id": "57",
+      "name": "Sân Văn chỉ",
+      "group": "Văn chỉ",
+      "image": "https://api-dinhtotdong.ditich.metatwin.vn/media/images/IMG_20251226_105227_00_501.jpg",
+      "thumb": "https://api-dinhtotdong.ditich.metatwin.vn/media/images/Screenshot_2026-02-09_152750.png",
+      "info": "",
+      "initialView": {
+        "lon": 177.7,
+        "lat": 0.6,
+        "fov": 120
+      },
+      "hotspots": [
+        {
+          "lon": 171.3,
+          "lat": 4.3,
+          "label": "Gian chính",
+          "target": "58",
+          "type": "poi"
+        },
+        {
+          "lon": -1.8,
+          "lat": 4.2,
+          "label": "Khu Văn chỉ",
+          "target": "72",
+          "type": "poi"
+        }
+      ]
+    },
+    {
+      "id": "58",
+      "name": "Gian chính",
+      "group": "Văn chỉ",
+      "image": "https://api-dinhtotdong.ditich.metatwin.vn/media/images/IMG_20251226_105303_00_502.jpg",
+      "thumb": "https://api-dinhtotdong.ditich.metatwin.vn/media/images/Screenshot_2026-02-09_152716.png",
+      "info": "",
+      "initialView": {
+        "lon": 175.9,
+        "lat": -1.3,
+        "fov": 120
+      },
+      "hotspots": [
+        {
+          "lon": 175.5,
+          "lat": 0.8,
+          "label": "Trong Văn chỉ",
+          "target": "59",
+          "type": "poi"
+        },
+        {
+          "lon": -4,
+          "lat": 0,
+          "label": "Sân Văn chỉ",
+          "target": "57",
+          "type": "poi"
+        }
+      ]
+    },
+    {
+      "id": "59",
+      "name": "In Văn chỉ",
+      "group": "Văn chỉ",
+      "image": "https://api-dinhtotdong.ditich.metatwin.vn/media/images/IMG_20251226_105351_00_503.jpg",
+      "thumb": "https://api-dinhtotdong.ditich.metatwin.vn/media/images/Screenshot_2026-02-09_152638.png",
+      "info": "",
+      "initialView": {
+        "lon": 172.2,
+        "lat": 2.1,
+        "fov": 120
+      },
+      "hotspots": [
+        {
+          "lon": 172.4,
+          "lat": 1.6,
+          "label": "Trong Văn chỉ",
+          "target": "62",
+          "type": "poi"
+        },
+        {
+          "lon": -5.5,
+          "lat": 2.5,
+          "label": "Sân Văn chỉ",
+          "target": "57",
+          "type": "poi"
+        }
+      ]
+    },
+    {
+      "id": "62",
+      "name": "Out Văn chỉ",
+      "group": "Văn chỉ",
+      "image": "https://api-dinhtotdong.ditich.metatwin.vn/media/images/IMG_20251226_105546_00_506.jpg",
+      "thumb": "https://api-dinhtotdong.ditich.metatwin.vn/media/images/Screenshot_2026-02-09_152350.png",
+      "info": "",
+      "initialView": {
+        "lon": 164.5,
+        "lat": -1.9,
+        "fov": 120
+      },
+      "hotspots": [
+        {
+          "lon": 164.1,
+          "lat": 5,
+          "label": "Ban Công đức",
+          "target": "63",
+          "type": "poi"
+        },
+        {
+          "lon": -18.5,
+          "lat": 2,
+          "label": "Trong Văn chỉ",
+          "target": "59",
+          "type": "poi"
+        },
+        {
+          "lon": -115.2,
+          "lat": -2.2,
+          "label": "Bia Văn chỉ",
+          "target": "66",
+          "type": "poi"
+        }
+      ]
+    },
+    {
+      "id": "63",
+      "name": "Văn chỉ - công đức",
+      "group": "Văn chỉ",
+      "image": "https://api-dinhtotdong.ditich.metatwin.vn/media/images/IMG_20251226_105629_00_507.jpg",
+      "thumb": "https://api-dinhtotdong.ditich.metatwin.vn/media/images/Screenshot_2026-02-09_152308.png",
+      "info": "",
+      "initialView": {
+        "lon": 172.8,
+        "lat": -5.9,
+        "fov": 120
+      },
+      "hotspots": [
+        {
+          "lon": -8.1,
+          "lat": -1.9,
+          "label": "Trong Văn chỉ",
+          "target": "62",
+          "type": "poi"
+        }
+      ]
+    },
+    {
+      "id": "66",
+      "name": "Bia Văn chỉ",
+      "group": "Văn chỉ",
+      "image": "https://api-dinhtotdong.ditich.metatwin.vn/media/images/IMG_20251226_105907_00_511.jpg",
+      "thumb": "https://api-dinhtotdong.ditich.metatwin.vn/media/images/Screenshot_2026-02-09_151902.png",
+      "info": "",
+      "initialView": {
+        "lon": 175.3,
+        "lat": -5.8,
+        "fov": 120
+      },
+      "hotspots": [
+        {
+          "lon": 52.8,
+          "lat": -3.8,
+          "label": "Trong Văn chỉ",
+          "target": "62",
+          "type": "poi"
+        }
+      ]
+    },
+    {
+      "id": "67",
+      "name": "Ov - Văn chỉ behind",
+      "group": "Văn chỉ",
+      "image": "https://api-dinhtotdong.ditich.metatwin.vn/media/images/IMG_20251226_105922_00_512.jpg",
+      "thumb": "https://api-dinhtotdong.ditich.metatwin.vn/media/images/Screenshot_2026-02-09_150920.png",
+      "info": "",
+      "initialView": {
+        "lon": 159.5,
+        "lat": -4.8,
+        "fov": 120
+      },
+      "hotspots": []
+    },
+    {
+      "id": "68",
+      "name": "Scene 68",
+      "group": "default",
+      "image": "https://api-dinhtotdong.ditich.metatwin.vn/media/images/IMG_20251226_110101_00_513.jpg",
+      "thumb": "https://api-dinhtotdong.ditich.metatwin.vn/media/images/Screenshot_2026-02-09_150501.png",
+      "info": "",
+      "initialView": {
+        "lon": 137,
+        "lat": -8.7,
+        "fov": 120
+      },
+      "hotspots": []
+    },
+    {
+      "id": "dji_20250102015101_0032_d_33",
+      "name": "Tổng quan Văn chỉ",
+      "group": "Văn chỉ",
+      "image": "https://storage.vanmanhit.com/uploads/panoramas/DJI_20250102015101_0032_D_1771611241494_70b9d3.jpg",
+      "thumb": "https://storage.vanmanhit.com/uploads/thumbnails/DJI_20250102015101_0032_D_1771611241494_70b9d3.jpg",
+      "info": "",
+      "initialView": {
+        "lon": 141.9,
+        "lat": -85,
+        "fov": 80
+      },
+      "hotspots": [
+        {
+          "lon": -132.9,
+          "lat": -49.7,
+          "label": "Khu Văn chỉ",
+          "target": "72",
+          "type": "poi"
+        }
+      ]
+    },
+    {
+      "id": "dji_20250102014337_0029_d_34",
+      "name": "Tổng quan Đình chính",
+      "group": "default",
+      "image": "https://storage.vanmanhit.com/uploads/panoramas/DJI_20250102014337_0029_D_1771611242976_3de97d.jpg",
+      "thumb": "https://storage.vanmanhit.com/uploads/thumbnails/DJI_20250102014337_0029_D_1771611242976_3de97d.jpg",
+      "info": "",
+      "initialView": {
+        "lon": -168.5,
+        "lat": -85,
+        "fov": 93.3
+      },
+      "hotspots": [
+        {
+          "lon": 103.8,
+          "lat": -47.3,
+          "label": "Khu Đình chính",
+          "target": "27",
+          "type": "poi"
+        }
+      ]
+    }
+  ]
+}
