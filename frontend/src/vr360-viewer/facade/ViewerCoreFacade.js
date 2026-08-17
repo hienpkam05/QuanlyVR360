@@ -25,6 +25,7 @@ export const CORE_FACADE_EVENTS = Object.freeze([
   'intro-start',
   'intro-phase-change',
   'intro-complete',
+  'poi-visibility-change',
 ]);
 
 const EVENT_ALIASES = Object.freeze({
@@ -389,6 +390,22 @@ export class ViewerCoreFacade {
   }
 
   startIntro() { return this.#call('startIntro', [], 'intro.start'); }
+
+  isPoiHidden() {
+    return typeof this.core?.isPoiHidden === 'function' ? Boolean(this.core.isPoiHidden()) : null;
+  }
+
+  getPoiState() {
+    const available = this.getCapabilities().poi;
+    const state = typeof this.core?.getPoiState === 'function' ? this.core.getPoiState() : null;
+    return Object.freeze({
+      available,
+      hidden: state ? state.hidden === true : null,
+    });
+  }
+
+  togglePoi(force) { return this.#call('togglePoi', [force], 'poi.toggle'); }
+  setPoiHidden(hidden) { return this.#call('setPoiHidden', [Boolean(hidden)], 'poi.setHidden'); }
 
   #call(methodName, args, feature) {
     const method = this.core?.[methodName];
