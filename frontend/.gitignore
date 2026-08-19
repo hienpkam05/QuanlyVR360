@@ -39,6 +39,7 @@ dist
 
 # file .md
 *.md
+!dinh-tot-dong.mapping.md
 
 # test
 tests/

@@ -79,6 +79,7 @@ let navigationGeneration = 0;
 let stopFullscreenSync = () => {};
 let stopAudioFacadeSync = () => {};
 const coreEventListeners = new Set();
+const defaultHudHidden = computed(() => props.options?.hideDefaultHud === true);
 
 function publishCoreEvent(type, payload) {
   coreEventListeners.forEach((listener) => listener(type, payload));
@@ -412,8 +413,24 @@ function closeViewModeSheet() {
   if (activeBottomPanel.value === 'view') activeBottomPanel.value = null;
 }
 
-function togglePoi() {
-  poiHidden.value = !poiHidden.value;
+function setPoiHidden(hidden) {
+  const next = Boolean(hidden);
+  if (poiHidden.value === next) return next;
+  poiHidden.value = next;
+  publishCoreEvent('poi-visibility-change', { hidden: next });
+  return next;
+}
+
+function togglePoi(force) {
+  return setPoiHidden(typeof force === 'boolean' ? force : !poiHidden.value);
+}
+
+function isPoiHidden() {
+  return poiHidden.value === true;
+}
+
+function getPoiState() {
+  return { hidden: poiHidden.value === true };
 }
 
 function selectViewMode(mode) {
@@ -597,6 +614,10 @@ defineExpose({
   setAudioMuted,
   getIntroState,
   startIntro,
+  togglePoi,
+  setPoiHidden,
+  isPoiHidden,
+  getPoiState,
   subscribeCoreEvents,
   dispose,
 });
@@ -658,7 +679,7 @@ defineExpose({
 
       <div v-if="viewerUIReady" class="viewer-hud viewer-presentation-enter">
         <ViewerTopBar
-          v-if="options.showTopbar === true"
+          v-if="options.showTopbar === true && !defaultHudHidden"
           :tour-title="runtimeTour.title"
           :scene-title="activeScene?.name || ''"
           :scene-index="activeSceneIndex"
@@ -674,7 +695,7 @@ defineExpose({
         /></ViewerTopBar>
       </div>
       <ViewerPill
-        v-if="viewerUIReady"
+        v-if="viewerUIReady && !defaultHudHidden"
         :scene-name="activeScene?.name || ''"
         :scene-index="activeSceneIndex"
         :scene-count="scenes.length"
@@ -703,7 +724,7 @@ defineExpose({
         </template>
       </ViewerPill>
       <ScenesSidebar
-        v-if="viewerUIReady && scenes.length && !isMobileViewport"
+        v-if="viewerUIReady && scenes.length && !isMobileViewport && !defaultHudHidden"
         :scenes="scenes"
         :active-scene-id="activeSceneId"
         :visited-scene-ids="visitedSceneIds"
