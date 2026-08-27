@@ -395,7 +395,7 @@ function onPointerLeave(event) {
 
 function isViewerControlTarget(target) {
   return target instanceof Element && Boolean(target.closest(
-    '.panorama-hotspot, .panorama-info-area, .area-landmark, .area-landmark-label',
+    '.panorama-hotspot, .panorama-info-area, .area-landmark, .area-landmark-label, .landmark-presentation, .landmark-label',
   ));
 }
 
@@ -679,7 +679,10 @@ defineExpose({
         <span v-else-if="!resolvePointVisual(hotspot).video && !resolvePointVisual(hotspot).audio && !resolvePointVisual(hotspot).nav" class="viewer-point-dot">{{ hotspot.index + 1 }}</span>
         <span v-if="!resolvePointVisual(hotspot).video" class="hotspot-label">{{ hotspot.label || 'Hotspot' }}</span>
         <template v-if="hotspotDisplayMode === 'viewer' && !resolvePointVisual(hotspot).video">
-          <span v-if="resolvePointPreview(hotspot).kind === 'tooltip' && resolvePointPreview(hotspot).text" class="viewer-hotspot-tooltip">{{ resolvePointPreview(hotspot).text }}</span>
+          <span v-if="resolvePointPreview(hotspot).kind === 'tooltip' && (resolvePointPreview(hotspot).title || resolvePointPreview(hotspot).description)" class="viewer-hotspot-tooltip">
+            <strong v-if="resolvePointPreview(hotspot).title" class="viewer-hotspot-tooltip-title">{{ resolvePointPreview(hotspot).title }}</strong>
+            <span v-if="resolvePointPreview(hotspot).description" class="viewer-hotspot-tooltip-description">{{ resolvePointPreview(hotspot).description }}</span>
+          </span>
           <span v-else-if="resolvePointPreview(hotspot).kind === 'image' && resolvePointPreview(hotspot).imageUrl" class="viewer-hotspot-image-preview" :style="{ backgroundImage: `url(${resolvePointPreview(hotspot).imageUrl})` }"></span>
         </template>
       </template>

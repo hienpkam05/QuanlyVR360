@@ -1,16 +1,22 @@
 import { resolvePointKind } from '../vr360/pointSchema.js';
 
-const tooltip = (point) => ({ kind: 'tooltip', text: point.hover?.text || point.content?.title || point.label || '' });
+const tooltip = (point) => ({
+  kind: 'tooltip',
+  title: point.content?.title || point.label || '',
+  description: point.content?.shortDescription || '',
+});
 const noPreview = () => ({ kind: 'none' });
 
 export const pointPreviewRegistry = Object.freeze({
   info: tooltip,
-  gallery: (point) => ({ kind: 'image', imageUrl: point.media?.images?.[0] || point.hover?.thumbnail || '' }),
+  gallery: tooltip,
   video: noPreview,
   audio: tooltip,
   nav: tooltip,
   area: noPreview,
   area_landmark: tooltip,
+  point_landmark: tooltip,
+  point_landmark: tooltip,
   pin: tooltip,
   generic: noPreview,
 });
@@ -31,6 +37,8 @@ export const pointVisualRegistry = Object.freeze({
   audio: { nav: false, audio: true, info: false },
   area: { nav: false, audio: false, info: false },
   area_landmark: { nav: false, audio: false, info: false },
+  point_landmark: { nav: false, audio: false, info: false },
+  point_landmark: { nav: false, audio: false, info: false },
   pin: { nav: false, audio: false, info: false },
   generic: { nav: false, audio: false, info: false },
 });
@@ -47,6 +55,8 @@ export const pointInteractionRegistry = Object.freeze({
   audio: (point, context) => context.playAudio(point),
   nav: (point, context) => context.navigate(point),
   area_landmark: (point, context) => context.navigate(point),
+  point_landmark: (point, context) => context.navigate(point),
+  point_landmark: (point, context) => context.navigate(point),
   info: (point, context) => context.openPopup('info', point),
   gallery: (point, context) => context.openPopup('image', point),
   video: (point, context) => context.openPopup('video', point),

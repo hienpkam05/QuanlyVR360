@@ -5,16 +5,18 @@ import {
   shallowRef,
   computed,
   watch,
+  nextTick,
   onMounted,
   onBeforeUnmount,
 } from "vue";
+import { useRouter } from "vue-router";
+import "../styles/vr360builder.css";
 import { PreviewEngine, generateThumb } from "../common/PreviewEngine.js";
 import { resizeImageFile } from "../common/imageResize.js";
 import { readGpsFromFile } from "../common/exifGps.js";
 import { DEFAULT_NAV_ICON } from "@/common/hotspotIcons.js";
 import {
   normalizeScene,
-  defaultNarration,
   defaultTransition,
   defaultHoverState,
   NAV_STYLES,
@@ -39,6 +41,12 @@ import {
 } from "@/api/toursApi.js";
 import { uploadSceneAsset } from "@/api/mediaApi.js";
 
+const router = useRouter();
+
+function goToManagement() {
+  router.push({ name: "Projects" });
+}
+
 // ══════════════════════════════════════
 //  STATE
 // ══════════════════════════════════════
@@ -56,7 +64,6 @@ const uiState = reactive({
     sceneProps: false,
     initialView: false,
     transition: true,
-    narration: true,
     tourAudio: true,
   },
   hsAcc: { chung: true, audio: true, noiDung: true, navTarget: true, hover: false },
@@ -106,7 +113,6 @@ watch(selectedHotspotIndex, (v) => {
     uiState.collapsed.sceneProps = true;
     uiState.collapsed.initialView = true;
     uiState.collapsed.transition = true;
-    uiState.collapsed.narration = true;
   } else {
     uiState.rightView = "point-list";
   }
@@ -115,7 +121,6 @@ watch(selectedHotspotIndex, (v) => {
 const canvasRef = ref(null);
 const fileInputRef = ref(null);
 const replaceImageInputRef = ref(null);
-const audioInputRef = ref(null);
 const tourAudioInputRef = ref(null);
 const hotspotAudioInputRef = ref(null);
 
@@ -268,6 +273,24 @@ const pendingPlacement = reactive({ lon: 0, lat: 0 });
 const quickMenu = reactive({ show: false, x: 0, y: 0, lon: 0, lat: 0 });
 const exportJsonText = ref("");
 const importJsonText = ref("");
+const isSaving = ref(false);
+const suppressDirtyTracking = ref(false);
+const saveState = ref("saved");
+const lastSavedAt = ref(null);
+
+watch(
+  [scenes, tourAudio],
+  () => {
+    if (
+      !suppressDirtyTracking.value &&
+      !isSaving.value &&
+      saveState.value === "saved"
+    ) {
+      saveState.value = "dirty";
+    }
+  },
+  { deep: true },
+);
 
 const toastState = reactive({ show: false, type: "info", msg: "" });
 let toastTimer = null;
@@ -313,10 +336,8 @@ function revokeIfBlob(url) {
 function disposeScene(scene) {
   if (!scene) return;
   revokeIfBlob(scene.image);
-  revokeIfBlob(scene._audioLocalUrl);
   (scene.hotspots || []).forEach((hotspot) => {
     revokeIfBlob(hotspot._audioLocalUrl);
-    revokeIfBlob(hotspot._infoImagePreview);
     revokeIfBlob(hotspot._videoPreview);
     revokeIfBlob(hotspot._areaMediaPreview);
     if (Array.isArray(hotspot._galleryImageFiles)) {
@@ -401,12 +422,9 @@ async function addScene(file) {
     info: "",
     initialView: { lon: 0, lat: 0, fov: 75 },
     hotspots: [],
-    am_thanh_thuyet_minh: defaultNarration(),
     transition: defaultTransition(),
     gps,
     _file: procFile,
-    _audioLocalUrl: "",
-    _audioFileName: "",
     _originalSize: originalSize,
     _resizedSize: resizedSize,
     _resized: resized,
@@ -521,11 +539,6 @@ function startDrawingInfoArea(seedLon = null, seedLat = null, type = 'area_landm
   );
 }
 
-function startDrawingInfoAreaFromModal() {
-  modals.hotspotType = false;
-  startDrawingInfoArea(pendingPlacement.lon, pendingPlacement.lat);
-}
-
 function startDrawingImageAreaFromModal() {
   modals.hotspotType = false;
   startDrawingInfoArea(pendingPlacement.lon, pendingPlacement.lat, 'area');
@@ -598,7 +611,7 @@ function finishInfoAreaDrawing() {
 function defaultNoiDung(loai_poi) {
   switch (loai_poi) {
     case "thong_tin_van_ban":
-      return { tieu_de: "", mo_ta: "", anh_minh_hoa: "", lien_ket: "" };
+      return { tieu_de: "", mo_ta_ngan: "", mo_ta: "", anh_minh_hoa: "", danh_sach_anh: [], lien_ket: "", youtube_url: "" };
     case "phat_video":
       return { url_video: "", tieu_de: "", tu_dong_phat: false };
     case "thu_vien_anh":
@@ -613,6 +626,14 @@ function confirmHotspotType(loai_poi) {
   if (loai_poi === "ghim_dia_danh") {
     modals.hotspotType = false;
     startDrawingInfoArea(pendingPlacement.lon, pendingPlacement.lat);
+    return;
+  }
+  if (loai_poi === 'point_landmark') {
+    const hs = scenes[activeSceneIndex.value].hotspots;
+    const newHs = createPoint('point_landmark', { id: generateHotspotId('landmark'), lon: pendingPlacement.lon, lat: pendingPlacement.lat, index: hs.length });
+    newHs.label = `Địa danh ${hs.length + 1}`;
+    newHs.khi_dua_chuot_vao = defaultHoverState();
+    hs.push(newHs); selectedHotspotIndex.value = hs.length - 1; modals.hotspotType = false; syncHotspotsToEngine();
     return;
   }
   if (loai_poi === 'area') {
@@ -892,28 +913,6 @@ function clearHotspotAudio() {
   showToast('info', '↺ Đã xóa Audio điểm nóng.');
 }
 
-function handleHotspotInfoImageFile(file) {
-  if (activeSceneIndex.value < 0 || selectedHotspotIndex.value < 0 || !file)
-    return;
-  if (!file.type?.startsWith("image/")) {
-    showToast("error", "Vui lòng chọn file ảnh.");
-    return;
-  }
-  const hs =
-    scenes[activeSceneIndex.value].hotspots[selectedHotspotIndex.value];
-  ensureHotspotId(hs);
-  if (hs._infoImagePreview?.startsWith("blob:")) {
-    URL.revokeObjectURL(hs._infoImagePreview);
-  }
-  const localUrl = URL.createObjectURL(file);
-  hs._infoImageFile = file;
-  hs._infoImagePreview = localUrl;
-  hs._infoImageName = file.name;
-  if (!hs.noi_dung) hs.noi_dung = defaultNoiDung("thong_tin_van_ban");
-  hs.noi_dung.anh_minh_hoa = localUrl;
-  showToast("info", "Ảnh thông tin sẽ được upload khi Save Tour.");
-}
-
 function handleGalleryImageFiles(files) {
   if (activeSceneIndex.value < 0 || selectedHotspotIndex.value < 0) return;
   const validFiles = Array.from(files || []).filter((file) =>
@@ -1128,78 +1127,11 @@ const handleReplaceImage = async (ev) => {
 };
 
 // ══════════════════════════════════════
-//  THUYẾT MINH (am_thanh_thuyet_minh)
+//  TRANSITION
 // ══════════════════════════════════════
 function ensureTransition(s) {
   if (!s.transition) s.transition = defaultTransition();
   return s.transition;
-}
-function ensureNarration(s) {
-  if (!s.am_thanh_thuyet_minh) s.am_thanh_thuyet_minh = defaultNarration();
-  return s.am_thanh_thuyet_minh;
-}
-const audioPreviewSrc = computed(() => {
-  const s = activeScene.value;
-  if (!s) return "";
-  return s._audioLocalUrl || s.am_thanh_thuyet_minh?.duong_dan_file_audio || "";
-});
-function updateNarration(key, value) {
-  if (activeSceneIndex.value < 0) return;
-  ensureNarration(scenes[activeSceneIndex.value])[key] = value;
-}
-function pickAudioFile() {
-  if (activeSceneIndex.value < 0) return;
-  audioInputRef.value?.click();
-}
-const handleAudioFile = (ev) => {
-  const f = ev.target.files?.[0];
-  ev.target.value = "";
-  if (!f || activeSceneIndex.value < 0) return;
-  if (!isAudioFile(f)) {
-    showToast("error", "❌ Chỉ chấp nhận tệp âm thanh");
-    return;
-  }
-  const s = scenes[activeSceneIndex.value];
-  ensureNarration(s);
-  if (s._audioLocalUrl) URL.revokeObjectURL(s._audioLocalUrl);
-  s._audioLocalUrl = URL.createObjectURL(f);
-  s._audioFile = f;
-  s._audioFileName = f.name;
-  s._audioUploadState = "pending";
-  s._audioUploadError = "";
-  ensureNarration(s).enabled = true;
-  readAudioDuration(s._audioLocalUrl, s);
-  showToast(
-    "info",
-    "🎧 Đã nạp để nghe thử. Scene Audio cần endpoint upload backend trước khi có thể lưu.",
-  );
-};
-function readAudioDuration(src, s) {
-  const a = new Audio();
-  a.preload = "metadata";
-  a.src = src;
-  a.addEventListener(
-    "loadedmetadata",
-    () => {
-      if (isFinite(a.duration))
-        s.am_thanh_thuyet_minh.thoi_luong_giay = Math.round(a.duration);
-    },
-    { once: true },
-  );
-}
-function clearNarration() {
-  if (activeSceneIndex.value < 0) return;
-  const s = scenes[activeSceneIndex.value];
-  if (s._audioLocalUrl) {
-    URL.revokeObjectURL(s._audioLocalUrl);
-    s._audioLocalUrl = "";
-  }
-  s._audioFileName = "";
-  delete s._audioFile;
-  delete s._audioUploadState;
-  delete s._audioUploadError;
-  s.am_thanh_thuyet_minh = defaultNarration();
-  showToast("info", "↺ Đã xoá thuyết minh của scene");
 }
 function updateTransition(key, value) {
   if (activeSceneIndex.value < 0) return;
@@ -1266,6 +1198,10 @@ const currentVersionLabel = computed(() => {
   if (!item) return "";
   return `v${item.version_number} - ${item.status}`;
 });
+
+function isSameId(left, right) {
+  return left !== undefined && left !== null && String(left) === String(right);
+}
 
 function apiUrl(p) {
   if (!p) return "";
@@ -1334,8 +1270,9 @@ async function loadVersionOptions(locationId = backendContext.locationId, { keep
   }
   const response = await listVersions(locationId);
   versions.value = normalizeApiList(response.data);
-  if (!keepSelection || !versions.value.some((v) => String(v.id) === String(backendContext.versionId))) {
-    const draft = versions.value.find((v) => v.status === "draft");
+  const selectedVersionExists = versions.value.some((v) => isSameId(v.id, backendContext.versionId));
+  if (!keepSelection || !selectedVersionExists) {
+    const draft = versions.value.find((v) => String(v.status || "").toLowerCase() === "draft");
     backendContext.versionId = draft?.id ? String(draft.id) : versions.value[0]?.id ? String(versions.value[0].id) : "";
   }
   api.currentTourId = backendContext.versionId || null;
@@ -1386,8 +1323,18 @@ async function initApi() {
   api.baseUrl = apiBaseURL;
   const ok = await apiTestConnection(true);
   if (!ok) return;
+  const requestedVersionId = backendContext.versionId;
   await loadBuilderOptions();
-  if (backendContext.locationId && backendContext.versionId) {
+  if (requestedVersionId && backendContext.locationId) {
+    const requestedVersion = versions.value.find((version) => isSameId(version.id, requestedVersionId));
+    if (!requestedVersion) {
+      showToast("error", "Không tìm thấy version được yêu cầu trong location đã chọn.");
+      clearTourCanvas();
+      return;
+    }
+    backendContext.versionId = String(requestedVersion.id);
+    api.currentTourId = backendContext.versionId;
+    persistBuilderContext();
     await loadTourById(backendContext.versionId);
   }
 }
@@ -1511,8 +1458,7 @@ async function apiSaveTour(d) {
       tourAudio._uploadState = "error";
       tourAudio._uploadError = e.response?.data?.detail || e.message || "Upload Tour Audio thất bại";
     }
-    showToast("error", e.response?.data?.detail || "Could not save tour version.");
-    return null;
+    throw e;
   }
 }
 async function apiListTours() {
@@ -1716,30 +1662,31 @@ function saveApiSettings() {
   }
   modals.api = false;
 }
-async function saveToServer() {
+async function handleSave() {
+  if (isSaving.value) return;
+  isSaving.value = true;
+  saveState.value = "saving";
   if (!api.connected) {
     showToast("error", "❌ Chưa kết nối");
+    isSaving.value = false;
+    saveState.value = "error";
     return;
   }
   if (!scenes.length) {
     showToast("error", "❌ Chưa có scene");
+    isSaving.value = false;
+    saveState.value = "error";
     return;
   }
-  const pendingSceneAudio = scenes.filter((scene) => scene._audioFile);
-  if (pendingSceneAudio.length) {
-    showToast(
-      "error",
-      `❌ Chưa thể lưu Scene Audio: backend chưa có endpoint upload cho ${pendingSceneAudio.map((scene) => scene.name || scene.id).join(", ")}.`,
-    );
-    return;
-  }
+  suppressDirtyTracking.value = true;
   try {
     const c = cloneForExport();
     audioDebug('Save Audio POI', c.flatMap((scene) => scene.hotspots).filter((hotspot) => hotspot.type === 'audio').map((hotspot) => hotspot.id));
     const pending = c.filter((x) => x._file && !x.exportUrl);
     if (pending.length) {
       // Save tour data first so new scenes exist in backend before uploading images
-      await apiSaveTour(buildJson(c));
+      const initialSave = await apiSaveTour(buildJson(c));
+      if (!initialSave) return;
       showToast("info", `⏳ Upload ${pending.length} ảnh...`);
       const r = await uploadClone(c);
       if (!r.ok) {
@@ -1752,18 +1699,29 @@ async function saveToServer() {
       showToast("error", "❌ Upload audio điểm nóng thất bại");
       return;
     }
-    const infoImageUpload = await uploadHotspotInfoImages(c);
-    if (!infoImageUpload.ok) {
+    const mediaUpload = await uploadHotspotInfoImages(c);
+    if (!mediaUpload.ok) {
       showToast("error", "❌ Upload media hotspot thất bại");
       return;
     }
     const res = await apiSaveTour(buildJson(c));
-    if (res) {
-      syncBack(c);
-      showToast("success", `✅ Saved! ID: ${res.tour_id || api.currentTourId}`);
+    if (!res) {
+      saveState.value = "error";
+      return;
     }
+    syncBack(c);
+    saveState.value = "saved";
+    lastSavedAt.value = new Date();
+    showToast("success", `✅ Đã lưu. ID: ${res.tour_id || api.currentTourId}`);
   } catch (e) {
-    showToast("error", "❌ " + e.message);
+    saveState.value = "error";
+    showToast("error", "❌ " + getSaveError(e));
+  } finally {
+    // Let the deep watcher flush while save-related reactive mutations are suppressed.
+    await nextTick();
+    suppressDirtyTracking.value = false;
+    isSaving.value = false;
+    if (saveState.value === "saving") saveState.value = "error";
   }
 }
 async function loadFromServer() {
@@ -1795,6 +1753,8 @@ async function loadTourById(id) {
   selectedHotspotIndex.value = -1;
   modals.load = false;
   if (scenes.length > 0) selectScene(0);
+  saveState.value = "saved";
+  lastSavedAt.value = null;
   showToast("success", `✅ "${d.title || id}" — ${scenes.length} scenes`);
 }
 
@@ -1814,9 +1774,6 @@ function cloneForExport() {
     _serverThumb: s._serverThumb || "",
     _file: s._file || null,
     initialView: { ...s.initialView },
-    am_thanh_thuyet_minh: s.am_thanh_thuyet_minh
-      ? { ...s.am_thanh_thuyet_minh }
-      : null,
     transition: s.transition ? { ...s.transition } : null,
     // Keep upload File handles, but deep-copy every persisted POI field so
     // save/export work cannot mutate the selected editor's reactive object.
@@ -1838,19 +1795,6 @@ function clonePlain(value, fallback = null) {
   return JSON.parse(JSON.stringify(value));
 }
 
-function cloneHotspotForExport(h) {
-  return {
-    ...h,
-    ...(h.noi_dung ? { noi_dung: clonePlain(h.noi_dung, {}) } : {}),
-    ...(Array.isArray(h.area_points)
-      ? { area_points: h.area_points.map((point) => ({ ...point })) }
-      : {}),
-    ...(h.khi_dua_chuot_vao
-      ? { khi_dua_chuot_vao: clonePlain(h.khi_dua_chuot_vao, {}) }
-      : {}),
-    ...(h.entryView ? { entryView: { ...h.entryView } } : {}),
-  };
-}
 function buildJson(c) {
   return {
     title: "VR360 Virtual Tour",
@@ -1876,9 +1820,6 @@ function buildJson(c) {
       info: s.info,
       gps: s.gps || null,
       initialView: { ...s.initialView },
-      ...(s.am_thanh_thuyet_minh?.duong_dan_file_audio
-        ? { am_thanh_thuyet_minh: { ...s.am_thanh_thuyet_minh } }
-        : {}),
       ...(s.transition?.enabled !== false
         ? { transition: { ...s.transition } }
         : {}),
@@ -1887,24 +1828,29 @@ function buildJson(c) {
   };
 }
 
+function getSaveError(error) {
+  const data = error?.response?.data;
+  if (data?.detail) return data.detail;
+  if (data && typeof data === "object") {
+    const [field, value] = Object.entries(data)[0] || [];
+    if (field && Array.isArray(value)) return `${field}: ${value[0]}`;
+    if (field && value) return `${field}: ${value}`;
+  }
+  return error?.message || "Không thể lưu tour.";
+}
+
 function cleanHotspotForSave(hotspot) {
   ensureHotspotId(hotspot);
   debugPoint('Saved type', hotspot);
   const copy = JSON.parse(
     JSON.stringify(hotspot, (key, value) => {
       if (
-        key === "_infoImageFile" ||
-        key === "_infoImagePreview" ||
-        key === "_infoImageName" ||
         key === "_galleryImageFiles" ||
         key === "_videoFile" ||
         key === "_videoPreview" ||
         key === "_videoName" ||
         key === "_areaMediaFile" ||
         key === "_areaMediaPreview" ||
-        key === "_audioFile" ||
-        key === "_audioLocalUrl" ||
-        key === "_audioFileName" ||
         key === "_audioBlob" ||
         key === "audioFile" ||
         key === "localAudio"
@@ -1913,7 +1859,7 @@ function cleanHotspotForSave(hotspot) {
       return value;
     }),
   );
-  if (resolvePointKind(copy) === "audio") {
+  if (resolvePointKind(copy) === "audio" || copy.audio) {
     const legacyAudioUrl = copy.audio?.url || copy.audio_url || "";
     copy.audio = canonicalHotspotAudio(copy.audio, {
       url: legacyAudioUrl,
@@ -2004,14 +1950,6 @@ async function uploadHotspotInfoImages(c) {
   const pending = [];
   c.forEach((scene) => {
     scene.hotspots.forEach((hotspot) => {
-      if (hotspot?._infoImageFile) {
-        ensureHotspotId(hotspot);
-        pending.push({
-          hotspot,
-          file: hotspot._infoImageFile,
-          mode: "info",
-        });
-      }
       if (Array.isArray(hotspot?._galleryImageFiles)) {
         ensureHotspotId(hotspot);
         hotspot._galleryImageFiles.forEach((item) => {
@@ -2105,14 +2043,6 @@ async function uploadHotspotInfoImages(c) {
         if (hotspot._areaMediaPreview?.startsWith("blob:")) URL.revokeObjectURL(hotspot._areaMediaPreview);
         delete hotspot._areaMediaFile;
         delete hotspot._areaMediaPreview;
-        } else {
-        hotspot.noi_dung.anh_minh_hoa = uploadedUrl;
-        if (hotspot._infoImagePreview?.startsWith("blob:")) {
-          URL.revokeObjectURL(hotspot._infoImagePreview);
-        }
-        delete hotspot._infoImageFile;
-        delete hotspot._infoImagePreview;
-        delete hotspot._infoImageName;
         }
       }
       up++;
@@ -2202,109 +2132,32 @@ function syncBack(c) {
     });
   });
 }
-function hasPendingUploads(c) {
-  return c.some((x) => x._file && !x.exportUrl);
-}
-function pendingHotspotMediaUploads(c) {
-  return c.flatMap((scene) => (scene.hotspots || []).filter((hotspot) =>
-    hotspot?._infoImageFile ||
-    hotspot?._videoFile ||
-    hotspot?._areaMediaFile ||
-    (Array.isArray(hotspot?._galleryImageFiles) && hotspot._galleryImageFiles.some((item) => item?.file)),
-  ));
-}
-async function exportJSON() {
-  try {
-    if (tourAudio._file) {
-      showToast(
-        "error",
-        "⚠ Tour Audio chưa được tải lên. Hãy lưu tour vào server trước khi export JSON.",
-      );
-      return;
-    }
-    const scenesWithLocalAudio = scenes.filter(
-      (scene) => scene._audioLocalUrl,
-    );
-    if (scenesWithLocalAudio.length) {
-      showToast(
-        "error",
-        "⚠ Scene Audio đang là tệp cục bộ. Hãy dùng URL audio đã host trước khi export JSON.",
-      );
-      return;
-    }
-    const hotspotsWithPendingAudio = scenes.flatMap((scene) =>
-      (scene.hotspots || []).filter((hotspot) => hotspot?._audioFile),
-    );
-    if (hotspotsWithPendingAudio.length) {
-      showToast(
-        "error",
-        "⚠ POI Audio chưa được tải lên. Hãy lưu tour vào server trước khi export JSON.",
-      );
-      return;
-    }
-    const c = cloneForExport();
-    const pending = c.filter((x) => x._file && !x.exportUrl);
-    const pendingHotspotMedia = pendingHotspotMediaUploads(c);
-    if ((pending.length || pendingHotspotMedia.length) && !api.connected) {
-      showToast(
-        "error",
-        `⚠ Còn ${pending.length + pendingHotspotMedia.length} media chưa upload. Hãy kết nối API rồi export lại (không xuất blob).`,
-      );
-      openApiSettings();
-      return;
-    }
-    if (!pending.length && !pendingHotspotMedia.length) {
-      const json = buildJson(c);
-      if (JSON.stringify(json).includes("blob:")) {
-        showToast(
-          "error",
-          "⚠ Còn ảnh dạng blob chưa được host. Hãy import lại ảnh gốc rồi export khi đã kết nối API.",
-        );
-        openApiSettings();
-        return;
-      }
-      exportJsonText.value = JSON.stringify(json, null, 2);
-      modals.export = true;
-      return;
-    }
-    exportJsonText.value = "⏳ Đang tải lên...";
-    modals.export = true;
-    if (pending.length) {
-      await apiSaveTour(buildJson(c));
-    }
-    const sceneUpload = await uploadClone(c, (i, t, n) => {
-      exportJsonText.value = `⏳ ${i}/${t}: ${n}`;
-    });
-    if (!sceneUpload.ok) {
-      exportJsonText.value = `❌ Upload thất bại ${sceneUpload.fail} ảnh panorama — chưa thể export.`;
-      showToast("error", `❌ ${sceneUpload.fail} ảnh upload thất bại, chưa export`);
-      return;
-    }
-    const hotspotUpload = await uploadHotspotInfoImages(c);
-    if (!hotspotUpload.ok) {
-      exportJsonText.value = "❌ Upload media POI thất bại — chưa thể export vì không được xuất URL blob.";
-      showToast("error", "❌ Upload media POI thất bại, chưa export");
-      return;
-    }
-    syncBack(c);
-    const json = buildJson(c);
-    if (hasPendingUploads(c) || pendingHotspotMediaUploads(c).length || JSON.stringify(json).includes("blob:")) {
-      exportJsonText.value = "❌ Vẫn còn media cục bộ chưa được host — chưa thể export JSON.";
-      showToast("error", "❌ Còn media dạng blob, chưa thể export");
-      return;
-    }
-    exportJsonText.value = JSON.stringify(json, null, 2);
-    const uploaded = sceneUpload.up + hotspotUpload.up;
-    if (uploaded) showToast("success", `☁️ Đã upload ${uploaded} media`);
-  } catch (e) {
-    exportJsonText.value = "❌ " + e.message;
-    modals.export = true;
-  }
-}
 function copyExportJSON() {
   navigator.clipboard
     .writeText(exportJsonText.value)
     .then(() => showToast("success", "📋 Copied!"));
+}
+function serializeCurrentTour() {
+  const json = buildJson(cloneForExport());
+  exportJsonText.value = JSON.stringify(json, null, 2);
+  return json;
+}
+function viewJSON() {
+  try {
+    serializeCurrentTour();
+    modals.export = true;
+  } catch (e) {
+    showToast("error", "❌ Không thể tạo JSON: " + e.message);
+  }
+}
+function exportJSON() {
+  try {
+    serializeCurrentTour();
+    downloadExportJSON();
+    showToast("success", "✅ Đã tải JSON");
+  } catch (e) {
+    showToast("error", "❌ Không thể xuất JSON: " + e.message);
+  }
 }
 function downloadExportJSON() {
   const blob = new Blob([exportJsonText.value], { type: "application/json" });
@@ -2346,6 +2199,11 @@ function closeModal(name) {
 //  LIFECYCLE
 // ══════════════════════════════════════
 function onGlobalKeydown(e) {
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") {
+    e.preventDefault();
+    handleSave();
+    return;
+  }
   if (
     e.target.tagName === "INPUT" ||
     e.target.tagName === "TEXTAREA" ||
@@ -2447,7 +2305,34 @@ onBeforeUnmount(() => {
     "
   >
     <div class="vb-topbar">
+      <button
+        class="vb-btn vb-back-btn"
+        type="button"
+        aria-label="Quay lại trang quản lý"
+        title="Quay lại trang quản lý"
+        @click="goToManagement"
+      >
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          aria-hidden="true"
+        >
+          <path d="M19 12H5M12 19l-7-7 7-7" />
+        </svg>
+        <span class="vb-back-label">Quản lý</span>
+      </button>
       <div class="vb-brand">VR360 BUILDER</div>
+      <div class="vb-save-state" :class="`vb-save-state-${saveState}`" aria-live="polite">
+        <span class="vb-save-state-icon" aria-hidden="true">
+          {{ saveState === "saving" ? "⟳" : saveState === "error" ? "⚠" : saveState === "dirty" ? "●" : "✓" }}
+        </span>
+        <span>{{ saveState === "saving" ? "Đang lưu..." : saveState === "error" ? "Lưu thất bại" : saveState === "dirty" ? "Chưa lưu" : "Đã lưu" }}</span>
+        <time v-if="saveState === 'saved' && lastSavedAt" :datetime="lastSavedAt.toISOString()">
+          {{ lastSavedAt.toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" }) }}
+        </time>
+      </div>
       <div
         class="vb-menu-trigger"
         @click.stop="uiState.fileMenuOpen = !uiState.fileMenuOpen"
@@ -2502,6 +2387,20 @@ onBeforeUnmount(() => {
           Nhập JSON
         </div>
         <div class="vb-menu-divider"></div>
+        <div class="vb-menu-item" @click="viewJSON(); uiState.fileMenuOpen = false">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12Z" />
+            <circle cx="12" cy="12" r="2.5" />
+          </svg>
+          Xem JSON
+        </div>
+        <div class="vb-menu-item" @click="exportJSON(); uiState.fileMenuOpen = false">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 3v12M7 10l5 5 5-5M5 21h14" />
+          </svg>
+          Xuất JSON
+        </div>
+        <div class="vb-menu-divider"></div>
         <div
           class="vb-menu-item"
           @click="
@@ -2543,7 +2442,12 @@ onBeforeUnmount(() => {
           Cài đặt API
         </div>
       </div>
-      <button class="vb-btn vb-btn-accent" @click="saveToServer">
+      <button
+        class="vb-btn vb-btn-accent"
+        :disabled="isSaving"
+        title="Lưu (Ctrl + S)"
+        @click="handleSave"
+      >
         <svg
           viewBox="0 0 24 24"
           fill="none"
@@ -2555,7 +2459,7 @@ onBeforeUnmount(() => {
             d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"
           />
         </svg>
-        Save Tour
+        {{ isSaving ? "Saving..." : "Save" }}
       </button>
       <button class="vb-btn vb-btn-success" @click="openQuickCreateTour">
         + Create new tour
@@ -2594,19 +2498,6 @@ onBeforeUnmount(() => {
         </option>
       </select>
       <div class="vb-spacer"></div>
-      <button class="vb-btn vb-btn-primary" @click="exportJSON">
-        <svg
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2"
-        >
-          <path
-            d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"
-          />
-        </svg>
-        Xuất JSON
-      </button>
     </div>
 
     <div class="vb-main">
@@ -2719,7 +2610,6 @@ onBeforeUnmount(() => {
       </div>
 
       <input
-        ref="audioInputRef"
         type="file"
         accept="audio/*"
         style="display: none"
@@ -3098,16 +2988,11 @@ onBeforeUnmount(() => {
               v-else-if="uiState.rightView === 'scene'"
               :scene="activeScene"
               :collapsed="uiState.collapsed"
-              :audio-preview-src="audioPreviewSrc"
-              :audio-file-name="activeScene._audioFileName"
               @update:scene="updateScene"
               @update:view="updateView"
-              @update:narration="updateNarration"
               @update:transition="updateTransition"
               @save-view="saveCurrentView"
               @replace-image="replaceImage"
-              @pick-audio="pickAudioFile"
-              @clear-narration="clearNarration"
               @navigate-to-points="navToPointList"
               @update:collapsed="
                 (key, value) => {
@@ -3144,7 +3029,6 @@ onBeforeUnmount(() => {
               @update-audio="updateHotspotAudio"
               @update:hover="updateHotspotHover"
               @update:content="updateHotspotContent"
-              @select-info-image="handleHotspotInfoImageFile"
               @select-gallery-images="handleGalleryImageFiles"
               @select-video="handleHotspotVideoFile"
               @select-area-media="handleAreaMediaFile"
@@ -3366,6 +3250,9 @@ onBeforeUnmount(() => {
               </div>
               <div class="vb-hs-type-option-label">Địa danh</div>
               <div class="vb-hs-type-option-desc">Vẽ khu vực, nhãn và đường dẫn</div>
+            </button>
+            <button class="vb-hs-type-option vb-hs-type-pin" @click="confirmHotspotType('point_landmark')">
+              <div class="vb-hs-type-option-icon">📍</div><div class="vb-hs-type-option-label">Địa danh điểm</div><div class="vb-hs-type-option-desc">Nhãn tại một vị trí, không có vùng</div>
             </button>
             <button class="vb-hs-type-option vb-hs-type-info" @click="startDrawingImageAreaFromModal">
               <div class="vb-hs-type-option-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="24" height="24"><path d="M3 3h18v18H3z"/><path d="m5 16 4-4 3 3 3-4 4 5"/></svg></div>
@@ -3740,1923 +3627,3 @@ onBeforeUnmount(() => {
     </div>
   </div>
 </template>
-
-<style>
-/* ── All original CSS from Vr360Builder.vue ── */
-.vb-app {
-  --vb-bg-0: #0c0c14;
-  --vb-bg-1: #12121c;
-  --vb-bg-2: #1a1a28;
-  --vb-bg-3: #222234;
-  --vb-bg-4: #2a2a40;
-  --vb-border: rgba(255, 255, 255, 0.06);
-  --vb-border-hover: rgba(255, 255, 255, 0.12);
-  --vb-primary: #6c5ce7;
-  --vb-primary-light: #a29bfe;
-  --vb-primary-dim: rgba(108, 92, 231, 0.15);
-  --vb-accent: #00cec9;
-  --vb-accent-dim: rgba(0, 206, 201, 0.15);
-  --vb-danger: #ff6b6b;
-  --vb-danger-dim: rgba(255, 107, 107, 0.15);
-  --vb-warning: #feca57;
-  --vb-text: #e8e8f0;
-  --vb-text-muted: rgba(232, 232, 240, 0.5);
-  --vb-text-dim: rgba(232, 232, 240, 0.3);
-  position: fixed;
-  inset: 0;
-  z-index: 1;
-  display: flex;
-  flex-direction: column;
-  height: 100vh;
-  width: 100%;
-  overflow: hidden;
-  font-family: "Segoe UI", sans-serif;
-  background: var(--vb-bg-0);
-  color: var(--vb-text);
-  font-size: 13px;
-}
-.vb-app * {
-  box-sizing: border-box;
-}
-.vb-topbar {
-  height: 40px;
-  flex-shrink: 0;
-  background: var(--vb-bg-1);
-  border-bottom: 1px solid var(--vb-border);
-  display: flex;
-  align-items: center;
-  padding: 0 12px;
-  gap: 6px;
-  z-index: 100;
-  position: relative;
-}
-.vb-main {
-  flex: 1;
-  position: relative;
-  overflow: hidden;
-}
-.vb-brand {
-  font-size: 13px;
-  font-weight: 700;
-  letter-spacing: 1px;
-  background: linear-gradient(
-    135deg,
-    var(--vb-primary-light),
-    var(--vb-accent)
-  );
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  flex-shrink: 0;
-}
-.vb-menu-trigger {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 5px 10px;
-  border: 1px solid transparent;
-  background: none;
-  color: var(--vb-text-muted);
-  border-radius: 5px;
-  cursor: pointer;
-  font-size: 12px;
-  font-weight: 500;
-  transition: all 0.15s;
-}
-.vb-menu-trigger:hover {
-  background: var(--vb-bg-3);
-  color: var(--vb-text);
-}
-.vb-dropdown-menu {
-  position: absolute;
-  top: 100%;
-  left: 60px;
-  min-width: 200px;
-  background: var(--vb-bg-2);
-  border: 1px solid var(--vb-border-hover);
-  border-radius: 8px;
-  padding: 4px;
-  z-index: 200;
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
-}
-.vb-menu-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
-  border-radius: 5px;
-  cursor: pointer;
-  font-size: 12px;
-  color: var(--vb-text-muted);
-  transition: all 0.12s;
-}
-.vb-menu-item:hover {
-  background: var(--vb-bg-3);
-  color: var(--vb-text);
-}
-.vb-menu-item svg {
-  width: 14px;
-  height: 14px;
-  flex-shrink: 0;
-}
-.vb-menu-divider {
-  height: 1px;
-  background: var(--vb-border);
-  margin: 4px 8px;
-}
-.vb-btn {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 14px;
-  border: 1px solid var(--vb-border);
-  background: var(--vb-bg-2);
-  color: var(--vb-text-muted);
-  border-radius: 6px;
-  cursor: pointer;
-  font-size: 12px;
-  font-weight: 500;
-  transition: all 0.2s ease;
-  white-space: nowrap;
-}
-.vb-btn:hover {
-  background: var(--vb-bg-3);
-  color: var(--vb-text);
-  border-color: var(--vb-border-hover);
-}
-.vb-btn-primary {
-  background: var(--vb-primary);
-  color: #fff;
-  border-color: var(--vb-primary);
-}
-.vb-btn-primary:hover {
-  background: var(--vb-primary-light);
-}
-.vb-btn-success {
-  background: #10b981;
-  color: #fff;
-  border-color: rgba(16, 185, 129, 0.75);
-}
-.vb-btn-success:hover {
-  background: #059669;
-  color: #fff;
-}
-.vb-btn-accent {
-  background: var(--vb-accent-dim);
-  color: var(--vb-accent);
-  border-color: rgba(0, 206, 201, 0.3);
-}
-.vb-btn svg {
-  width: 15px;
-  height: 15px;
-  flex-shrink: 0;
-}
-.vb-top-select {
-  height: 30px;
-  min-width: 150px;
-  max-width: 210px;
-  padding: 0 30px 0 10px;
-  border: 1px solid var(--vb-border-hover);
-  background: #fff;
-  color: #0f172a;
-  border-radius: 6px;
-  font-size: 12px;
-  font-weight: 600;
-  outline: none;
-}
-.vb-top-select-version {
-  min-width: 130px;
-}
-.vb-top-select:disabled {
-  opacity: 0.65;
-  cursor: not-allowed;
-}
-.vb-spacer {
-  flex: 1;
-}
-.vb-left {
-  position: absolute;
-  top: 0;
-  left: 0;
-  bottom: 0;
-  width: 240px;
-  z-index: 10;
-  background: var(--vb-bg-1);
-  border-right: 1px solid var(--vb-border);
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  transition: width 0.2s ease;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
-}
-.vb-left.collapsed {
-  width: 40px;
-}
-.vb-panel-header {
-  padding: 10px 12px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  border-bottom: 1px solid var(--vb-border);
-  flex-shrink: 0;
-  gap: 6px;
-  min-height: 40px;
-}
-.vb-panel-title {
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 1.5px;
-  text-transform: uppercase;
-  color: var(--vb-text-muted);
-}
-.vb-collapse-toggle {
-  background: none;
-  border: none;
-  color: var(--vb-text-dim);
-  cursor: pointer;
-  padding: 2px;
-  border-radius: 4px;
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-.vb-collapse-toggle:hover {
-  color: var(--vb-text);
-  background: var(--vb-bg-3);
-}
-.vb-scene-count {
-  font-family: monospace;
-  font-size: 11px;
-  color: var(--vb-text-dim);
-}
-.vb-scene-list {
-  flex: 1;
-  overflow-y: auto;
-  padding: 8px;
-}
-.vb-scene-card {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px;
-  margin-bottom: 4px;
-  background: var(--vb-bg-2);
-  border: 1px solid transparent;
-  border-radius: 8px;
-  cursor: pointer;
-  transition: background 0.15s, border-color 0.15s;
-  position: relative;
-}
-.vb-scene-card:hover {
-  background: var(--vb-bg-3);
-  border-color: var(--vb-border-hover);
-}
-.vb-scene-card.active {
-  border-color: var(--vb-primary);
-  background: var(--vb-primary-dim);
-}
-.vb-scene-card.dragover {
-  border-color: var(--vb-accent);
-  border-style: dashed;
-}
-.vb-scene-thumb {
-  width: 56px;
-  height: 36px;
-  border-radius: 4px;
-  overflow: hidden;
-  background: var(--vb-bg-4);
-  flex-shrink: 0;
-}
-.vb-scene-thumb img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-.vb-scene-meta {
-  flex: 1;
-  min-width: 0;
-}
-.vb-scene-name {
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--vb-text);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.vb-scene-info {
-  font-size: 10px;
-  color: var(--vb-text-dim);
-  margin-top: 2px;
-  font-family: monospace;
-}
-.vb-scene-num {
-  position: absolute;
-  top: 4px;
-  left: 4px;
-  font-size: 9px;
-  font-weight: 700;
-  color: var(--vb-text-dim);
-  background: var(--vb-bg-0);
-  padding: 1px 5px;
-  border-radius: 3px;
-  font-family: monospace;
-}
-.vb-scene-delete {
-  opacity: 0;
-  background: none;
-  border: none;
-  color: var(--vb-danger);
-  cursor: pointer;
-  padding: 4px;
-  transition: opacity 0.15s;
-  flex-shrink: 0;
-}
-.vb-scene-card:hover .vb-scene-delete {
-  opacity: 1;
-}
-.vb-scene-badge {
-  position: absolute;
-  top: 4px;
-  right: 4px;
-  font-size: 8px;
-  font-weight: 700;
-  padding: 1px 5px;
-  border-radius: 3px;
-  background: #10b981;
-  color: #fff;
-}
-.vb-add-area {
-  margin: 8px;
-  padding: 24px;
-  text-align: center;
-  border: 2px dashed var(--vb-border);
-  border-radius: 8px;
-  color: var(--vb-text-dim);
-  cursor: pointer;
-  transition: all 0.2s ease;
-  font-size: 12px;
-  flex-shrink: 0;
-}
-.vb-add-area:hover {
-  border-color: var(--vb-primary);
-  color: var(--vb-primary-light);
-}
-.vb-add-area.dragover {
-  border-color: var(--vb-accent);
-  background: var(--vb-accent-dim);
-  color: var(--vb-accent);
-}
-.vb-center {
-  position: absolute;
-  inset: 0;
-  z-index: 0;
-  background: var(--vb-bg-0);
-  overflow: hidden;
-}
-.vb-canvas {
-  width: 100%;
-  height: 100%;
-  cursor: grab;
-  display: block;
-}
-.vb-canvas:active {
-  cursor: grabbing;
-}
-.vb-canvas.placing-hotspot {
-  cursor: crosshair !important;
-}
-.vb-info-area-layer {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  z-index: 8;
-  pointer-events: none;
-}
-.vb-info-area-group {
-  pointer-events: auto;
-  cursor: pointer;
-}
-.vb-info-area-fill {
-  fill: rgba(34, 211, 238, 0.16);
-  transition: fill 0.16s ease;
-}
-.vb-info-area-line,
-.vb-info-area-draft-line {
-  fill: none;
-  stroke: rgba(103, 232, 249, 0.92);
-  stroke-width: 2;
-  stroke-linejoin: round;
-  stroke-dasharray: 2 8;
-  stroke-linecap: round;
-  filter: drop-shadow(0 0 7px rgba(34, 211, 238, 0.28));
-}
-.vb-info-area-group:hover .vb-info-area-fill,
-.vb-info-area-group.selected .vb-info-area-fill {
-  fill: rgba(34, 211, 238, 0.24);
-}
-.vb-info-area-group.selected .vb-info-area-line {
-  stroke: rgba(255, 225, 82, 0.96);
-}
-.vb-info-area-node {
-  fill: var(--vb-accent);
-  stroke: var(--vb-bg-0);
-  stroke-width: 2;
-}
-.vb-info-area-toolbar {
-  position: absolute;
-  top: 88px;
-  left: 50%;
-  z-index: 24;
-  transform: translateX(-50%);
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px;
-  border: 1px solid var(--vb-border);
-  border-radius: 14px;
-  background: rgba(18, 18, 28, 0.88);
-  box-shadow: var(--vb-shadow);
-  backdrop-filter: blur(12px);
-}
-.vb-info-area-toolbar span {
-  padding: 0 6px;
-  color: var(--vb-text-muted);
-  font-size: 12px;
-  font-weight: 700;
-  white-space: nowrap;
-}
-.vb-info-area-toolbar .vb-btn {
-  min-height: 32px;
-  padding: 7px 12px;
-  font-size: 12px;
-}
-.area-landmark-layer {
-  z-index: 9;
-}
-.area-landmark polygon {
-  fill-opacity: 0.3;
-  filter: drop-shadow(0 0 6px rgba(251, 191, 36, 0.28));
-  pointer-events: none;
-}
-.area-landmark.is-selected polygon {
-  filter: drop-shadow(0 0 10px rgba(253, 224, 71, 0.78));
-  stroke: #fde047;
-}
-.area-landmark line {
-  pointer-events: none;
-  stroke-linecap: round;
-}
-.area-landmark circle {
-  pointer-events: auto;
-}
-.area-landmark .area-landmark-vertex {
-  filter: drop-shadow(0 0 4px rgba(251, 191, 36, 0.96));
-}
-.area-landmark.is-selected .area-landmark-vertex {
-  r: 6px;
-  stroke: #fde047;
-}
-.area-landmark-label {
-  align-items: center;
-  background: rgba(18, 18, 28, 0.92);
-  border: 1px solid #fbbf24;
-  border-radius: 8px;
-  color: #fff;
-  cursor: grab;
-  display: inline-flex;
-  font-size: 12px;
-  font-weight: 700;
-  left: 0;
-  padding: 8px 10px;
-  position: absolute;
-  top: 0;
-  z-index: 10;
-}
-.area-landmark-label:active { cursor: grabbing; }
-.preview-hotspot-container .hotspot {
-  position: absolute;
-  left: 0;
-  top: 0;
-  transform-origin: center center;
-  pointer-events: auto;
-  z-index: 2;
-  will-change: left, top, transform;
-}
-.preview-hotspot-container .hotspot.hidden {
-  display: none;
-}
-.preview-hotspot-container .hotspot-marker {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 5px;
-  pointer-events: auto;
-}
-.preview-hotspot-container .hotspot-marker::before {
-  content: "";
-  position: absolute;
-  top: 16px;
-  left: 50%;
-  width: 36px;
-  height: 36px;
-  border: 1px solid rgba(255, 255, 255, 0.34);
-  border-radius: 999px;
-  transform: translate(-50%, -50%);
-  animation: vbHotspotPulse 2.4s ease-out infinite;
-  pointer-events: none;
-}
-.preview-hotspot-container .hotspot-icon {
-  position: relative;
-  z-index: 1;
-  width: 32px;
-  height: 32px;
-  display: grid;
-  place-items: center;
-  border-radius: 999px;
-  background: linear-gradient(135deg, #7b61ff, #4f7cff);
-  color: #fff;
-  border: 2px solid rgba(255, 225, 82, 0.92);
-  box-shadow: 0 0 0 3px rgba(123, 97, 255, 0.14), 0 7px 16px rgba(0, 0, 0, 0.28);
-  transition: transform 0.18s ease, box-shadow 0.18s ease;
-}
-.preview-hotspot-container .hotspot-icon svg {
-  width: 14px;
-  height: 14px;
-}
-.preview-hotspot-container .hotspot-label {
-  position: relative;
-  z-index: 1;
-  max-width: 120px;
-  padding: 3px 7px;
-  border-radius: 6px;
-  background: rgba(7, 8, 12, 0.78);
-  color: #fff;
-  font-size: 10px;
-  font-weight: 700;
-  line-height: 1.2;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.preview-hotspot-container .hotspot-walk {
-  position: relative;
-  width: 38px;
-  height: 38px;
-  display: grid;
-  place-items: center;
-  pointer-events: auto;
-  animation: vbHotspotFloat 1.25s ease-in-out infinite;
-}
-.preview-hotspot-container .hotspot-marker-nav::before {
-  display: none;
-}
-.preview-hotspot-container .hotspot-walk::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border: 1px solid rgba(255, 255, 255, 0.24);
-  border-radius: 999px;
-  background: rgba(22, 22, 28, 0.38);
-  box-shadow: inset 0 0 18px rgba(255, 255, 255, 0.08), 0 8px 16px rgba(0, 0, 0, 0.22);
-  backdrop-filter: blur(3px);
-  pointer-events: none;
-}
-.preview-hotspot-container .hotspot-walk::after {
-  content: "";
-  position: absolute;
-  z-index: 2;
-  width: 14px;
-  height: 14px;
-  border-top: 4px solid rgba(255, 255, 255, 0.96);
-  border-left: 4px solid rgba(255, 255, 255, 0.96);
-  border-radius: 2px;
-  transform: translateY(3px) rotate(45deg);
-  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.35));
-  pointer-events: none;
-}
-.preview-hotspot-container .hotspot-walk-img {
-  position: relative;
-  z-index: 1;
-  width: 0;
-  height: 0;
-  opacity: 0;
-  object-fit: contain;
-  filter: none;
-  transition: transform 0.18s ease, filter 0.18s ease;
-}
-.preview-hotspot-container .hotspot-edit-ring {
-  position: absolute;
-  top: 16px;
-  left: 50%;
-  width: 44px;
-  height: 44px;
-  border: 1px dashed rgba(255, 255, 255, 0.24);
-  border-radius: 999px;
-  transform: translate(-50%, -50%);
-  pointer-events: none;
-}
-.preview-hotspot-container .hotspot-selected .hotspot-icon,
-.preview-hotspot-container .hotspot-selected .hotspot-walk::before {
-  border-color: rgba(255, 225, 82, 0.65);
-  box-shadow: 0 0 0 3px rgba(255, 225, 82, 0.12), 0 8px 16px rgba(0, 0, 0, 0.22);
-}
-.preview-hotspot-container .hotspot:hover .hotspot-icon {
-  transform: scale(1.08);
-  box-shadow: 0 0 0 5px rgba(123, 97, 255, 0.15), 0 10px 20px rgba(0, 0, 0, 0.3);
-}
-.preview-hotspot-container .hotspot:hover .hotspot-walk {
-  transform: scale(1.08);
-}
-.preview-hotspot-container .hotspot:hover .hotspot-walk::before {
-  border-color: rgba(255, 255, 255, 0.42);
-  box-shadow:
-    0 0 0 5px rgba(255, 255, 255, 0.08),
-    0 0 18px rgba(255, 255, 255, 0.28),
-    inset 0 0 18px rgba(255, 255, 255, 0.1),
-    0 8px 16px rgba(0, 0, 0, 0.22);
-}
-@keyframes vbHotspotPulse {
-  0% {
-    opacity: 0.34;
-    transform: translate(-50%, -50%) scale(0.9);
-  }
-  70% {
-    opacity: 0;
-    transform: translate(-50%, -50%) scale(1.45);
-  }
-  100% {
-    opacity: 0;
-    transform: translate(-50%, -50%) scale(1.45);
-  }
-}
-@keyframes vbHotspotFloat {
-  0%,
-  100% {
-    transform: translateY(0);
-  }
-  50% {
-    transform: translateY(-3px);
-  }
-}
-.vb-viewer-empty {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  color: var(--vb-text-dim);
-  z-index: 5;
-}
-.vb-viewer-empty svg {
-  width: 64px;
-  height: 64px;
-  margin-bottom: 16px;
-  opacity: 0.3;
-}
-.vb-crosshair-overlay {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  z-index: 15;
-  display: none;
-}
-.vb-crosshair-overlay.active {
-  display: block;
-}
-.vb-crosshair-msg {
-  position: absolute;
-  top: 56px;
-  left: 50%;
-  transform: translateX(-50%);
-  background: var(--vb-accent);
-  color: var(--vb-bg-0);
-  padding: 8px 20px;
-  border-radius: 20px;
-  font-size: 12px;
-  font-weight: 600;
-  pointer-events: none;
-}
-.vb-preview-banner {
-  position: absolute;
-  top: 56px;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 20;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  background: rgba(0, 0, 0, 0.85);
-  border: 1px solid var(--vb-accent);
-  color: var(--vb-text);
-  padding: 8px 12px 8px 16px;
-  border-radius: 10px;
-  font-size: 12px;
-  white-space: nowrap;
-}
-.vb-canvas-toolbar {
-  position: absolute;
-  top: 12px;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 18;
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  background: rgba(12, 12, 20, 0.75);
-  backdrop-filter: blur(12px);
-  border: 1px solid var(--vb-border-hover);
-  border-radius: 10px;
-  padding: 4px;
-}
-.vb-tool-btn {
-  width: 34px;
-  height: 34px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border: none;
-  background: transparent;
-  color: var(--vb-text-muted);
-  border-radius: 7px;
-  cursor: pointer;
-  transition: all 0.15s;
-}
-.vb-tool-btn:hover {
-  background: var(--vb-bg-3);
-  color: var(--vb-text);
-}
-.vb-tool-btn.active {
-  background: var(--vb-primary-dim);
-  color: var(--vb-primary-light);
-}
-.vb-tool-btn svg {
-  width: 18px;
-  height: 18px;
-}
-.vb-tool-sep {
-  width: 1px;
-  height: 20px;
-  background: var(--vb-border);
-  margin: 0 2px;
-}
-.vb-right {
-  position: absolute;
-  top: 0;
-  right: 0;
-  bottom: 0;
-  width: 300px;
-  z-index: 10;
-  background: var(--vb-bg-1);
-  border-left: 1px solid var(--vb-border);
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  transition: width 0.2s ease;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
-}
-.vb-right.collapsed {
-  width: 40px;
-}
-.vb-right-header {
-  min-height: 40px;
-}
-.vb-breadcrumb {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  min-width: 0;
-  flex: 1;
-}
-.vb-breadcrumb-item {
-  font-size: 11px;
-  font-weight: 500;
-  color: var(--vb-text-dim);
-  cursor: pointer;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 120px;
-  transition: color 0.15s;
-}
-.vb-breadcrumb-item:hover {
-  color: var(--vb-text);
-}
-.vb-breadcrumb-item.active {
-  color: var(--vb-text);
-  font-weight: 600;
-  cursor: default;
-}
-.vb-breadcrumb-sep {
-  flex-shrink: 0;
-  color: var(--vb-text-dim);
-}
-.vb-right-scroll {
-  flex: 1;
-  overflow-y: auto;
-}
-.vb-section-action {
-  background: none;
-  border: 1px solid var(--vb-border);
-  color: var(--vb-text-dim);
-  cursor: pointer;
-  padding: 3px 6px;
-  border-radius: 4px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: all 0.15s;
-}
-.vb-section-action:hover {
-  color: var(--vb-accent);
-  border-color: var(--vb-accent);
-  background: var(--vb-accent-dim);
-}
-.vb-hover-toggle-label {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  cursor: pointer;
-  color: var(--vb-text-muted);
-}
-.vb-prop-row {
-  margin-bottom: 10px;
-}
-.vb-prop-label {
-  font-size: 11px;
-  color: var(--vb-text-muted);
-  margin-bottom: 4px;
-  display: block;
-}
-.vb-prop-input {
-  width: 100%;
-  padding: 8px 10px;
-  background: var(--vb-bg-2);
-  border: 1px solid var(--vb-border);
-  border-radius: 6px;
-  color: var(--vb-text);
-  font-size: 12px;
-  outline: none;
-}
-.vb-prop-input:focus {
-  border-color: var(--vb-primary);
-}
-.vb-prop-input-mono {
-  font-family: monospace;
-  font-size: 11px;
-}
-textarea.vb-prop-input {
-  resize: vertical;
-  min-height: 60px;
-  line-height: 1.5;
-}
-.vb-prop-row-inline {
-  display: flex;
-  gap: 8px;
-}
-.vb-prop-row-inline .vb-prop-row {
-  flex: 1;
-  margin-bottom: 0;
-}
-.vb-info-area-note {
-  margin-bottom: 12px;
-  padding: 10px 12px;
-  border: 1px solid rgba(34, 211, 238, 0.18);
-  border-radius: 12px;
-  background: rgba(34, 211, 238, 0.08);
-  color: var(--vb-text-muted);
-  font-size: 12px;
-  line-height: 1.45;
-}
-.vb-info-image-box {
-  display: grid;
-  grid-template-columns: 120px 1fr;
-  gap: 10px;
-  margin-bottom: 10px;
-}
-.vb-info-image-preview {
-  min-height: 82px;
-  display: grid;
-  place-items: center;
-  overflow: hidden;
-  border: 1px solid var(--vb-border);
-  border-radius: 12px;
-  background: var(--vb-bg-2);
-  color: var(--vb-text-dim);
-  font-size: 12px;
-}
-.vb-info-image-preview img {
-  width: 100%;
-  height: 100%;
-  min-height: 82px;
-  object-fit: cover;
-}
-.vb-info-image-upload {
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  gap: 6px;
-  min-height: 82px;
-  padding: 12px;
-  border: 1px dashed rgba(34, 211, 238, 0.3);
-  border-radius: 12px;
-  background: rgba(34, 211, 238, 0.04);
-  cursor: pointer;
-  transition: border-color 0.16s ease, background 0.16s ease;
-}
-.vb-info-image-upload:hover {
-  border-color: var(--vb-accent);
-  background: rgba(34, 211, 238, 0.08);
-}
-.vb-info-image-upload input {
-  display: none;
-}
-.vb-info-image-upload span {
-  color: var(--vb-accent);
-  font-weight: 800;
-}
-.vb-info-image-upload small {
-  color: var(--vb-text-muted);
-  font-size: 11px;
-  line-height: 1.35;
-}
-.vb-prop-btn {
-  width: 100%;
-  padding: 9px;
-  border: 1px solid var(--vb-border);
-  background: var(--vb-bg-2);
-  color: var(--vb-text-muted);
-  border-radius: 6px;
-  cursor: pointer;
-  font-size: 12px;
-  font-weight: 500;
-  transition: all 0.2s ease;
-}
-.vb-prop-btn:hover {
-  background: var(--vb-bg-3);
-  color: var(--vb-text);
-}
-.vb-prop-btn-primary {
-  background: var(--vb-primary-dim);
-  color: var(--vb-primary-light);
-  border-color: var(--vb-primary);
-}
-.vb-prop-btn-primary:hover {
-  background: var(--vb-primary);
-  color: #fff;
-}
-.vb-prop-btn-accent {
-  background: var(--vb-accent-dim);
-  color: var(--vb-accent);
-  border-color: rgba(0, 206, 201, 0.3);
-}
-.vb-prop-btn-danger {
-  color: var(--vb-danger);
-  border-color: rgba(255, 107, 107, 0.2);
-}
-.vb-prop-btn-danger:hover {
-  background: var(--vb-danger-dim);
-}
-.vb-prop-thumb {
-  width: 80px;
-  height: 45px;
-  border-radius: 6px;
-  overflow: hidden;
-  background: var(--vb-bg-3);
-  flex-shrink: 0;
-  border: 1px solid var(--vb-border);
-}
-.vb-prop-thumb img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-.vb-prop-filename {
-  font-size: 10px;
-  color: var(--vb-text-dim);
-  font-family: monospace;
-  display: block;
-  margin-top: 4px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.vb-prop-filesize {
-  font-size: 10px;
-  color: var(--vb-accent);
-  font-family: monospace;
-  display: block;
-  margin-top: 2px;
-}
-.vb-gps-value {
-  font-size: 11px;
-  color: var(--vb-text-muted);
-  font-family: monospace;
-}
-.vb-audio-player {
-  width: 100%;
-  height: 34px;
-  border-radius: 8px;
-}
-.vb-hs-list {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-.vb-hs-empty {
-  text-align: center;
-  color: var(--vb-text-dim);
-  padding: 16px;
-  font-size: 11px;
-}
-.vb-hs-card {
-  padding: 10px;
-  background: var(--vb-bg-2);
-  border: 1px solid var(--vb-border);
-  border-radius: 8px;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-.vb-hs-card:hover {
-  border-color: var(--vb-border-hover);
-}
-.vb-hs-card.selected {
-  border-color: var(--vb-warning);
-  background: rgba(254, 202, 87, 0.05);
-}
-.vb-hs-card-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 6px;
-}
-.vb-hs-card-title {
-  font-size: 12px;
-  font-weight: 500;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-.vb-hs-idx {
-  background: var(--vb-primary-dim);
-  color: var(--vb-primary-light);
-  padding: 1px 6px;
-  border-radius: 3px;
-  font-size: 10px;
-  font-weight: 700;
-  font-family: monospace;
-}
-.vb-hs-card-actions {
-  display: flex;
-  gap: 2px;
-  opacity: 0;
-  transition: opacity 0.15s;
-}
-.vb-hs-card:hover .vb-hs-card-actions {
-  opacity: 1;
-}
-.vb-hs-card-btn {
-  background: none;
-  border: none;
-  color: var(--vb-text-dim);
-  cursor: pointer;
-  padding: 2px;
-  border-radius: 4px;
-}
-.vb-hs-card-btn:hover {
-  color: var(--vb-primary-light);
-}
-.vb-hs-card-btn-delete:hover {
-  color: var(--vb-danger);
-}
-.vb-hs-type-badge {
-  font-size: 9px;
-  font-weight: 700;
-  padding: 1px 5px;
-  border-radius: 3px;
-  text-transform: uppercase;
-  letter-spacing: 0.3px;
-  white-space: nowrap;
-}
-.vb-hs-badge-nav,
-.vb-hs-badge-chuyen_canh {
-  background: var(--vb-accent-dim);
-  color: var(--vb-accent);
-}
-.vb-hs-badge-poi,
-.vb-hs-badge-thong_tin_van_ban {
-  background: var(--vb-primary-dim);
-  color: var(--vb-primary-light);
-}
-.vb-hs-badge-thu_vien_anh {
-  background: rgba(255, 159, 67, 0.15);
-  color: #ff9f43;
-}
-.vb-hs-badge-phat_video {
-  background: rgba(255, 71, 87, 0.15);
-  color: #ff4757;
-}
-.vb-hs-badge-ghim_dia_danh {
-  background: rgba(255, 138, 43, 0.15);
-  color: #ff8a2b;
-}
-.vb-hs-shortcuts {
-  margin-top: 8px;
-  text-align: center;
-  font-size: 10px;
-  color: var(--vb-text-dim);
-  font-family: monospace;
-}
-.vb-hs-card-coords {
-  font-family: monospace;
-  font-size: 10px;
-  color: var(--vb-text-dim);
-}
-.vb-empty-state {
-  text-align: center;
-  padding: 32px 16px;
-  color: var(--vb-text-dim);
-  font-size: 12px;
-  line-height: 1.6;
-}
-.vb-empty-state svg {
-  width: 40px;
-  height: 40px;
-  margin-bottom: 12px;
-  opacity: 0.3;
-}
-.vb-toast {
-  position: fixed;
-  bottom: 20px;
-  left: 50%;
-  transform: translateX(-50%) translateY(20px);
-  z-index: 9999;
-  padding: 10px 24px;
-  border-radius: 8px;
-  font-size: 13px;
-  font-weight: 500;
-  opacity: 0;
-  pointer-events: none;
-  transition: all 0.3s ease;
-  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.4);
-}
-.vb-toast.show {
-  opacity: 1;
-  transform: translateX(-50%) translateY(0);
-}
-.vb-toast.success {
-  background: #10b981;
-  color: #fff;
-}
-.vb-toast.info {
-  background: var(--vb-primary);
-  color: #fff;
-}
-.vb-toast.error {
-  background: var(--vb-danger);
-  color: #fff;
-}
-.vb-statusbar {
-  height: 28px;
-  flex-shrink: 0;
-  background: var(--vb-bg-1);
-  border-top: 1px solid var(--vb-border);
-  display: flex;
-  align-items: center;
-  padding: 0 12px;
-  gap: 12px;
-  z-index: 100;
-  font-size: 11px;
-}
-.vb-status-group {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.vb-status-chip {
-  font-family: monospace;
-  font-size: 10px;
-  color: var(--vb-text-dim);
-}
-.vb-status-chip b {
-  color: var(--vb-accent);
-  font-weight: 500;
-}
-.vb-status-select {
-  background: var(--vb-bg-2);
-  color: var(--vb-text-muted);
-  border: 1px solid var(--vb-border);
-  border-radius: 4px;
-  padding: 2px 6px;
-  font-size: 10px;
-  outline: none;
-}
-.vb-api-mini {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  cursor: pointer;
-  font-size: 10px;
-  color: var(--vb-text-dim);
-  padding: 2px 6px;
-  border-radius: 4px;
-  transition: all 0.15s;
-}
-.vb-api-mini:hover {
-  background: var(--vb-bg-3);
-  color: var(--vb-text-muted);
-}
-.vb-api-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  flex-shrink: 0;
-}
-.vb-api-dot.off {
-  background: var(--vb-text-dim);
-}
-.vb-api-dot.on {
-  background: #10b981;
-  box-shadow: 0 0 5px #10b981;
-}
-.vb-api-dot.loading {
-  background: var(--vb-warning);
-}
-.vb-api-test-result {
-  padding: 10px;
-  border-radius: 6px;
-  font-size: 12px;
-}
-.vb-api-test-result.ok {
-  background: rgba(16, 185, 129, 0.1);
-  border: 1px solid rgba(16, 185, 129, 0.3);
-  color: #10b981;
-}
-.vb-api-test-result.err {
-  background: rgba(255, 107, 107, 0.1);
-  border: 1px solid rgba(255, 107, 107, 0.3);
-  color: #ff6b6b;
-}
-.vb-tour-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 12px;
-  background: var(--vb-bg-2);
-  border: 1px solid var(--vb-border);
-  border-radius: 8px;
-  margin-bottom: 6px;
-  cursor: pointer;
-}
-.vb-tour-row:hover {
-  border-color: var(--vb-primary);
-}
-.vb-tour-icon {
-  width: 40px;
-  height: 40px;
-  background: var(--vb-primary-dim);
-  border-radius: 8px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 18px;
-}
-.vb-tour-meta {
-  font-size: 10px;
-  color: var(--vb-text-dim);
-  font-family: monospace;
-  margin-top: 2px;
-}
-.vb-modal-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 500;
-  background: rgba(0, 0, 0, 0.6);
-  display: none;
-  align-items: center;
-  justify-content: center;
-}
-.vb-modal-overlay.show {
-  display: flex;
-}
-.vb-modal {
-  background: var(--vb-bg-1);
-  border: 1px solid var(--vb-border);
-  border-radius: 12px;
-  width: 560px;
-  max-height: 80vh;
-  display: flex;
-  flex-direction: column;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
-}
-.vb-modal-header {
-  padding: 16px 20px;
-  border-bottom: 1px solid var(--vb-border);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-.vb-modal-header h3 {
-  font-size: 15px;
-  font-weight: 600;
-  margin: 0;
-}
-.vb-modal-close {
-  background: none;
-  border: none;
-  color: var(--vb-text-muted);
-  cursor: pointer;
-  padding: 4px;
-}
-.vb-modal-body {
-  padding: 20px;
-  overflow-y: auto;
-  flex: 1;
-}
-.vb-modal-footer {
-  padding: 14px 20px;
-  border-top: 1px solid var(--vb-border);
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-}
-.vb-modal-tour {
-  width: min(760px, calc(100vw - 32px));
-}
-.vb-tour-form {
-  display: grid;
-  gap: 12px;
-  padding: 16px;
-}
-.vb-tour-form-section {
-  border: 1px solid var(--vb-border);
-  border-radius: 10px;
-  background: rgba(255, 255, 255, 0.02);
-  padding: 14px;
-}
-.vb-tour-form-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  margin-bottom: 12px;
-}
-.vb-tour-form-head h4 {
-  margin: 0;
-  font-size: 14px;
-}
-.vb-form-label {
-  display: grid;
-  gap: 6px;
-  margin-bottom: 10px;
-  color: var(--vb-text-muted);
-  font-size: 12px;
-  font-weight: 600;
-}
-.vb-form-input {
-  width: 100%;
-  min-height: 34px;
-  border: 1px solid var(--vb-border-hover);
-  border-radius: 8px;
-  background: var(--vb-bg-2);
-  color: var(--vb-text);
-  padding: 8px 10px;
-  font-size: 12px;
-  outline: none;
-}
-textarea.vb-form-input {
-  min-height: 70px;
-  resize: vertical;
-}
-.vb-form-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
-}
-.vb-json-preview {
-  width: 100%;
-  min-height: 300px;
-  max-height: 50vh;
-  background: var(--vb-bg-0);
-  border: 1px solid var(--vb-border);
-  border-radius: 8px;
-  padding: 14px;
-  font-family: monospace;
-  font-size: 11px;
-  line-height: 1.6;
-  color: var(--vb-accent);
-  resize: vertical;
-  outline: none;
-}
-.vb-json-editable {
-  color: var(--vb-text);
-}
-.vb-quick-menu {
-  position: absolute;
-  z-index: 50;
-  width: 164px;
-  background: var(--vb-bg-2);
-  border: 1px solid var(--vb-border-hover);
-  border-radius: 10px;
-  padding: 4px;
-  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.55),
-    0 0 0 1px rgba(255, 255, 255, 0.04);
-  pointer-events: auto;
-}
-.vb-qm-title {
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 1px;
-  text-transform: uppercase;
-  color: var(--vb-text-dim);
-  padding: 6px 10px 4px;
-}
-.vb-qm-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-  padding: 8px 10px;
-  border: none;
-  background: transparent;
-  color: var(--vb-text-muted);
-  border-radius: 7px;
-  cursor: pointer;
-  font-size: 12px;
-  font-weight: 500;
-  text-align: left;
-  transition: background 0.12s, color 0.12s;
-}
-.vb-qm-item:hover {
-  background: var(--vb-bg-3);
-  color: var(--vb-text);
-}
-.vb-qm-icon {
-  width: 22px;
-  height: 22px;
-  border-radius: 6px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-}
-.vb-qm-nav .vb-qm-icon {
-  background: rgba(0, 206, 201, 0.15);
-  color: var(--vb-accent);
-}
-.vb-qm-nav:hover {
-  color: var(--vb-accent);
-}
-.vb-qm-poi .vb-qm-icon {
-  background: var(--vb-primary-dim);
-  color: var(--vb-primary-light);
-}
-.vb-qm-poi:hover {
-  color: var(--vb-primary-light);
-}
-.vb-qm-more .vb-qm-icon {
-  background: var(--vb-bg-4);
-  color: var(--vb-text-dim);
-}
-.vb-qm-label {
-  flex: 1;
-}
-.vb-qm-close {
-  position: absolute;
-  top: 6px;
-  right: 6px;
-  background: none;
-  border: none;
-  color: var(--vb-text-dim);
-  cursor: pointer;
-  padding: 2px;
-  border-radius: 4px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-.vb-qm-close:hover {
-  color: var(--vb-text);
-  background: var(--vb-bg-3);
-}
-.qm-enter-active {
-  transition: opacity 0.12s ease, transform 0.12s ease;
-}
-.qm-leave-active {
-  transition: opacity 0.08s ease, transform 0.08s ease;
-}
-.qm-enter-from,
-.qm-leave-to {
-  opacity: 0;
-  transform: scale(0.92) translateY(-4px);
-}
-.vb-nav-preview-panel {
-  margin: 10px 0;
-  border: 1px solid var(--vb-accent);
-  border-radius: 10px;
-  overflow: hidden;
-  background: var(--vb-bg-2);
-}
-.vb-nav-preview-header {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 8px 10px;
-  font-size: 11px;
-  color: var(--vb-accent);
-  background: var(--vb-accent-dim);
-  border-bottom: 1px solid rgba(0, 206, 201, 0.2);
-}
-.vb-nav-preview-header strong {
-  color: var(--vb-text);
-}
-.vb-nav-preview-thumb {
-  position: relative;
-  cursor: pointer;
-  height: 90px;
-  overflow: hidden;
-}
-.vb-nav-preview-thumb img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  transition: transform 0.3s ease;
-}
-.vb-nav-preview-thumb:hover img {
-  transform: scale(1.05);
-}
-.vb-nav-preview-overlay {
-  position: absolute;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.45);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 5px;
-  color: #fff;
-  font-size: 11px;
-  font-weight: 600;
-  opacity: 0;
-  transition: opacity 0.2s;
-}
-.vb-nav-preview-thumb:hover .vb-nav-preview-overlay {
-  opacity: 1;
-}
-.vb-nav-preview-info {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  padding: 7px 10px;
-  font-size: 10px;
-  font-family: monospace;
-  border-bottom: 1px solid var(--vb-border);
-}
-.vb-nav-entry-custom {
-  color: var(--vb-warning);
-}
-.vb-nav-entry-default {
-  color: var(--vb-text-dim);
-}
-.vb-nav-preview-actions {
-  display: flex;
-  gap: 6px;
-  padding: 8px 10px;
-}
-.vb-nav-preview-actions .vb-prop-btn {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 5px;
-  font-size: 11px;
-}
-.vb-modal-hotspot-type {
-  width: 560px;
-}
-.vb-hs-type-hint {
-  font-size: 11px;
-  color: var(--vb-text-dim);
-  font-family: monospace;
-  margin: 0 0 16px;
-}
-.vb-hs-type-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 10px;
-}
-.vb-hs-type-option {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
-  padding: 16px 10px;
-  border: 1px solid var(--vb-border);
-  background: var(--vb-bg-2);
-  border-radius: 10px;
-  cursor: pointer;
-  transition: all 0.18s;
-  text-align: center;
-}
-.vb-hs-type-option:hover {
-  transform: translateY(-2px);
-  border-color: var(--vb-primary);
-  background: var(--vb-bg-3);
-}
-.vb-hs-type-option-icon {
-  width: 44px;
-  height: 44px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-}
-.vb-hs-type-option-label {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--vb-text);
-}
-.vb-hs-type-option-desc {
-  font-size: 10px;
-  color: var(--vb-text-dim);
-  line-height: 1.4;
-}
-.vb-hs-type-nav .vb-hs-type-option-icon {
-  background: rgba(0, 206, 201, 0.15);
-  color: var(--vb-accent);
-}
-.vb-hs-type-nav:hover {
-  border-color: var(--vb-accent);
-}
-.vb-hs-type-info .vb-hs-type-option-icon {
-  background: var(--vb-primary-dim);
-  color: var(--vb-primary-light);
-}
-.vb-hs-type-info:hover {
-  border-color: var(--vb-primary);
-}
-.vb-hs-type-gallery .vb-hs-type-option-icon {
-  background: rgba(255, 159, 67, 0.15);
-  color: #ff9f43;
-}
-.vb-hs-type-gallery:hover {
-  border-color: #ff9f43;
-}
-.vb-hs-type-video .vb-hs-type-option-icon {
-  background: rgba(255, 71, 87, 0.15);
-  color: #ff4757;
-}
-.vb-hs-type-video:hover {
-  border-color: #ff4757;
-}
-.vb-hs-type-audio .vb-hs-type-option-icon {
-  background: rgba(250, 204, 21, 0.15);
-  color: #facc15;
-}
-.vb-hs-type-audio:hover {
-  border-color: #facc15;
-}
-.vb-hs-type-pin .vb-hs-type-option-icon {
-  background: rgba(255, 138, 43, 0.15);
-  color: #ff8a2b;
-}
-.vb-hs-type-pin:hover {
-  border-color: #ff8a2b;
-}
-.vb-hs-type-generic .vb-hs-type-option-icon {
-  background: var(--vb-bg-3);
-  color: var(--vb-text-muted);
-}
-.vb-hs-detail-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 12px;
-}
-.vb-hs-detail-title {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-.vb-hs-idx-lg {
-  background: var(--vb-warning);
-  color: #1a1208;
-  padding: 2px 8px;
-  border-radius: 4px;
-  font-size: 11px;
-  font-weight: 700;
-  font-family: monospace;
-}
-.vb-hs-badge-lg {
-  font-size: 10px !important;
-  padding: 2px 8px !important;
-}
-.vb-lock-btn {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  padding: 5px 10px;
-  border: 1px solid var(--vb-border);
-  background: var(--vb-bg-2);
-  color: var(--vb-text-dim);
-  border-radius: 6px;
-  cursor: pointer;
-  font-size: 11px;
-  font-weight: 500;
-  transition: all 0.15s;
-}
-.vb-lock-btn:hover {
-  border-color: var(--vb-warning);
-  color: var(--vb-warning);
-  background: rgba(254, 202, 87, 0.08);
-}
-.vb-lock-btn.locked {
-  background: rgba(254, 202, 87, 0.1);
-  border-color: var(--vb-warning);
-  color: var(--vb-warning);
-}
-.vb-lock-warning {
-  margin-bottom: 10px;
-  padding: 8px 10px;
-  background: rgba(254, 202, 87, 0.08);
-  border: 1px solid rgba(254, 202, 87, 0.3);
-  border-radius: 6px;
-  font-size: 11px;
-  color: var(--vb-warning);
-  line-height: 1.5;
-}
-.vb-hs-card.locked {
-  border-color: rgba(254, 202, 87, 0.3);
-  background: rgba(254, 202, 87, 0.03);
-}
-.vb-hs-card.locked .vb-hs-card-title {
-  opacity: 0.8;
-}
-.vb-hs-lock-tag {
-  font-size: 10px;
-  margin-left: 4px;
-}
-.vb-hs-card-btn-locked {
-  color: var(--vb-warning) !important;
-  opacity: 1 !important;
-}
-.vb-hs-type-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  flex-shrink: 0;
-}
-.vb-hs-icon-nav,
-.vb-hs-icon-chuyen_canh {
-  background: rgba(0, 206, 201, 0.15);
-  color: var(--vb-accent);
-}
-.vb-hs-icon-poi,
-.vb-hs-icon-thong_tin_van_ban {
-  background: var(--vb-primary-dim);
-  color: var(--vb-primary-light);
-}
-.vb-hs-icon-thu_vien_anh {
-  background: rgba(255, 159, 67, 0.15);
-  color: #ff9f43;
-}
-.vb-hs-icon-phat_video {
-  background: rgba(255, 71, 87, 0.15);
-  color: #ff4757;
-}
-.vb-hs-icon-ghim_dia_danh {
-  background: rgba(255, 138, 43, 0.15);
-  color: #ff8a2b;
-}
-.vb-hs-name {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  max-width: 100px;
-}
-.vb-scene-nav-shortcut {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 10px 12px;
-  margin-bottom: 8px;
-  background: var(--vb-bg-2);
-  border: 1px solid var(--vb-border);
-  border-radius: 8px;
-  cursor: pointer;
-  transition: all 0.15s;
-}
-.vb-scene-nav-shortcut:hover {
-  border-color: var(--vb-primary);
-  background: var(--vb-primary-dim);
-}
-.vb-sns-left {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 12px;
-  color: var(--vb-text-muted);
-}
-.vb-sns-right {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-.vb-sns-count {
-  font-family: monospace;
-  font-size: 12px;
-  font-weight: 700;
-  color: var(--vb-primary-light);
-}
-.vb-hs-list-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 10px 12px;
-  border-bottom: 1px solid var(--vb-border);
-}
-.vb-hs-list-title {
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--vb-text-muted);
-  text-transform: uppercase;
-  letter-spacing: 1px;
-}
-.vb-hs-list-full {
-  padding: 8px;
-}
-.vb-hs-detail-actions {
-  display: flex;
-  gap: 8px;
-  margin-top: 12px;
-}
-.vb-hs-detail-actions .vb-prop-btn {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 5px;
-}
-.vb-acc-item {
-  border-bottom: 1px solid var(--vb-border);
-}
-.vb-acc-header {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 10px 12px;
-  cursor: pointer;
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--vb-text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  transition: background 0.12s;
-  user-select: none;
-}
-.vb-acc-header:hover {
-  background: var(--vb-bg-2);
-  color: var(--vb-text);
-}
-.vb-acc-chevron {
-  width: 10px;
-  height: 10px;
-  flex-shrink: 0;
-  transition: transform 0.2s ease;
-}
-.vb-acc-chevron.open {
-  transform: rotate(90deg);
-}
-.vb-acc-body {
-  padding: 8px 12px 12px;
-}
-.vb-acc-badge {
-  font-size: 9px;
-  font-weight: 700;
-  margin-left: auto;
-  padding: 1px 6px;
-  border-radius: 3px;
-}
-.vb-acc-badge-ok {
-  background: rgba(16, 185, 129, 0.15);
-  color: #10b981;
-}
-.vb-acc-badge-warn {
-  background: rgba(254, 202, 87, 0.15);
-  color: var(--vb-warning);
-}
-.vb-nav-no-target {
-  padding: 16px;
-  text-align: center;
-  color: var(--vb-text-dim);
-  font-size: 11px;
-}
-</style>
-

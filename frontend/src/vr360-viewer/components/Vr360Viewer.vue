@@ -20,6 +20,11 @@ const emit = defineEmits([
 
 const panorama = ref(null);
 const runtimeTour = ref(normalizeTour({}, props.options));
+
+function transitionDuration(transition = {}) {
+  if (transition.enabled === false || transition.effect === 'none') return 0;
+  return Math.min(1200, Math.max(800, Number(transition.duration) || 1000));
+}
 const activeSceneId = ref('');
 const isTransitioning = ref(false);
 const hasEmittedReady = ref(false);
@@ -81,14 +86,7 @@ async function goToScene(sceneId, options = {}) {
     await nextTick();
     await panorama.value?.animateToView?.(
       options.targetView || target.initialView,
-      target.transition?.rotation === false
-        ? 0
-        : Math.max(
-          120,
-          Number(target.transition?.speed)
-            ? 1200 / Number(target.transition.speed)
-            : 180,
-        ),
+      target.transition?.rotation === false ? 0 : transitionDuration(target.transition),
     );
     if (generation !== navigationGeneration) return;
     emit('scene-change', {
@@ -115,7 +113,17 @@ function previousScene() {
 }
 
 function onHotspotClick(hotspot, event) {
-  emit('hotspot-click', { hotspot, event });
+  hotspot = hotspot?.hotspot || hotspot || {};
+  hotspot = {
+    ...hotspot,
+    target_scene_id: String(hotspot.target_scene_id || hotspot.targetSceneId || hotspot.target || hotspot.scene_id || ''),
+    target_view: hotspot.target_view || hotspot.targetView || hotspot.view,
+  };
+  // Preserve the public event contract: consumers receive the canonical
+  // hotspot as the first argument, just like PanoramaViewer emits it.
+  // Wrapping it here makes parent handlers read wrapper.target_scene_id and
+  // silently skip navigation.
+  emit('hotspot-click', hotspot, event);
   dispatchPointInteraction(hotspot, {
     navigate: (point) => {
       if (!point.target_scene_id) return;

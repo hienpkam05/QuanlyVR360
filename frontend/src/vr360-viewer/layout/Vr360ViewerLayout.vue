@@ -31,6 +31,7 @@ import {
 } from "../common/mapper/normalizeTour.js";
 import { youtubeEmbedUrl } from "../common/utils/media.js";
 import { dispatchPointInteraction } from '../common/registry/pointPluginRegistry.js';
+import { createPreloadScheduler } from '../services/preloadScheduler.js';
 import InfoPoiPopup from '../components/popups/InfoPoiPopup.vue';
 import ImageViewerPopup from '../components/popups/ImageViewerPopup.vue';
 import VideoPoiPopup from '../components/popups/VideoPoiPopup.vue';
@@ -60,7 +61,13 @@ const emit = defineEmits([
 const root = ref(null);
 const panorama = ref(null);
 const runtimeTour = ref(normalizeTour({}, props.options));
+
+function transitionDuration(transition = {}) {
+  if (transition.enabled === false || transition.effect === 'none') return 0;
+  return Math.min(1200, Math.max(800, Number(transition.duration) || 1000));
+}
 const activeSceneId = ref("");
+const preloadScheduler = ref(null);
 const activeBottomPanel = ref(null);
 const visitedSceneIds = ref(new Set());
 const poiHidden = ref(false);
@@ -218,6 +225,12 @@ async function applyTour(payload) {
   visitedSceneIds.value = new Set();
   activePointPopup.value = null;
   await nextTick();
+  if (!preloadScheduler.value && panorama.value?.preloadTexture) {
+    preloadScheduler.value = createPreloadScheduler(
+      (url) => panorama.value.preloadTexture(url),
+      { concurrency: 2 },
+    );
+  }
   if (!hasCompletedInitialIntro.value) {
     introCamera.prepare(intro.getInitialFrame(sceneViewForViewer()));
   }
@@ -252,6 +265,9 @@ async function goToScene(sceneId, options = {}) {
     publishCoreEvent("load-progress", progressPayload);
     audioManager.stop(AUDIO_SCOPE.POI);
     await panorama.value?.preloadTexture?.(target.imageSources?.[0]);
+    if (preloadScheduler.value && scenes.value.length) {
+      preloadScheduler.value.schedule(scenes.value, target.id, 5);
+    }
     if (generation !== navigationGeneration) return;
     markSceneVisited(previousSceneId);
     activeSceneId.value = target.id;
@@ -260,21 +276,13 @@ async function goToScene(sceneId, options = {}) {
       ? viewForViewer(options.targetView)
       : targetView;
     viewModeManager.setNormalFov(targetView.fov);
-    selectViewModeState(VIEW_MODE.NORMAL);
     await nextTick();
     await panorama.value?.animateToView?.(
       {
         ...navigationView,
         fov: viewModeManager.getTargetFov(),
       },
-      target.transition?.rotation === false
-        ? 0
-        : Math.max(
-            120,
-            Number(target.transition?.speed)
-              ? 1200 / Number(target.transition.speed)
-              : 180,
-          ),
+      target.transition?.rotation === false ? 0 : transitionDuration(target.transition),
     );
     if (generation !== navigationGeneration) return;
     const sceneChangePayload = {
@@ -306,8 +314,14 @@ function previousScene() {
 
 function onHotspotClick(hotspot, event) {
   if (!viewerUIReady.value) return;
+  hotspot = hotspot?.hotspot || hotspot || {};
+  hotspot = {
+    ...hotspot,
+    target_scene_id: String(hotspot.target_scene_id || hotspot.targetSceneId || hotspot.target || hotspot.scene_id || ''),
+    target_view: hotspot.target_view || hotspot.targetView || hotspot.view,
+  };
   const payload = { hotspot, event };
-  emit("hotspot-click", payload);
+  emit("hotspot-click", hotspot, event);
   publishCoreEvent("hotspot-click", payload);
   dispatchPointInteraction(hotspot, {
     playAudio: (point) => {
@@ -358,7 +372,8 @@ function completeIntro() {
   if (introPhase.value !== INTRO_PHASE.FINISHING) return;
   intro.complete();
   introCamera.complete();
-  panorama.value?.setView?.(sceneViewForViewer());
+  // Intro final frame now converges to the exact saved Builder view (lon, lat, fov).
+  // No setView() needed; the camera state is already at the canonical target.
   hasCompletedInitialIntro.value = true;
   setIntroPhase(INTRO_PHASE.INTERACTIVE);
   publishCoreEvent('intro-complete', getIntroState());
@@ -366,6 +381,12 @@ function completeIntro() {
 }
 
 function onPanoramaTextureReady() {
+  // Do not compete with the critical first texture load. Start the initial
+  // background queue only after PanoramaViewer confirms that the active
+  // scene texture is ready.
+  if (preloadScheduler.value && scenes.value.length) {
+    preloadScheduler.value.schedule(scenes.value, activeSceneId.value, 3);
+  }
   if (hasCompletedInitialIntro.value || introPlayed.value) return;
   introCamera.prepare(intro.getInitialFrame(sceneViewForViewer()));
 }
@@ -549,6 +570,7 @@ function getIntroState() {
 }
 function dispose() {
   navigationGeneration += 1;
+  preloadScheduler.value?.dispose();
   intro.cancel();
   mobileViewportQuery?.removeEventListener?.('change', updateMobileViewport);
   window.removeEventListener('resize', updateMobileViewport);
@@ -666,17 +688,6 @@ defineExpose({
           @start="startIntro"
         />
       </Transition>
-      <div class="viewer-transition-layer">
-        <div
-          class="viewer-transition-overlay"
-          :class="{ active: isTransitioning }"
-        >
-          <div class="viewer-transition-card">
-            <span></span>
-          </div>
-        </div>
-      </div>
-
       <div v-if="viewerUIReady" class="viewer-hud viewer-presentation-enter">
         <ViewerTopBar
           v-if="options.showTopbar === true && !defaultHudHidden"
@@ -736,7 +747,7 @@ defineExpose({
         @toggle-fullscreen="toggleFullscreen()"
         @toggle-poi="togglePoi"
       />
-      <div class="viewer-modal-layer">
+      <div class="viewer-modal-layer" :class="{ 'has-poi-popup': viewerUIReady && activePointPopup?.kind === 'info' }">
         <div
           v-if="viewerUIReady && isMobileViewport && isViewModeSheetOpen"
           class="viewer-view-mode-backdrop"
@@ -764,7 +775,7 @@ defineExpose({
             </button>
           </section>
         </div>
-        <InfoPoiPopup v-if="viewerUIReady && activePointPopup?.kind === 'info'" :point="activePointPopup.point" @close="activePointPopup = null" />
+        <InfoPoiPopup v-if="viewerUIReady && activePointPopup?.kind === 'info'" :point="activePointPopup.point" :audio-service="audioService" :audio-session="audioStore.state.activeSession" @close="activePointPopup = null" />
         <ImageViewerPopup v-if="viewerUIReady && activePointPopup?.kind === 'image'" :point="activePointPopup.point" @close="activePointPopup = null" />
         <VideoPoiPopup v-if="viewerUIReady && activePointPopup?.kind === 'video'" :point="activePointPopup.point" @close="activePointPopup = null" />
       </div>

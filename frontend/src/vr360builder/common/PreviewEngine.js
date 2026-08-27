@@ -1,8 +1,9 @@
 import * as THREE from "three";
 import { HotspotRenderer } from "@/common/vr360/HotspotRenderer";
 import { AreaLandmarkRenderer } from "@/common/vr360/AreaLandmarkRenderer";
+import { PointLandmarkRenderer } from "@/common/vr360/PointLandmarkRenderer.js";
 import { AreaMediaRenderer } from "@/common/vr360/AreaMediaRenderer.js";
-import { isAreaLandmarkPoint, isAreaOverlayPoint } from "@/common/vr360/pointRendererRegistry.js";
+import { isAreaLandmarkPoint, isAreaOverlayPoint, isPointLandmarkPoint } from "@/common/vr360/pointRendererRegistry.js";
 import { AreaMediaEditorOverlay } from './AreaMediaEditorOverlay.js';
 
 // ══════════════════════════════════════
@@ -275,6 +276,10 @@ export class PreviewEngine {
         if (sphere) this.callbacks.onAreaLandmarkVertexDragEnd?.(annotation, vertexIndex, sphere);
       },
     });
+    this.pointLandmarkRenderer = new PointLandmarkRenderer(this.canvas.parentElement, {
+      editMode: true,
+      onClick: (annotation, event) => this.callbacks.onAreaLandmarkSelect?.(annotation, event),
+    });
   }
 
   _initAreaMediaRenderer() {
@@ -290,11 +295,12 @@ export class PreviewEngine {
 
   setHotspots(hotspots, selectedIndex = -1) {
     this._allHotspots = hotspots || [];
-    this._sceneHotspots = this._allHotspots.filter((hotspot) => !isAreaLandmarkPoint(hotspot) && !isAreaOverlayPoint(hotspot));
+    this._sceneHotspots = this._allHotspots.filter((hotspot) => !isAreaLandmarkPoint(hotspot) && !isPointLandmarkPoint(hotspot) && !isAreaOverlayPoint(hotspot));
     this._selectedHotspotIndex = selectedIndex;
     const selected = this._allHotspots[selectedIndex];
     this.areaLandmarkRenderer?.setSelectedAnnotation(isAreaLandmarkPoint(selected) ? selected : null);
     this.areaLandmarkRenderer?.setAnnotations(this._allHotspots.filter(isAreaLandmarkPoint));
+    this.pointLandmarkRenderer?.setAnnotations(this._allHotspots);
     this.areaMediaRenderer?.setAreas(this._allHotspots);
     this.areaMediaEditorOverlay?.setAreas(this._allHotspots);
     this.areaMediaEditorOverlay?.setSelectedArea(isAreaOverlayPoint(selected) ? selected : null);
@@ -459,6 +465,7 @@ export class PreviewEngine {
       p.clientHeight
     );
     this.areaLandmarkRenderer?.update(this.camera, p.clientWidth, p.clientHeight);
+    this.pointLandmarkRenderer?.update(this.camera, p.clientWidth, p.clientHeight);
     this.areaMediaEditorOverlay?.update(this.camera, p.clientWidth, p.clientHeight);
   }
 
@@ -566,6 +573,7 @@ export class PreviewEngine {
     window.removeEventListener("keydown", this._onKeydown);
     this.hotspotRenderer?.dispose();
     this.areaLandmarkRenderer?.dispose();
+    this.pointLandmarkRenderer?.dispose();
     this.areaMediaRenderer?.dispose();
     this.areaMediaEditorOverlay?.dispose();
     this.textureCache.clear();

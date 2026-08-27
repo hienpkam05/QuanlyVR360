@@ -6,13 +6,11 @@ import { formatBytes } from '../../common/imageResize.js';
 defineProps({
   scene: { type: Object, required: true },
   collapsed: { type: Object, required: true },
-  audioPreviewSrc: { type: String, default: '' },
-  audioFileName: { type: String, default: '' },
 });
 
 const emit = defineEmits([
-  'update:scene', 'update:view', 'update:narration', 'update:transition',
-  'save-view', 'replace-image', 'pick-audio', 'clear-narration',
+  'update:scene', 'update:view', 'update:transition',
+  'save-view', 'replace-image',
   'navigate-to-points','update:collapsed'
 ]);
 
@@ -21,9 +19,6 @@ function update(key, value) {
 }
 function updateView(key, value) {
   emit('update:view', key, value);
-}
-function updateNarration(key, value) {
-  emit('update:narration', key, value);
 }
 function updateTransition(key, value) {
   emit('update:transition', key, value);
@@ -140,36 +135,5 @@ function updateTransition(key, value) {
       </template>
     </BaseAccordion>
 
-    <!-- Narration -->
-    <BaseAccordion title="Thuyết minh âm thanh" :open="!collapsed.narration" @toggle="emit('update:collapsed', 'narration', !collapsed.narration)"
-      :badge="(scene.am_thanh_thuyet_minh?.duong_dan_file_audio || audioPreviewSrc) ? '●' : ''"
-      badge-class="vb-acc-badge">
-      <template #icon>
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><path d="M9 18V5l12-2v13" /><circle cx="6" cy="18" r="3" /><circle cx="18" cy="16" r="3" /></svg>
-      </template>
-      <div class="vb-prop-row-inline" style="align-items:flex-end">
-        <div class="vb-prop-row" style="flex:0 0 auto;margin-bottom:0"><button class="vb-prop-btn vb-prop-btn-accent" @click="emit('pick-audio')">{{ audioPreviewSrc ? 'Thay file âm thanh' : 'Chọn file âm thanh' }}</button></div>
-        <div class="vb-prop-row" style="flex:1;margin-bottom:0"><label class="vb-prop-label">Thời lượng (giây)</label><input class="vb-prop-input vb-prop-input-mono" type="number" min="0" step="1" :value="scene.am_thanh_thuyet_minh?.thoi_luong_giay || 0" @change="updateNarration('thoi_luong_giay', +$event.target.value)" /></div>
-      </div>
-      <div class="vb-prop-row">
-        <label class="vb-prop-label">URL file âm thanh</label>
-        <input class="vb-prop-input vb-prop-input-mono" placeholder="https://..." :value="scene.am_thanh_thuyet_minh?.duong_dan_file_audio || ''" @change="updateNarration('duong_dan_file_audio', $event.target.value)" />
-        <span v-if="audioFileName" class="vb-prop-filename">{{ audioFileName }}</span>
-      </div>
-      <div class="vb-prop-row" v-if="audioPreviewSrc"><audio class="vb-audio-player" controls :src="audioPreviewSrc"></audio></div>
-      <div class="vb-prop-row">
-        <label class="vb-prop-label vb-hover-toggle-label"><input type="checkbox" :checked="!!scene.am_thanh_thuyet_minh?.enabled" :disabled="!audioPreviewSrc" @change="updateNarration('enabled', $event.target.checked)" /> Bật Scene Audio</label>
-      </div>
-      <div class="vb-prop-row-inline">
-        <div class="vb-prop-row" style="flex:1"><label class="vb-prop-label">Âm lượng cấu hình</label><input class="vb-prop-input vb-prop-input-mono" type="number" min="0" max="1" step="0.1" :value="scene.am_thanh_thuyet_minh?.volume ?? 1" @change="updateNarration('volume', +$event.target.value)" /></div>
-        <div class="vb-prop-row" style="flex:1"><label class="vb-prop-label">Ngôn ngữ</label><input class="vb-prop-input" :value="scene.am_thanh_thuyet_minh?.language || ''" @change="updateNarration('language', $event.target.value)" placeholder="vi" /></div>
-      </div>
-      <div class="vb-prop-row">
-        <label class="vb-prop-label vb-hover-toggle-label"><input type="checkbox" :checked="!!scene.am_thanh_thuyet_minh?.tu_dong_phat" @change="updateNarration('tu_dong_phat', $event.target.checked)" /> Tự động phát khi vào cảnh</label>
-      </div>
-      <div class="vb-prop-row" v-if="audioPreviewSrc" style="margin-bottom:0">
-        <button class="vb-prop-btn vb-prop-btn-danger" @click="emit('clear-narration')">Xóa thuyết minh</button>
-      </div>
-    </BaseAccordion>
   </div>
 </template>

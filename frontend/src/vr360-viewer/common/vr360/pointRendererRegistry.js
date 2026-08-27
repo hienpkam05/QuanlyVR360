@@ -15,6 +15,8 @@ export const pointRendererRegistry = Object.freeze({
   pin: { renderer: 'pin-marker', interactive: true },
   info_area: { renderer: 'info-area', interaction: 'info-panel', interactive: true },
   area_landmark: { renderer: 'area-landmark', interaction: 'navigate', interactive: true },
+  point_landmark: { renderer: 'point-landmark', interaction: 'navigate', interactive: true },
+  point_landmark: { renderer: 'point-landmark', interaction: 'navigate', interactive: true },
   area: { renderer: 'area-media', interaction: 'none', interactive: false },
   generic: { renderer: 'generic-marker', interactive: true },
 });
@@ -40,6 +42,10 @@ export function isMarkerPoint(point) {
 
 export function isAreaLandmarkPoint(point) {
   return hasPointRenderer(point, 'area-landmark');
+}
+
+export function isPointLandmarkPoint(point) {
+  return hasPointRenderer(point, 'point-landmark');
 }
 
 export function isAreaOverlayPoint(point) {

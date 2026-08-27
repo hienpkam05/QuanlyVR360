@@ -19,9 +19,8 @@ const emit = defineEmits([
   'update', 'update:hover', 'update:content',
   'toggle-lock', 'duplicate', 'remove',
   'preview-target', 'save-entry-view', 'clear-entry-view',
-  'toggle-acc', 'select-info-image', 'select-gallery-images', 'select-video', 'select-area-media',
-  'pick-audio', 'clear-audio', 'update-audio',
-  'select-audio',
+  'toggle-acc', 'select-gallery-images', 'select-video', 'select-area-media',
+  'pick-audio', 'clear-audio', 'update-audio', 'select-audio',
 ]);
 
 // Forward helpers for nested component emit
@@ -47,6 +46,7 @@ const poiEditor = computed(() => resolvePointEditor(props.hotspot));
 const hasContent = computed(() => ['info', 'gallery', 'video'].includes(pointKind.value));
 const isPinMarker = computed(() => pointKind.value === 'pin');
 const isAreaLandmark = computed(() => pointKind.value === 'area_landmark');
+const isPointLandmark = computed(() => pointKind.value === 'point_landmark');
 const isArea = computed(() => pointKind.value === 'area');
 const isAudio = computed(() => pointKind.value === 'audio');
 
@@ -59,6 +59,7 @@ if (import.meta.env?.DEV) {
 const typeLabel = computed(() => {
   if (isAudio.value) return 'Audio';
   if (isAreaLandmark.value) return 'Địa danh';
+  if (isPointLandmark.value) return 'Địa danh điểm';
   if (isArea.value) return 'Vùng ảnh';
   if (poiType.value && POI_TYPES[poiType.value]) return POI_TYPES[poiType.value].label;
   return isNav.value ? 'Chỉ đường' : 'POI';
@@ -98,12 +99,13 @@ const typeLabel = computed(() => {
       @clear-entry-view="emit('clear-entry-view')"
       @toggle-acc="forwardAccToggle"
     />
+    <component v-if="isPointLandmark && poiEditor" :is="poiEditor" :hotspot="hotspot" :scenes="scenes" @update="forwardUpdate" />
 
     <!-- ── POI EDITOR ── -->
     <template v-if="isPoi">
       <component v-if="isAudio && poiEditor" :is="poiEditor" :hotspot="hotspot" @update="forwardUpdate" @select-audio="emit('pick-audio')" @clear-audio="emit('clear-audio')" />
       <!-- Accordion: Thông tin chung -->
-      <BaseAccordion v-if="!isAudio && !isArea" title="Thông tin chung" :open="accOpen.chung" @toggle="emit('toggle-acc', 'chung')">
+      <BaseAccordion v-if="!isAudio && !isArea && !isPointLandmark" title="Thông tin chung" :open="accOpen.chung" @toggle="emit('toggle-acc', 'chung')">
         <template #icon>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" /></svg>
         </template>
@@ -131,7 +133,7 @@ const typeLabel = computed(() => {
       </BaseAccordion>
 
       <BaseAccordion
-        v-if="!hotspot.loai_poi && !isAudio && !isArea"
+        v-if="!hotspot.loai_poi && !isAudio && !isArea && !isPointLandmark"
         title="Cảnh đích & góc nhìn"
         :open="accOpen.navTarget"
         @toggle="emit('toggle-acc', 'navTarget')"
@@ -189,9 +191,10 @@ const typeLabel = computed(() => {
           :hotspot="hotspot"
           @update-content="(key, value) => emit('update:content', key, value)"
           @update="(key, value) => emit('update', key, value)"
-          @select-image="(file) => emit('select-info-image', file)"
           @select-images="(files) => emit('select-gallery-images', files)"
           @select-video="(file) => emit('select-video', file)"
+          @select-audio="emit('select-audio')"
+          @clear-audio="emit('clear-audio')"
         />
       </BaseAccordion>
 

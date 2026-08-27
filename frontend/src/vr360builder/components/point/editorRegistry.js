@@ -5,6 +5,7 @@ import VideoEditor from './editors/poi/VideoEditor.vue';
 import GalleryEditor from './editors/poi/GalleryEditor.vue';
 import PinMarkerEditor from './editors/poi/PinMarkerEditor.vue';
 import AreaLandmarkEditor from './editors/poi/AreaLandmarkEditor.vue';
+import PointLandmarkEditor from './editors/poi/PointLandmarkEditor.vue';
 import AudioPoiEditor from './editors/poi/AudioPoiEditor.vue';
 import AreaEditor from './editors/poi/AreaEditor.vue';
 import { resolvePointKind } from '@/common/vr360/pointSchema.js';
@@ -16,6 +17,7 @@ export const pointEditorRegistry = Object.freeze({
   video: markRaw(VideoEditor),
   pin: markRaw(PinMarkerEditor),
   area_landmark: markRaw(AreaLandmarkEditor),
+  point_landmark: markRaw(PointLandmarkEditor),
   audio: markRaw(AudioPoiEditor),
   area: markRaw(AreaEditor),
 });

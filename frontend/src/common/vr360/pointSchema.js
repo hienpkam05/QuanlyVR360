@@ -45,6 +45,7 @@ export const POINT_TYPES = Object.freeze({
   AUDIO: 'audio',
   PIN: 'pin',
   AREA_LANDMARK: 'area_landmark',
+  POINT_LANDMARK: 'point_landmark',
   AREA: 'area',
   INFO_AREA: 'info_area',
   GENERIC: 'generic',
@@ -71,11 +72,19 @@ export function createPoint(kind, { id, lon = 0, lat = 0, index = 0 } = {}) {
   };
   if (type === 'nav') point.navStyle = 'default';
   if (type === 'audio') point.audio = { enabled: false, url: '', title: '', description: '', volume: 1, autoplay: false, loop: false, playbackRate: 1 };
-  if (type === 'info') { point.loai_poi = 'thong_tin_van_ban'; point.noi_dung = { tieu_de: '', mo_ta: '', anh_minh_hoa: '', lien_ket: '' }; }
+  if (type === 'info') {
+    point.loai_poi = 'thong_tin_van_ban';
+    point.noi_dung = { tieu_de: '', mo_ta_ngan: '', mo_ta: '', anh_minh_hoa: '', danh_sach_anh: [], lien_ket: '', youtube_url: '' };
+    point.audio = { enabled: false, url: '', title: '', description: '', volume: 1, autoplay: false, loop: false, playbackRate: 1 };
+  }
   if (type === 'gallery') { point.loai_poi = 'thu_vien_anh'; point.noi_dung = { tieu_de: '', danh_sach_anh: [] }; }
   if (type === 'video') { point.loai_poi = 'phat_video'; point.noi_dung = { url_video: '', tieu_de: '', tu_dong_phat: false }; }
   if (type === 'area') point.areaMedia = { type: 'image', src: '', opacity: 1, brightness: 1, borderRadius: 0, tint: '', fitMode: 'cover', loop: true, muted: true, autoplay: true, poster: '', playbackRate: 1, zIndex: 0 };
   if (type === 'pin') point.loai_poi = 'ghim_dia_danh';
+  if (type === 'point_landmark') {
+    point.interaction = 'navigate';
+    point.loai_poi = null;
+  }
   return point;
 }
 
@@ -144,6 +153,7 @@ export function resolvePointKind(rawPoint = {}) {
   const poiKind = POI_KIND_BY_LEGACY_TYPE[raw.loai_poi];
 
   if (sourceType === 'area_landmark') return 'area_landmark';
+  if (sourceType === 'point_landmark') return 'point_landmark';
   if (sourceType === 'area' || sourceType === 'image_area' || sourceType === 'image_overlay' || sourceType === 'area-media') return 'area';
   if (sourceType === 'info_area') return 'info_area';
   // Persisted Builder/API records may retain the generic `poi` type while
@@ -231,14 +241,30 @@ export function normalizePoint(rawPoint = {}, options = {}) {
     showPolygonOnHover: raw.show_polygon_on_hover !== false,
     content: {
       title: firstValue(legacyContent.tieu_de, info.title, raw.info_title, raw.title, label),
+      shortDescription: firstValue(
+        legacyContent.mo_ta_ngan,
+        legacyContent.short_description,
+        info.short_description,
+        info.shortDescription,
+        raw.info_short_description,
+        raw.short_description,
+      ),
       description: firstValue(legacyContent.mo_ta, info.description, raw.info_description, raw.description),
       link: firstValue(legacyContent.lien_ket, info.link, raw.link),
     },
     media: {
       imageUrl: resolveAsset(firstValue(legacyContent.anh_minh_hoa, info.image_url, raw.info_image_url, raw.image_url, raw.image)),
-      images: asArray(firstValue(legacyContent.danh_sach_anh, raw.images, info.images)),
+      images: [...new Set([
+        legacyContent.anh_minh_hoa,
+        ...asArray(firstValue(legacyContent.danh_sach_anh, raw.images, info.images)),
+      ].filter(Boolean))],
       videoUrl: resolveAsset(firstValue(legacyContent.url_video, info.video_url, raw.info_video_url, raw.video_url)),
-      youtubeUrl: firstValue(info.youtube_url, raw.info_youtube_url, raw.youtube_url),
+      youtubeUrl: firstValue(
+        legacyContent.youtube_url,
+        info.youtube_url,
+        raw.info_youtube_url,
+        raw.youtube_url,
+      ),
       previewUrl: resolveAsset(firstValue(raw.preview_image, raw.preview, raw.image_url)),
       overlayImageUrl: resolveAsset(firstValue(raw.overlay_image, raw.overlayImage, legacyContent.anh_minh_hoa, raw.image_url, raw.image)),
     },
@@ -329,7 +355,7 @@ export function normalizeBuilderPoint(rawPoint = {}, options = {}) {
   // `normalizePoint` reads this legacy field for compatibility; Builder state
   // itself remains canonical so every subsequent save/export writes `audio`.
   delete builderPoint.audio_url;
-  if (point.kind !== 'audio') delete builderPoint.audio;
+  if (!point.audio) delete builderPoint.audio;
   if (point.kind === 'area_landmark') {
     builderPoint.vertices = point.vertices;
     // Builder UI still displays the derived center in its legacy coordinate
@@ -340,6 +366,13 @@ export function normalizeBuilderPoint(rawPoint = {}, options = {}) {
     delete builderPoint.label_position;
     delete builderPoint.polygon;
     delete builderPoint.area_points;
+  }
+  if (point.kind === 'point_landmark') {
+    delete builderPoint.vertices;
+    delete builderPoint.polygon;
+    delete builderPoint.area_points;
+    delete builderPoint.style;
+    delete builderPoint.show_polygon_on_hover;
   }
   if (point.kind === 'area') {
     builderPoint.vertices = point.vertices;

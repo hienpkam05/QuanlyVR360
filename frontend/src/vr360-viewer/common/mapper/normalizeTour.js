@@ -88,7 +88,7 @@ export function normalizeScene(rawScene = {}, sceneIndex = 0, options = {}) {
     initialView: normalizeView({ ...view, lon: view.lon ?? raw.lon, lat: view.lat ?? raw.lat, fov: view.fov ?? raw.fov }),
     transition,
     hotspots: asArray(raw.hotspots).map((hotspot, index) => normalizeHotspot(hotspot, sceneIndex, index, options)),
-    narration: normalizeNarration(firstValue(raw.am_thanh_thuyet_minh, raw.audio, raw.audio_url, raw.entry_audio_url, raw.narration_audio), options),
+    // Per-scene narration removed
     metadata: { description: firstValue(raw.description, raw.info), gps: raw.gps || null },
     raw,
   };
@@ -152,7 +152,7 @@ export function runtimeHotspotForViewer(hotspot, scenes, activeScene) {
     preview_image: hotspot.type === 'gallery'
       ? (hotspot.media.images?.[0] || hotspot.hover.thumbnail || '')
       : '',
-    info: { title: hotspot.content.title, description: hotspot.content.description, image_url: hotspot.media.imageUrl, video_url: hotspot.media.videoUrl, youtube_url: hotspot.media.youtubeUrl },
+    info: { title: hotspot.content.title, short_description: hotspot.content.shortDescription, description: hotspot.content.description, image_url: hotspot.media.imageUrl, images: hotspot.media.images, video_url: hotspot.media.videoUrl, youtube_url: hotspot.media.youtubeUrl },
     areaMedia: hotspot.areaMedia,
     vertices: hotspot.vertices, area_points: hotspot.areaPoints, polygon: hotspot.polygon, anchor: hotspot.anchor, label_config: hotspot.labelConfig, label_position: hotspot.labelPosition, line_height: hotspot.lineHeight, show_polygon_on_hover: hotspot.showPolygonOnHover, style: hotspot.annotationStyle || hotspot.style, glow: hotspot.style.glow, khi_dua_chuot_vao: hotspot.hover, loai_poi: hotspot.loaiPoi, chieu_cao_duong_ghim: hotspot.pinHeight,
   };
@@ -175,7 +175,6 @@ export function legacySceneForViewer(scene, scenes = []) {
     name: scene.name,
     group: scene.group,
     description: scene.metadata.description,
-    audio_url: scene.narration.url,
     imageSources: scene.imageSources,
     original_file: scene.imageSources[0] || '',
     thumbnail: scene.thumbnailSource,

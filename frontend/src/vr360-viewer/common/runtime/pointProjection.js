@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import {
   isInfoAreaPoint,
   isMarkerPoint,
+  isPointLandmarkPoint,
   resolvePointRenderer,
 } from '../vr360/pointRendererRegistry.js';
 
@@ -37,8 +38,9 @@ export function projectViewerPoints(hotspots, camera, width, height, youtubeEmbe
   const projectLonLat = createProjector(camera, width, height);
   const markers = hotspots
     .filter((hotspot) => {
-      const result = isMarkerPoint(hotspot)
-        || resolvePointRenderer(hotspot).renderer === 'audio-marker';
+      const result = !isPointLandmarkPoint(hotspot) && (
+        isMarkerPoint(hotspot) || resolvePointRenderer(hotspot).renderer === 'audio-marker'
+      );
       return result;
     })
     .map((hotspot, index) => ({

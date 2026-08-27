@@ -115,7 +115,11 @@ export class AreaLandmarkRenderer {
     group.append(polygon, line, anchor);
     const label = document.createElement('button');
     label.type = 'button'; label.className = 'area-landmark-label';
-    const element = { group, polygon, line, anchor, label, vertices: [], annotation };
+    const element = {
+      group, polygon, line, anchor, label, vertices: [], annotation,
+      labelHeight: 0,
+      labelText: '',
+    };
     let suppressClick = false;
     let hoverCount = 0;
     let hoverEndTimer;
@@ -240,11 +244,21 @@ export class AreaLandmarkRenderer {
       const labelOffset = Math.max(40, Number(annotation.line_height || annotation.lineHeight) || 48) * 2;
       const labelBottom = anchor.y - labelOffset;
       element.label.style.display = '';
-      element.label.textContent = annotation.label?.text || annotation.label || annotation.name || 'Area Landmark';
+      const labelText = annotation.label?.text || annotation.label || annotation.name || 'Area Landmark';
+      const textChanged = labelText !== element.labelText;
+      if (textChanged) {
+        element.label.textContent = labelText;
+        element.labelText = labelText;
+      }
       element.label.title = annotation.metadata?.description || annotation.raw?.khi_dua_chuot_vao?.van_ban_huong_dan || '';
       element.label.style.setProperty('--area-landmark-fill', style.fill);
-      const labelHeight = element.label.offsetHeight || 32;
+      // Only re-measure height when text changes to avoid reading stale offsetHeight during animation
+      if (textChanged || !element.labelHeight) {
+        element.labelHeight = element.label.offsetHeight || 32;
+      }
+      const labelHeight = element.labelHeight;
       const labelTop = labelBottom - labelHeight;
+      // Set line endpoint and label position atomically using same anchor and labelBottom
       element.line.setAttribute('x2', String(labelX)); element.line.setAttribute('y2', String(labelBottom));
       element.line.setAttribute('stroke', style.line || '#ffffff'); element.line.setAttribute('stroke-width', '2'); element.line.setAttribute('stroke-dasharray', '6 4');
       element.anchor.setAttribute('cx', String(anchor.x)); element.anchor.setAttribute('cy', String(anchor.y)); element.anchor.setAttribute('r', '5.5'); element.anchor.setAttribute('fill', '#ff5a1f'); element.anchor.setAttribute('stroke', '#fff'); element.anchor.setAttribute('stroke-width', '2');

@@ -25,6 +25,7 @@ const TYPE_ALIASES = {
   landmark: 'area_landmark',
   'landmark-area': 'area_landmark',
   place: 'area_landmark',
+  point_landmark: 'point_landmark',
   area: 'area',
   image_area: 'area',
   image_overlay: 'area',
@@ -45,6 +46,7 @@ export const POINT_TYPES = Object.freeze({
   AUDIO: 'audio',
   PIN: 'pin',
   AREA_LANDMARK: 'area_landmark',
+  POINT_LANDMARK: 'point_landmark',
   AREA: 'area',
   INFO_AREA: 'info_area',
   GENERIC: 'generic',
@@ -85,6 +87,12 @@ function asObject(value) {
 
 function asArray(value) {
   return Array.isArray(value) ? value : [];
+}
+
+function mediaSource(value) {
+  if (typeof value === 'string') return value.trim();
+  if (!value || typeof value !== 'object') return '';
+  return firstValue(value.url, value.src, value.file, value.image_url, value.imageUrl);
 }
 
 function firstValue(...values) {
@@ -144,6 +152,7 @@ export function resolvePointKind(rawPoint = {}) {
   const poiKind = POI_KIND_BY_LEGACY_TYPE[raw.loai_poi];
 
   if (sourceType === 'area_landmark') return 'area_landmark';
+  if (sourceType === 'point_landmark') return 'point_landmark';
   if (sourceType === 'area' || sourceType === 'image_area' || sourceType === 'image_overlay' || sourceType === 'area-media') return 'area';
   if (sourceType === 'info_area') return 'info_area';
   // Persisted Builder/API records may retain the generic `poi` type while
@@ -152,7 +161,7 @@ export function resolvePointKind(rawPoint = {}) {
   if (poiKind && (sourceType === 'poi' || !sourceType || sourceType === 'generic')) {
     return poiKind === 'pin' ? (hasPolygon ? 'area_landmark' : 'pin') : poiKind;
   }
-  if (['nav', 'navigate', 'navigation', 'chuyen_canh', 'info', 'text', 'text_info', 'gallery', 'image_gallery', 'video', 'video_poi', 'audio', 'pin', 'pin_marker', 'landmark', 'landmark-area', 'place', 'area', 'image_area', 'image_overlay'].includes(sourceType)) {
+  if (['nav', 'navigate', 'navigation', 'chuyen_canh', 'info', 'text', 'text_info', 'gallery', 'image_gallery', 'video', 'video_poi', 'audio', 'pin', 'pin_marker', 'landmark', 'landmark-area', 'place', 'point_landmark', 'area', 'image_area', 'image_overlay'].includes(sourceType)) {
     return TYPE_ALIASES[sourceType];
   }
 
@@ -231,14 +240,33 @@ export function normalizePoint(rawPoint = {}, options = {}) {
     showPolygonOnHover: raw.show_polygon_on_hover !== false,
     content: {
       title: firstValue(legacyContent.tieu_de, info.title, raw.info_title, raw.title, label),
+      shortDescription: firstValue(
+        legacyContent.mo_ta_ngan,
+        legacyContent.short_description,
+        info.short_description,
+        info.shortDescription,
+        raw.info_short_description,
+        raw.short_description,
+      ),
       description: firstValue(legacyContent.mo_ta, info.description, raw.info_description, raw.description),
       link: firstValue(legacyContent.lien_ket, info.link, raw.link),
     },
     media: {
-      imageUrl: resolveAsset(firstValue(legacyContent.anh_minh_hoa, info.image_url, raw.info_image_url, raw.image_url, raw.image)),
-      images: asArray(firstValue(legacyContent.danh_sach_anh, raw.images, info.images)),
+      imageUrl: resolveAsset(mediaSource(firstValue(legacyContent.anh_minh_hoa, info.image_url, raw.info_image_url, raw.image_url, raw.image))),
+      images: [...new Set([
+        mediaSource(legacyContent.anh_minh_hoa),
+        ...asArray(firstValue(legacyContent.danh_sach_anh, raw.images, info.images)).map(mediaSource),
+      ].map((value) => resolveAsset(value)).filter(Boolean))],
       videoUrl: resolveAsset(firstValue(legacyContent.url_video, info.video_url, raw.info_video_url, raw.video_url)),
-      youtubeUrl: firstValue(info.youtube_url, raw.info_youtube_url, raw.youtube_url),
+      youtubeUrl: firstValue(
+        legacyContent.youtube_url,
+        legacyContent.youtubeUrl,
+        info.youtube_url,
+        info.youtubeUrl,
+        raw.info_youtube_url,
+        raw.youtube_url,
+        raw.youtubeUrl,
+      ),
       previewUrl: resolveAsset(firstValue(raw.preview_image, raw.preview, raw.image_url)),
       overlayImageUrl: resolveAsset(firstValue(raw.overlay_image, raw.overlayImage, legacyContent.anh_minh_hoa, raw.image_url, raw.image)),
     },
@@ -266,10 +294,10 @@ export function normalizePoint(rawPoint = {}, options = {}) {
       };
     })(),
     audio: (() => {
-      const hasLegacyAudio = Boolean(raw.audio_url || raw.audio);
+      const hasLegacyAudio = Boolean(raw.audio_url || raw.audio || legacyContent.audio);
       if (kind !== 'audio' && !hasLegacyAudio) return null;
       const audio = raw.audio && typeof raw.audio === 'object' ? raw.audio : {};
-      const url = resolveAsset(firstValue(audio.url, audio.file, raw.audio_url, typeof raw.audio === 'string' ? raw.audio : ''));
+      const url = resolveAsset(mediaSource(firstValue(audio.url, audio.file, raw.audio_url, raw.audio, legacyContent.audio)));
       return {
         enabled: audio.enabled !== undefined ? Boolean(audio.enabled) : Boolean(url),
         url,
