@@ -234,6 +234,10 @@ class PublicTourView(PublicAccessMixin, APIView):
                 scene["thumbnail_file"] = (
                     self.scene_image_url(request, public_token, scene_key, "thumbnail") if asset.thumbnail_file else ""
                 )
+                # The tour JSON may contain an old direct /media/ URL in
+                # ``image``. Replace it with the public image endpoint so an
+                # embedded viewer receives the CORS headers from this view.
+                scene["image"] = scene["original_file"]
                 scene["thumbnail"] = scene.get("thumbnail") or scene["thumbnail_file"] or scene["preview_file"]
 
         response = Response(
