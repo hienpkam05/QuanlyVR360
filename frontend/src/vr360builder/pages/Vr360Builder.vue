@@ -1727,6 +1727,8 @@ async function saveToServer() {
     const pending = c.filter((x) => x._file && !x.exportUrl);
     if (pending.length) {
       showToast("info", `⏳ Upload ${pending.length} ảnh...`);
+      const registered = await registerPendingSceneKeys(c);
+      if (!registered) return;
       const r = await uploadClone(c);
       if (!r.ok) {
         showToast("error", "❌ Upload thất bại");
@@ -1870,6 +1872,36 @@ function buildJson(c) {
       hotspots: s.hotspots.map(cleanHotspotForSave),
     })),
   };
+}
+
+// A SceneAsset upload is tied to a scene_key already present in the saved
+// version data. Newly added scenes only exist in the browser at first, so
+// register their IDs before uploading files. Do not persist temporary blob
+// URLs during that short registration request.
+function buildSceneRegistrationJson(c) {
+  const data = buildJson(c);
+  data.scenes = data.scenes.map((scene) => ({
+    ...scene,
+    image: typeof scene.image === "string" && scene.image.startsWith("blob:") ? "" : scene.image,
+    thumb: typeof scene.thumb === "string" && scene.thumb.startsWith("blob:") ? "" : scene.thumb,
+  }));
+  return data;
+}
+
+async function registerPendingSceneKeys(c) {
+  if (!api.connected || !requireBackendContext()) return false;
+  try {
+    const data = buildSceneRegistrationJson(c);
+    await updateVersion(backendContext.locationId, backendContext.versionId, {
+      label: data.title || "VR360 Virtual Tour",
+      data,
+    });
+    return true;
+  } catch (error) {
+    console.warn("Could not register scene keys before upload:", error.response?.data || error.message);
+    showToast("error", error.response?.data?.detail || "❌ Không thể chuẩn bị dữ liệu scene để upload");
+    return false;
+  }
 }
 
 function cleanHotspotForSave(hotspot) {
@@ -2254,6 +2286,10 @@ async function exportJSON() {
     }
     exportJsonText.value = "⏳ Đang tải lên...";
     modals.export = true;
+    if (pending.length && !(await registerPendingSceneKeys(c))) {
+      exportJsonText.value = "❌ Không thể chuẩn bị dữ liệu scene để upload.";
+      return;
+    }
     const sceneUpload = await uploadClone(c, (i, t, n) => {
       exportJsonText.value = `⏳ ${i}/${t}: ${n}`;
     });
