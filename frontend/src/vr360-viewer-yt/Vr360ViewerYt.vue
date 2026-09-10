@@ -15,6 +15,7 @@ const props = defineProps({
 defineEmits([
   'ready', 'scene-change', 'hotspot-click',
   'load-progress', 'load-complete', 'error', 'back',
+  'theater-mode-change',
 ]);
 
 const coreRef = ref(null);
@@ -67,6 +68,7 @@ onBeforeUnmount(() => {
       :facade="facade"
       :host-ref="coreRef"
       :tour-title="tourTitle"
+      @theater-mode-change="$emit('theater-mode-change', $event)"
     />
   </div>
 </template>

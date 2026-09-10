@@ -86,7 +86,6 @@ function pickViewMode(mode) {
       >
         <span class="yt-settings__item__label">
           <span>Ẩn điểm POI</span>
-          <small>Ẩn các nút điểm dừng trên panorama</small>
         </span>
         <span class="yt-settings__item__toggle" aria-hidden="true"></span>
       </button>
@@ -102,7 +101,6 @@ function pickViewMode(mode) {
       >
         <span class="yt-settings__item__label">
           <span>Tự động xoay</span>
-          <small>Xoay panorama chậm khi không tương tác</small>
         </span>
         <span class="yt-settings__item__toggle" aria-hidden="true"></span>
       </button>
@@ -115,8 +113,7 @@ function pickViewMode(mode) {
         @click="run('resetView', 'reset-view'); close()"
       >
         <span class="yt-settings__item__label">
-          <span>Về góc nhìn mặc định</span>
-          <small>Đưa camera về vị trí ban đầu của cảnh</small>
+          <span>Góc mặc định</span>
         </span>
         <span class="yt-settings__item__value">
           <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7" /><path d="M3 4v5h5" /></svg>
