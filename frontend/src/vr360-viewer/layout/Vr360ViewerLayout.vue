@@ -81,6 +81,13 @@ const isFullscreen = ref(false);
 const introPhase = ref(INTRO_PHASE.WAITING_TO_START);
 const introPlayed = ref(false);
 const hasCompletedInitialIntro = ref(false);
+const autoTourActive = ref(false);
+const autoTourIndex = ref(0);
+let autoTourTimer = null;
+let autoTourIdleTimer = null;
+let autoTourRemainingMs = 0;
+let autoTourTimerStartedAt = 0;
+
 let hasStartedTourAudioForIntro = false;
 let navigationGeneration = 0;
 let stopFullscreenSync = () => {};
@@ -143,6 +150,9 @@ const displayHotspots = computed(() =>
   ),
 );
 const visibleHotspots = computed(() => (poiHidden.value ? [] : displayHotspots.value));
+const autoTourPanoramas = computed(() =>
+  scenes.value.filter(scene => scene.raw?.autoTour === 1)
+);
 const pointHotspotLogo = computed(() => runtimeTour.value.pointHotspotLogo);
 const activeAudioPoiId = computed(() => (
   audioStore.state.activeSession.sourceType === 'poi'
@@ -208,6 +218,7 @@ async function playTourAudio() {
 }
 
 async function applyTour(payload) {
+  stopAutoTour();
   audioManager.stop();
   const progressPayload = { phase: "normalize" };
   emit("load-progress", progressPayload);
@@ -244,6 +255,9 @@ async function applyTour(payload) {
   const completePayload = { scope: "tour", tour: runtimeTour.value };
   emit("load-complete", completePayload);
   publishCoreEvent("load-complete", completePayload);
+  if (hasCompletedInitialIntro.value && autoTourPanoramas.value.length > 0) {
+    startAutoTour();
+  }
 }
 
 async function goToScene(sceneId, options = {}) {
@@ -314,6 +328,7 @@ function previousScene() {
 
 function onHotspotClick(hotspot, event) {
   if (!viewerUIReady.value) return;
+  if (autoTourActive.value) stopAutoTour();
   hotspot = hotspot?.hotspot || hotspot || {};
   hotspot = {
     ...hotspot,
@@ -337,6 +352,7 @@ function onHotspotClick(hotspot, event) {
 
 function onInteraction() {
   if (!viewerUIReady.value) return;
+  if (autoTourActive.value) pauseAutoTour();
 }
 
 function onOnboardingWheel(event) {
@@ -378,6 +394,7 @@ function completeIntro() {
   setIntroPhase(INTRO_PHASE.INTERACTIVE);
   publishCoreEvent('intro-complete', getIntroState());
   void playTourAudio().catch((cause) => error("tour-audio-play", cause));
+  if (autoTourPanoramas.value.length > 0) startAutoTour();
 }
 
 function onPanoramaTextureReady() {
@@ -389,6 +406,103 @@ function onPanoramaTextureReady() {
   }
   if (hasCompletedInitialIntro.value || introPlayed.value) return;
   introCamera.prepare(intro.getInitialFrame(sceneViewForViewer()));
+}
+
+function stopAutoTour() {
+  autoTourActive.value = false;
+  if (autoTourTimer !== null) { clearTimeout(autoTourTimer); autoTourTimer = null; }
+  if (autoTourIdleTimer !== null) { clearTimeout(autoTourIdleTimer); autoTourIdleTimer = null; }
+  autoTourRemainingMs = 0;
+}
+
+function pauseAutoTour() {
+  if (!autoTourActive.value) return;
+  if (autoTourTimer !== null) {
+    const elapsed = performance.now() - autoTourTimerStartedAt;
+    autoTourRemainingMs = Math.max(0, autoTourRemainingMs - elapsed);
+    clearTimeout(autoTourTimer);
+    autoTourTimer = null;
+  }
+  if (autoTourIdleTimer !== null) { clearTimeout(autoTourIdleTimer); autoTourIdleTimer = null; }
+  const idleDelay = props.options.autoRotateDelay ?? 3000;
+  autoTourIdleTimer = setTimeout(() => {
+    autoTourIdleTimer = null;
+    resumeAutoTour();
+  }, idleDelay);
+}
+
+function resumeAutoTour() {
+  if (!autoTourActive.value) return;
+  const list = autoTourPanoramas.value;
+  if (!list.length) { stopAutoTour(); return; }
+  if (isTransitioning.value) return;
+  autoRotate.value = true;
+
+  const indexScene = list[autoTourIndex.value];
+  if (indexScene && indexScene.id === activeSceneId.value) {
+    const remaining = autoTourRemainingMs > 1000 ? autoTourRemainingMs : 1000;
+    scheduleAutoTourAdvance(remaining);
+  } else {
+    const viewerIndex = list.findIndex(s => s.id === activeSceneId.value);
+    if (viewerIndex >= 0) {
+      autoTourIndex.value = viewerIndex;
+    }
+    scheduleAutoTourAdvance();
+  }
+}
+
+function onPointerActivity() {
+  if (autoTourIdleTimer !== null) {
+    clearTimeout(autoTourIdleTimer);
+    const idleDelay = props.options.autoRotateDelay ?? 3000;
+    autoTourIdleTimer = setTimeout(() => {
+      autoTourIdleTimer = null;
+      resumeAutoTour();
+    }, idleDelay);
+  }
+}
+
+function scheduleAutoTourAdvance(remainingMs) {
+  if (!autoTourActive.value) return;
+  if (autoTourTimer !== null) { clearTimeout(autoTourTimer); autoTourTimer = null; }
+  const scene = autoTourPanoramas.value[autoTourIndex.value];
+  if (!scene) return;
+  const duration = remainingMs ?? (Number(scene.raw?.autoTourDuration) || 20) * 1000;
+  autoTourRemainingMs = duration;
+  autoTourTimerStartedAt = performance.now();
+  autoTourTimer = setTimeout(() => {
+    autoTourTimer = null;
+    autoTourRemainingMs = 0;
+    advanceAutoTour();
+  }, duration);
+}
+
+async function advanceAutoTour() {
+  if (!autoTourActive.value) return;
+  const list = autoTourPanoramas.value;
+  if (!list.length) { stopAutoTour(); return; }
+  autoTourIndex.value = (autoTourIndex.value + 1) % list.length;
+  const target = list[autoTourIndex.value];
+  if (target.id !== activeSceneId.value) {
+    await goToScene(target.id, { source: 'auto-tour' });
+  }
+  if (!autoTourActive.value) return;
+  scheduleAutoTourAdvance();
+}
+
+function startAutoTour() {
+  const list = autoTourPanoramas.value;
+  if (!list.length) return;
+  autoTourActive.value = true;
+  autoRotate.value = true;
+  const currentIndex = list.findIndex(s => s.id === activeSceneId.value);
+  if (currentIndex >= 0) {
+    autoTourIndex.value = currentIndex;
+    scheduleAutoTourAdvance();
+  } else {
+    autoTourIndex.value = -1;
+    advanceAutoTour();
+  }
 }
 
 function toggleAutorotate(force) {
@@ -569,6 +683,7 @@ function getIntroState() {
   };
 }
 function dispose() {
+  stopAutoTour();
   navigationGeneration += 1;
   preloadScheduler.value?.dispose();
   intro.cancel();
@@ -650,6 +765,7 @@ defineExpose({
     ref="root"
     class="tour-viewer-page"
     @pointerdown="onInteraction"
+    @pointermove="onPointerActivity"
     @wheel.capture="onOnboardingWheel"
     @contextmenu.capture="!viewerUIReady && $event.preventDefault()"
   >

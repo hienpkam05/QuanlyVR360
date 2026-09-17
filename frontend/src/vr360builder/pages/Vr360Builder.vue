@@ -63,6 +63,7 @@ const uiState = reactive({
   collapsed: {
     sceneProps: false,
     initialView: false,
+    autoTour: true,
     transition: true,
     tourAudio: true,
   },
@@ -422,6 +423,8 @@ async function addScene(file) {
     info: "",
     initialView: { lon: 0, lat: 0, fov: 75 },
     hotspots: [],
+    autoTour: 0,
+    autoTourDuration: 20,
     transition: defaultTransition(),
     gps,
     _file: procFile,
@@ -1774,6 +1777,8 @@ function cloneForExport() {
     _serverThumb: s._serverThumb || "",
     _file: s._file || null,
     initialView: { ...s.initialView },
+    autoTour: s.autoTour ?? 0,
+    autoTourDuration: s.autoTourDuration ?? 20,
     transition: s.transition ? { ...s.transition } : null,
     // Keep upload File handles, but deep-copy every persisted POI field so
     // save/export work cannot mutate the selected editor's reactive object.
@@ -1820,6 +1825,8 @@ function buildJson(c) {
       info: s.info,
       gps: s.gps || null,
       initialView: { ...s.initialView },
+      autoTour: s.autoTour ?? 0,
+      autoTourDuration: s.autoTourDuration ?? 20,
       ...(s.transition?.enabled !== false
         ? { transition: { ...s.transition } }
         : {}),
@@ -2548,9 +2555,10 @@ onBeforeUnmount(() => {
               <span v-if="s.exportUrl" class="vb-scene-badge">☁</span>
               <div class="vb-scene-thumb">
                 <img
-                  :src="s._serverThumb || s.thumb || s.image"
+                  :src="s.thumb || s.image"
                   alt=""
                   loading="lazy"
+                  crossorigin="anonymous"
                 />
               </div>
               <div class="vb-scene-meta">
