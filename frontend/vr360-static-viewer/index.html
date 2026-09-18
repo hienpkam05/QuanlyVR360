@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>VR360 Viewer (Static)</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div id="app" class="tour-viewer-page">
+    <div class="viewer-shell">
+      <main class="viewer-stage">
+        <div class="panorama-viewer" id="panorama-viewer">
+          <canvas id="pano-canvas" class="panorama-canvas"></canvas>
+          <svg class="area-landmark-layer" id="area-layer"></svg>
+          <div id="hotspot-layer"></div>
+          <div id="landmark-label-layer"></div>
+        </div>
+      </main>
+
+      <div class="viewer-pill" id="viewer-pill">
+        <div class="viewer-pill-cluster">
+          <button type="button" class="viewer-pill-btn viewer-pill-home" id="btn-home" aria-label="Về góc nhìn mặc định" title="Về mặc định">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12l9-9 9 9M5 10v10a1 1 0 0 0 1 1h4v-6h4v6h4a1 1 0 0 0 1-1V10" /></svg>
+          </button>
+          <button type="button" class="viewer-pill-btn" id="btn-autorotate" aria-label="Tự động xoay" title="Tự động xoay">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8" /><path d="M21 3v5h-5" /></svg>
+          </button>
+          <button type="button" class="viewer-pill-btn" id="btn-fullscreen" aria-label="Toàn màn hình" title="Toàn màn hình">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3" /></svg>
+          </button>
+          <button type="button" class="viewer-pill-btn" id="btn-prev" aria-label="Cảnh trước" title="Cảnh trước">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6" /></svg>
+          </button>
+          <button type="button" class="viewer-pill-btn" id="btn-next" aria-label="Cảnh tiếp theo" title="Cảnh tiếp theo">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6" /></svg>
+          </button>
+        </div>
+      </div>
+
+      <div class="scenes-sidebar-root" id="sidebar-root">
+        <div class="scenes-sidebar-trigger" id="sidebar-trigger" aria-hidden="true"></div>
+        <aside class="scenes-sidebar" id="scenes-sidebar" role="navigation" aria-label="Scene list">
+          <header class="scenes-sidebar-header" id="scenes-sidebar-header">Scenes</header>
+          <div class="scenes-sidebar-list" id="scenes-list"></div>
+          <footer class="scenes-sidebar-controls">
+            <button type="button" id="btn-sidebar-fullscreen" title="Toàn màn hình" aria-label="Toàn màn hình">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3" /></svg>
+            </button>
+            <button type="button" id="btn-sidebar-poi" title="Ẩn/hiện điểm POI" aria-label="Ẩn/hiện điểm POI">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z" /><circle cx="12" cy="10" r="3" /></svg>
+            </button>
+            <button type="button" id="btn-sidebar-autorotate" title="Tự động xoay" aria-label="Tự động xoay">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8" /><path d="M21 3v5h-5" /></svg>
+            </button>
+            <button type="button" id="btn-import-json" title="Nhập JSON" aria-label="Nhập JSON">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20V4M5 11l7-7 7 7" /></svg>
+            </button>
+          </footer>
+        </aside>
+        <div class="sidebar-toggle-tab" id="sidebar-toggle-tab">
+          <button type="button" class="sidebar-toggle-button" id="btn-sidebar-toggle" aria-label="Hiện/ẩn danh sách cảnh" title="Hiện/ẩn danh sách">
+            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M13.1714 12.0007L8.22168 7.05093L9.63589 5.63672L15.9999 12.0007L9.63589 18.3646L8.22168 16.9504L13.1714 12.0007Z" /></svg>
+          </button>
+        </div>
+      </div>
+
+      <div class="viewer-modal-layer" id="modal-layer"></div>
+      <div class="viewer-notification-layer" id="notif-layer" aria-live="polite"></div>
+
+      <div class="state-overlay" id="state-overlay">
+        <div class="state-box">
+          <h2 id="state-title">Đang tải…</h2>
+          <p id="state-message"></p>
+        </div>
+      </div>
+    </div>
+
+    <input type="file" id="json-file-input" accept="application/json" hidden />
+  </div>
+
+  <script type="module" src="viewer.js"></script>
+  <script src="data.js"></script>
+</body>
+</html>
