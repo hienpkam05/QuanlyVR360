@@ -112,6 +112,9 @@ let projectionState;
 let projectionRenderCount = 0;
 let componentUpdateCount = 0;
 let introRotationClock = 0;
+let dragVelocityX = 0;
+let dragVelocityY = 0;
+let lastMoveAt = 0;
 
 function emitViewChange() {
   emit('view-change', cameraController?.getRoundedView() || { lon: 0, lat: 0, fov: 75 });
@@ -187,13 +190,17 @@ function renderLoop() {
     mesh?.material.setProjectionState?.(projectionState?.state);
     needsProjection = true;
   }
-  if (cameraController.tick(now)) needsProjection = true;
+  if (cameraController.tick(now)) {
+    needsProjection = true;
+    if (cameraController.isInertiaActive()) lastInteractionAt = now;
+  }
   if (
     props.autoRotate &&
     hasImage.value &&
     !isDragging &&
     !isPointerOver &&
     !cameraController.isAnimating() &&
+    !cameraController.isInertiaActive() &&
     now - lastInteractionAt >= props.autoRotateDelay
   ) {
     cameraController.dragBy(-props.autoRotateSpeed * deltaSeconds / 0.12, 0);
@@ -215,6 +222,7 @@ function renderLoop() {
 
 function animateToView(targetView = {}, duration = 520) {
   markInteraction();
+  cameraController.stopInertia();
   return cameraController.animateTo(targetView, duration);
 }
 
@@ -285,6 +293,7 @@ function dispose() {
   resizeObserver?.disconnect();
   cancelAnimationFrame(animationId);
   cameraController?.cancelTween?.();
+  cameraController?.stopInertia?.();
   textureManager?.dispose();
   textureManager = null;
   projectionState = null;
@@ -322,6 +331,7 @@ function textureCandidates() {
 
 function loadTexture() {
   if (!mesh) return;
+  cameraController?.stopInertia?.();
   isTextureLoading.value = true;
   projectedHotspots.value = [];
   projectedInfoAreas.value = [];
@@ -456,6 +466,10 @@ function onPointerDown(event) {
   ) return;
   markInteraction();
   cameraController.cancelTween();
+  cameraController.stopInertia();
+  dragVelocityX = 0;
+  dragVelocityY = 0;
+  lastMoveAt = 0;
   isDragging = true;
   const pointerState = {
     id: event.pointerId,
@@ -483,6 +497,15 @@ function onPointerMove(event) {
       event.clientX - pointerDown.startX,
       event.clientY - pointerDown.startY,
     ) >= TAP_MOVEMENT_THRESHOLD;
+    const now = performance.now();
+    const dt = lastMoveAt ? (now - lastMoveAt) / 1000 : 0;
+    lastMoveAt = now;
+    if (dt > 0 && dt < 0.1) {
+      const instantVx = deltaX / dt;
+      const instantVy = deltaY / dt;
+      dragVelocityX = dragVelocityX * 0.7 + instantVx * 0.3;
+      dragVelocityY = dragVelocityY * 0.7 + instantVy * 0.3;
+    }
     cameraController.dragBy(deltaX, deltaY);
   } else if (activePointers.size >= 2) {
     const currentDistance = pointerDistance();
@@ -514,6 +537,15 @@ function finishPointerGesture(event, { cancelled = false } = {}) {
   gestureMode = 'idle';
   pinchDistance = 0;
   pointerDown = null;
+  if (!cancelled && !gestureHadMultiplePointers && finishedPointerDown && finishedPointerDown.moved) {
+    const timeSinceLastMove = performance.now() - lastMoveAt;
+    if (timeSinceLastMove < 80) {
+      cameraController.startInertia(dragVelocityX, dragVelocityY);
+    }
+  }
+  dragVelocityX = 0;
+  dragVelocityY = 0;
+  lastMoveAt = 0;
   if (!cancelled && !gestureHadMultiplePointers && finishedPointerDown && !finishedPointerDown.moved && hasImage.value) {
     emitPanoramaClick(event);
   }

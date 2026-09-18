@@ -70,6 +70,8 @@ export function normalizeScene(s, { generateId, resolveUrl } = {}) {
     _file: null,
     info: s.info || "",
     gps: s.gps || null,
+    autoTour: s.autoTour ?? 0,
+    autoTourDuration: s.autoTourDuration ?? 20,
     initialView: { lon: 0, lat: 0, fov: 75, ...(s.initialView || {}) },
     transition: s.transition
       ? { ...defaultTransition(), ...s.transition }

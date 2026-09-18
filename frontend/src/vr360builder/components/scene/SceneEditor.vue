@@ -104,6 +104,22 @@ function updateTransition(key, value) {
       <button class="vb-prop-btn vb-prop-btn-primary" @click="emit('save-view')">Lưu góc nhìn hiện tại</button>
     </BaseAccordion>
 
+    <!-- Auto Tour -->
+    <BaseAccordion title="Auto Tour" :open="!collapsed.autoTour" @toggle="emit('update:collapsed', 'autoTour', !collapsed.autoTour)">
+      <template #icon>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><polygon points="5 3 19 12 5 21 5 3" /></svg>
+      </template>
+      <div class="vb-prop-row">
+        <label class="vb-prop-label vb-hover-toggle-label"><input type="checkbox" :checked="scene.autoTour === 1" @change="update('autoTour', $event.target.checked ? 1 : 0)" /> Bật Auto Tour</label>
+      </div>
+      <template v-if="scene.autoTour === 1">
+        <div class="vb-prop-row" style="margin-bottom:0">
+          <label class="vb-prop-label">Thời gian hiển thị (giây)</label>
+          <input class="vb-prop-input vb-prop-input-mono" type="number" min="1" step="1" :value="scene.autoTourDuration ?? 20" @change="update('autoTourDuration', +$event.target.value)" />
+        </div>
+      </template>
+    </BaseAccordion>
+
     <!-- Transition -->
     <BaseAccordion title="Hiệu ứng chuyển cảnh" :open="!collapsed.transition" @toggle="emit('update:collapsed', 'transition', !collapsed.transition)">
       <template #icon>
