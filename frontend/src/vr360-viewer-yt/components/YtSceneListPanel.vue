@@ -1,5 +1,5 @@
 <script setup>
-import { computed } from 'vue';
+import { computed, onBeforeUnmount, ref, watch } from 'vue';
 
 const props = defineProps({
   scenes: { type: Array, default: () => [] },
@@ -18,10 +18,32 @@ const items = computed(() =>
     active: scene?.id === props.currentSceneId,
   })),
 );
+
+// Đóng panel khi bấm ra ngoài — cùng cách làm với YtSettingsMenu (document
+// pointerdown ở capture phase, vì panel nằm trong Teleport nên listener gắn
+// ở component cha bình thường sẽ không "thấy" click ở nơi khác trong DOM
+// gốc). Bỏ qua click trúng nút toggle (`.yt-btn--scenelist` ở YtControlBar,
+// một component anh em khác) để tránh đóng rồi mở lại ngay trong cùng thao
+// tác (pointerdown đóng panel, rồi click trên cùng nút lại bật lại).
+const rootEl = ref(null);
+function onDocPointer(event) {
+  if (!props.open) return;
+  if (event.target?.closest?.('.yt-btn--scenelist')) return;
+  if (rootEl.value && !rootEl.value.contains(event.target)) emit('close');
+}
+watch(
+  () => props.open,
+  (isOpen) => {
+    if (isOpen) document.addEventListener('pointerdown', onDocPointer, true);
+    else document.removeEventListener('pointerdown', onDocPointer, true);
+  },
+);
+onBeforeUnmount(() => document.removeEventListener('pointerdown', onDocPointer, true));
 </script>
 
 <template>
   <aside
+    ref="rootEl"
     class="yt-scene-panel yt-fadeable"
     :data-open="open ? 'true' : 'false'"
     role="dialog"

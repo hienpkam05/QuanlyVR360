@@ -14,7 +14,7 @@ const props = defineProps({
   tourTitle: { type: String, default: '' },
   autoHideMs: { type: Number, default: 3000 },
 });
-const emit = defineEmits(['command-result', 'adapter-error']);
+const emit = defineEmits(['command-result', 'adapter-error', 'theater-mode-change']);
 
 const adapter = shallowRef(null);
 const sceneState = shallowRef({
@@ -29,6 +29,14 @@ const poiHidden = shallowRef(false);
 const introState = shallowRef({ available: false, interactive: true });
 const errorState = shallowRef(null);
 const sceneListOpen = ref(false);
+// Chế độ rạp chiếu — chỉ là state UI, không đụng adapter/core; trang nhúng
+// (VR360ThanhCong.vue...) tự lắng nghe `theater-mode-change` để nới layout
+// (khác với fullscreen — dùng Fullscreen API của trình duyệt, giữ nguyên).
+const theaterMode = ref(false);
+function toggleTheater() {
+  theaterMode.value = !theaterMode.value;
+  emit('theater-mode-change', theaterMode.value);
+}
 const idle = ref(false);
 const teleportTarget = ref(null);
 
@@ -70,6 +78,12 @@ function onAutoAdvanceViewChange(view) {
   if (lastYaw === null) { lastYaw = yaw; return; }
   const delta = normalizeDelta(lastYaw, yaw);
   lastYaw = yaw;
+  // Người dùng đang tự kéo xoay (isInteracting) — vẫn cập nhật lastYaw để
+  // làm mốc đúng cho lần sau, nhưng KHÔNG cộng dồn vào cumulativeYaw. Trước
+  // đây cộng dồn MỌI view-change bất kể nguồn gốc (auto-rotate hay người
+  // dùng tự kéo), nên chỉ cần người dùng xoay xem cảnh 1 vòng bằng tay là
+  // bị tính nhầm thành "auto-rotate đã quay đủ 360°" và nhảy sang cảnh khác.
+  if (isInteracting.value) return;
   cumulativeYaw += Math.abs(delta);
   if (cumulativeYaw < AUTO_ADVANCE_THRESHOLD) return;
   advanceScheduled = true;
@@ -117,16 +131,63 @@ function scheduleIdle() {
 function onActivity() { scheduleIdle(); }
 function onSurfaceLeave() { idle.value = true; if (idleTimer) window.clearTimeout(idleTimer); idleTimer = 0; }
 
+// Đang kéo/chạm để xoay panorama → ẩn HUD NGAY (không chờ scheduleIdle),
+// và trong lúc kéo pointermove không được phép "đánh thức" HUD trở lại
+// (trước đây pointermove bắn liên tục khi kéo khiến idle không bao giờ
+// thành true — thanh điều khiển chình ình suốt lúc xoay).
+const isInteracting = ref(false);
+let pointerDownPos = null;
+let pointerDownTime = 0;
+const CLICK_MOVE_TOLERANCE = 5; // px
+const CLICK_MAX_DURATION = 250; // ms
+
+function onSurfacePointerDown(e) {
+  // Bấm trúng chính HUD (thanh điều khiển, settings, danh sách cảnh) —
+  // không tính là thao tác xoay canvas, chỉ đánh dấu hoạt động như cũ.
+  if (e.target?.closest?.('.yt-hud')) { onActivity(); return; }
+  pointerDownPos = { x: e.clientX, y: e.clientY };
+  pointerDownTime = Date.now();
+  isInteracting.value = true;
+  idle.value = true; // ẩn HUD ngay lập tức khi bắt đầu kéo
+  if (idleTimer) { window.clearTimeout(idleTimer); idleTimer = 0; }
+}
+
+function onSurfacePointerMove() {
+  if (isInteracting.value) return; // đang kéo xoay — giữ HUD ẩn, không reset timer
+  scheduleIdle();
+}
+
+function onSurfacePointerUp(e) {
+  const wasInteracting = isInteracting.value;
+  isInteracting.value = false;
+  scheduleIdle();
+  if (!wasInteracting || !pointerDownPos) return;
+  const dx = Math.abs(e.clientX - pointerDownPos.x);
+  const dy = Math.abs(e.clientY - pointerDownPos.y);
+  const dt = Date.now() - pointerDownTime;
+  pointerDownPos = null;
+  // Lệch chuột/ngón tay rất nhỏ + bấm nhanh → coi là CLICK (không phải kéo
+  // xoay) → bật/tắt tự động xoay, giống hành vi Play/Pause khi bấm vào
+  // video của Youtube.
+  if (dx < CLICK_MOVE_TOLERANCE && dy < CLICK_MOVE_TOLERANCE && dt < CLICK_MAX_DURATION) {
+    if (capabilities.value.autorotate && isIntroComplete.value) {
+      adapter.value?.toggleAutorotate();
+    }
+  }
+}
+
 function subscribeSurface(el) {
   if (!el) return () => {};
-  el.addEventListener('pointermove', onActivity, { passive: true });
-  el.addEventListener('pointerdown', onActivity, { passive: true });
+  el.addEventListener('pointerdown', onSurfacePointerDown, { passive: true });
+  el.addEventListener('pointermove', onSurfacePointerMove, { passive: true });
+  window.addEventListener('pointerup', onSurfacePointerUp, { passive: true });
   el.addEventListener('touchstart', onActivity, { passive: true });
   el.addEventListener('keydown', onActivity);
   el.addEventListener('mouseleave', onSurfaceLeave);
   return () => {
-    el.removeEventListener('pointermove', onActivity);
-    el.removeEventListener('pointerdown', onActivity);
+    el.removeEventListener('pointerdown', onSurfacePointerDown);
+    el.removeEventListener('pointermove', onSurfacePointerMove);
+    window.removeEventListener('pointerup', onSurfacePointerUp);
     el.removeEventListener('touchstart', onActivity);
     el.removeEventListener('keydown', onActivity);
     el.removeEventListener('mouseleave', onSurfaceLeave);
@@ -242,6 +303,7 @@ onBeforeUnmount(() => {
         :scene-name="currentSceneName"
         :scene-index="sceneState.currentSceneIndex"
         :total-scenes="sceneState.totalScenes"
+        :audio-playing="Boolean(audioState.playing)"
       />
 
       <YtSceneListPanel
@@ -264,9 +326,11 @@ onBeforeUnmount(() => {
         :available-view-modes="adapter?.getAvailableViewModes() || []"
         :fullscreen="fullscreen"
         :scene-list-open="sceneListOpen"
+        :theater-mode="theaterMode"
         :disabled="introState.available && !introState.interactive"
         @command-result="handleCommandResult"
         @toggle-scene-list="toggleSceneList"
+        @toggle-theater="toggleTheater"
       />
     </div>
   </Teleport>

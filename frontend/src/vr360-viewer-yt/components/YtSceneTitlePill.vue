@@ -4,15 +4,17 @@ defineProps({
   sceneName: { type: String, default: '' },
   sceneIndex: { type: Number, default: -1 },
   totalScenes: { type: Number, default: 0 },
+  audioPlaying: { type: Boolean, default: false },
 });
 </script>
 
 <template>
   <div class="yt-title-pill yt-fadeable" role="status" aria-live="polite">
-    <!-- <span class="yt-title-pill__tag">VR 360°</span> -->
+    <!-- Badge "đang nghe" — chỉ hiện khi thuyết minh đang phát, kiểu chấm
+         nhấp nháy + equalizer giống badge "ĐANG XEM" ở trang di tích. -->
+    <span v-if="audioPlaying" class="yt-audio-live">
+      <span class="yt-audio-live__bars" aria-hidden="true"><i></i><i></i><i></i></span>
+    </span>
     <span class="yt-title-pill__name">{{ sceneName || tourTitle || 'VR360' }}</span>
-    <!-- <span v-if="totalScenes > 1 && sceneIndex >= 0" class="yt-title-pill__meta">
-      {{ sceneIndex + 1 }} / {{ totalScenes }}
-    </span> -->
   </div>
 </template>

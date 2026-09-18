@@ -63,6 +63,34 @@
   font-size: 11px; color: var(--yt-text-mute);
 }
 
+/* Badge "đang nghe" — equalizer 3 vạch nhấp nhô + chữ, nền đỏ accent giống
+   badge "ĐANG XEM" ở trang di tích (thumb-live). Chỉ hiện khi audioState
+   .playing = true (xem YtSceneTitlePill / Vr360ViewerYtLayout). */
+.yt-audio-live {
+  display: inline-flex; align-items: center; gap: 6px;
+  flex: none;
+  background: var(--yt-accent);
+  color: #fff;
+  font-size: 10.5px; font-weight: 700; letter-spacing: .4px; text-transform: uppercase;
+  padding: 4px 9px 4px 7px;
+  border-radius: 999px;
+}
+.yt-audio-live__bars {
+  display: inline-flex; align-items: flex-end; gap: 2px;
+  width: 12px; height: 10px;
+}
+.yt-audio-live__bars i {
+  display: block; width: 2px; background: #fff; border-radius: 1px;
+  animation: yt-eq .9s ease-in-out infinite;
+}
+.yt-audio-live__bars i:nth-child(1) { height: 40%; animation-delay: -.6s; }
+.yt-audio-live__bars i:nth-child(2) { height: 100%; animation-delay: -.3s; }
+.yt-audio-live__bars i:nth-child(3) { height: 65%; animation-delay: 0s; }
+@keyframes yt-eq {
+  0%, 100% { transform: scaleY(.4); }
+  50% { transform: scaleY(1); }
+}
+
 /* ── Control bar (bottom) ── */
 .yt-control-bar {
   position: absolute;
@@ -127,8 +155,13 @@
   min-height: var(--yt-nav-height);
   padding: 0 4px;
 }
+/* Nền pill mờ bọc quanh từng cụm nút — giống cách Youtube nhóm icon lại
+   với nhau thay vì để rời trên nền gradient trơn. */
 .yt-control-row__group {
   display: flex; align-items: center; gap: 2px;
+  background: rgba(0, 0, 0, .32);
+  border-radius: 999px;
+  padding: 2px;
 }
 .yt-control-row__spacer { flex: 1; }
 .yt-control-row__time {
@@ -228,17 +261,19 @@
 .yt-settings {
   position: relative;
 }
+/* Popover gọn kiểu Youtube — chỉ nhãn ngắn + trạng thái, không mô tả dài
+   dòng, để không chiếm quá nhiều diện tích trên khung viewer nhỏ. */
 .yt-settings__menu {
   position: absolute;
   bottom: calc(100% + 10px);
   right: 0;
-  min-width: 260px;
+  width: 200px;
   background: var(--yt-panel-strong);
   backdrop-filter: blur(12px);
   border: 1px solid var(--yt-border);
   border-radius: var(--yt-radius);
   box-shadow: 0 12px 40px rgba(0,0,0,.6);
-  padding: 6px;
+  padding: 4px;
   opacity: 0; pointer-events: none;
   transform: translateY(4px);
   transition: opacity .15s ease, transform .15s ease;
@@ -248,15 +283,15 @@
 }
 .yt-settings__item {
   display: flex; align-items: center; justify-content: space-between;
-  gap: 12px;
+  gap: 10px;
   width: 100%;
-  padding: 10px 12px;
+  padding: 7px 9px;
   background: transparent;
   border: 0;
   border-radius: var(--yt-radius-sm);
   color: var(--yt-text);
   font: inherit;
-  font-size: 13px;
+  font-size: 12px;
   cursor: pointer;
   text-align: left;
 }
@@ -265,15 +300,12 @@
 .yt-settings__item__label {
   display: flex; flex-direction: column; align-items: flex-start; gap: 2px;
 }
-.yt-settings__item__label small {
-  color: var(--yt-text-mute); font-size: 11px;
-}
 .yt-settings__item__value {
-  color: var(--yt-text-dim); font-size: 12px;
+  color: var(--yt-text-dim); font-size: 11px;
   display: inline-flex; align-items: center; gap: 6px;
 }
 .yt-settings__item__toggle {
-  width: 34px; height: 20px;
+  width: 28px; height: 16px;
   background: rgba(255,255,255,.15);
   border-radius: 999px;
   position: relative;
@@ -283,20 +315,20 @@
 .yt-settings__item__toggle::after {
   content: '';
   position: absolute; top: 2px; left: 2px;
-  width: 16px; height: 16px;
+  width: 12px; height: 12px;
   background: #fff;
   border-radius: 50%;
   transition: left .18s ease;
 }
 .yt-settings__item[data-on="true"] .yt-settings__item__toggle { background: var(--yt-accent); }
-.yt-settings__item[data-on="true"] .yt-settings__item__toggle::after { left: 16px; }
+.yt-settings__item[data-on="true"] .yt-settings__item__toggle::after { left: 12px; }
 
 .yt-settings__divider {
-  height: 1px; background: var(--yt-border); margin: 4px 8px;
+  height: 1px; background: var(--yt-border); margin: 3px 6px;
 }
 .yt-settings__section {
-  padding: 8px 12px 4px;
-  font-size: 10px; letter-spacing: 2px; text-transform: uppercase;
+  padding: 6px 9px 3px;
+  font-size: 9px; letter-spacing: 1.5px; text-transform: uppercase;
   color: var(--yt-text-mute);
 }
 
@@ -408,97 +440,62 @@
   .yt-control-row__time { display: none; }
   .yt-volume:hover .yt-volume__slider,
   .yt-volume:focus-within .yt-volume__slider { width: 0; }
+
+  /* Thừa chức năng trên màn hẹp: chế độ rạp chiếu (mở rộng khung trong
+     trang — không có ý nghĩa khi trang đã full-width trên mobile) và
+     danh sách cảnh (panel riêng khó thao tác trên màn nhỏ) — ẩn cả 2. */
+  .yt-btn--theater,
+  .yt-btn--scenelist {
+    display: none;
+  }
+
+  /* Settings popover: nội dung nhiều mục (toggle, chế độ xem) từng bị
+     cắt/tràn trên khung VR thấp của mobile. Giới hạn lại theo viewport
+     (ngắn hơn 2/3 so với trước, khớp khung player cũng thu ngắn — xem
+     .scvr-player trong VR360ThanhCong.vue) và cho cuộn dọc nội bộ nếu
+     vẫn cao hơn khoảng trống. */
+  .yt-settings__menu {
+    width: min(240px, calc(100vw - 24px));
+    max-height: calc(64vh * 2 / 3);
+    overflow-y: auto;
+  }
 }
 
-/* ── Intro overlay: Youtube-preview-style trên mobile ──
+/* ── Intro overlay trên mobile ──
    Core viewer render <IntroOverlay> với card có brand/title/subtitle/button.
-   Trên mobile, ẩn card content, chỉ giữ nút — biến thành nút play tròn
-   giữa màn hình giống thumbnail preview của Youtube.
-   Selector chi tiết + !important vì đè lên intro.css. */
+   Trên mobile vẫn giữ đủ title/subtitle, chỉ thu nhỏ cỡ chữ + khoảng cách
+   cho vừa khung hẹp, và rút gọn nhãn nút xuống còn "Khám phá" + icon mũi
+   tên mặc định của dự án — không custom icon riêng để tránh trùng hình
+   dạng logo bên thứ ba. */
 @media (max-width: 640px) {
   .tour-viewer-page .viewer-intro-card {
     background: transparent !important;
     box-shadow: none !important;
     padding: 0 !important;
-    max-width: none !important;
+    max-width: min(22rem, 88vw) !important;
     min-width: 0 !important;
     display: flex !important;
+    flex-direction: column !important;
     align-items: center !important;
     justify-content: center !important;
-    animation: none !important;
+    gap: 8px !important;
   }
-  .tour-viewer-page .viewer-intro-brand,
-  .tour-viewer-page #viewer-intro-title,
+  .tour-viewer-page .viewer-intro-brand {
+    font-size: 0.5625rem !important;
+    margin: 0 !important;
+  }
+  .tour-viewer-page #viewer-intro-title {
+    font-size: clamp(1.25rem, 6.5vw, 1.625rem) !important;
+    line-height: 1.15 !important;
+    margin: 0 !important;
+    max-width: 100% !important;
+  }
   .tour-viewer-page .viewer-intro-subtitle {
-    display: none !important;
+    font-size: clamp(0.75rem, 3.2vw, 0.8125rem) !important;
+    line-height: 1.4 !important;
+    margin: 0 !important;
+    max-width: 100% !important;
   }
-  .tour-viewer-page .viewer-intro-start {
-    position: relative;
-    /* Youtube app-icon style, half size — gọn, vẫn nổi bật nhờ đỏ tươi. */
-    width: 42px !important;
-    height: 30px !important;
-    min-height: 0 !important;
-    padding: 0 !important;
-    border-radius: 8px !important;
-    background: #FF0033 !important;
-    box-shadow:
-      0 5px 16px rgba(255, 0, 51, .45),
-      0 2px 6px rgba(0, 0, 0, .35) !important;
-    display: flex !important;
-    align-items: center !important;
-    justify-content: center !important;
-    gap: 0 !important;
-    transition: transform .18s ease, background .18s ease, box-shadow .18s ease !important;
-    /* Heartbeat pulse — subtle "còn sống" scale để thu hút mắt. */
-    animation: yt-intro-heartbeat 2s ease-in-out infinite;
-  }
-  .tour-viewer-page .viewer-intro-start:hover:not(:disabled),
-  .tour-viewer-page .viewer-intro-start:active:not(:disabled) {
-    background: #E60028 !important;
-    transform: scale(1.08) !important;
-    box-shadow:
-      0 7px 20px rgba(255, 0, 51, .6),
-      0 3px 8px rgba(0, 0, 0, .4) !important;
-    animation: none;
-  }
-  .tour-viewer-page .viewer-intro-start:disabled {
-    animation: none;
-  }
-  /* Ring pinging ra ngoài — dùng box-shadow spread, không cần thêm DOM element.
-     Pseudo-element (::before đã dùng cho tam giác play), nên đặt lên phần tử ::after. */
-  .tour-viewer-page .viewer-intro-start::after {
-    content: '';
-    position: absolute;
-    inset: 0;
-    border-radius: inherit;
-    background: #FF0033;
-    z-index: -1;
-    animation: yt-intro-ring 2s ease-out infinite;
-    pointer-events: none;
-  }
-  .tour-viewer-page .viewer-intro-start:hover:not(:disabled)::after,
-  .tour-viewer-page .viewer-intro-start:disabled::after { animation: none; opacity: 0; }
-
-  .tour-viewer-page .viewer-intro-start span { display: none !important; }
-  .tour-viewer-page .viewer-intro-start svg { display: none !important; }
-  .tour-viewer-page .viewer-intro-start::before {
-    content: '';
-    width: 0; height: 0;
-    border-left: 10px solid #ffffff;
-    border-top: 6px solid transparent;
-    border-bottom: 6px solid transparent;
-    margin-left: 3px;
-  }
-}
-
-/* Intro play button attention animations (outside media query — keyframes
-   are global, but only used from inside the mobile block above). */
-@keyframes yt-intro-heartbeat {
-  0%, 100% { transform: scale(1); }
-  50%      { transform: scale(1.06); }
-}
-@keyframes yt-intro-ring {
-  0%   { transform: scale(1);    opacity: .55; }
-  70%  { transform: scale(1.9);  opacity: 0; }
-  100% { transform: scale(1.9);  opacity: 0; }
+  .tour-viewer-page .viewer-intro-start-label-full { display: none !important; }
+  .tour-viewer-page .viewer-intro-start-label-short { display: inline !important; }
 }
