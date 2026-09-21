@@ -70,7 +70,7 @@ const props = defineProps({
   },
 });
 
-const emit = defineEmits(['panorama-click', 'hotspot-click', 'hotspot-dblclick', 'view-change', 'texture-ready']);
+const emit = defineEmits(['panorama-click', 'hotspot-click', 'hotspot-dblclick', 'view-change', 'texture-ready', 'texture-error']);
 
 const container = ref(null);
 const projectedHotspots = ref([]);
@@ -375,7 +375,7 @@ function initThree() {
     getTransition: () => props.transition,
     hasPrimaryImage: () => Boolean(props.imageUrl),
     onLoadingChange: (value) => { isTextureLoading.value = value; },
-    onError: (value) => { textureError.value = value; },
+    onError: (value) => { textureError.value = value; if (value) emit('texture-error', value); },
     onApplied: () => {
       needsProjection = true;
       resize();

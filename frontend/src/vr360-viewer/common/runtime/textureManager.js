@@ -21,9 +21,11 @@ export function createTextureManager({ scene, mesh, renderer, getTransition, has
     transitionTexture = null;
   }
 
+  const MAX_CACHE = 6;
+
   function cacheTexture(url, loadedTexture) {
     cache.set(url, loadedTexture);
-    while (cache.size > 3) {
+    while (cache.size > MAX_CACHE) {
       const eviction = [...cache.entries()].find(([, value]) => value !== texture && value !== transitionTexture);
       if (!eviction) break;
       cache.delete(eviction[0]);
@@ -83,6 +85,24 @@ export function createTextureManager({ scene, mesh, renderer, getTransition, has
     const cachedTexture = cache.get(imageUrl);
     if (cachedTexture) {
       applyTexture(cachedTexture, generation);
+      return;
+    }
+    const inflight = pending.get(imageUrl);
+    if (inflight) {
+      inflight.then((loaded) => {
+        if (disposed || generation !== loadGeneration) return;
+        if (loaded) {
+          applyTexture(loaded, generation);
+        } else if (candidateIndex + 1 < candidates.length) {
+          load(candidates, candidateIndex + 1, generation);
+        } else {
+          mesh.material.map = null;
+          mesh.material.color.set(0x111827);
+          mesh.material.needsUpdate = true;
+          onLoadingChange(false);
+          onError('Could not load panorama image.');
+        }
+      });
       return;
     }
     const loader = new THREE.TextureLoader();

@@ -73,6 +73,11 @@ const visitedSceneIds = ref(new Set());
 const poiHidden = ref(false);
 const activePointPopup = ref(null);
 const isTransitioning = ref(false);
+const isSceneLoading = ref(false);
+const showSceneLoadingUI = ref(false);
+const isInitialPanoramaReady = ref(false);
+const initialPanoramaFailed = ref(false);
+let sceneLoadingShowTimer = null;
 const errorMessage = ref("");
 const viewState = ref({ lon: 0, lat: 0, fov: 75 });
 const autoRotate = ref(props.options.autoRotate ?? true);
@@ -230,6 +235,8 @@ async function applyTour(payload) {
   if (!hasCompletedInitialIntro.value) {
     panorama.value?.resetProjectionIntro?.();
     introPlayed.value = false;
+    isInitialPanoramaReady.value = false;
+    initialPanoramaFailed.value = false;
     setIntroPhase(INTRO_PHASE.WAITING_TO_START);
     hasStartedTourAudioForIntro = false;
   }
@@ -260,6 +267,17 @@ async function applyTour(payload) {
   }
 }
 
+function setSceneLoading(loading) {
+  isSceneLoading.value = loading;
+  if (loading) {
+    sceneLoadingShowTimer = setTimeout(() => { showSceneLoadingUI.value = true; }, 200);
+  } else {
+    clearTimeout(sceneLoadingShowTimer);
+    sceneLoadingShowTimer = null;
+    showSceneLoadingUI.value = false;
+  }
+}
+
 async function goToScene(sceneId, options = {}) {
   const target = scenes.value.find((scene) => scene.id === sceneId);
   if (
@@ -271,6 +289,7 @@ async function goToScene(sceneId, options = {}) {
   const generation = ++navigationGeneration;
   const previousSceneId = activeSceneId.value;
   isTransitioning.value = true;
+  setSceneLoading(true);
   activePointPopup.value = null;
   if (activeBottomPanel.value === 'view') activeBottomPanel.value = null;
   try {
@@ -279,6 +298,7 @@ async function goToScene(sceneId, options = {}) {
     publishCoreEvent("load-progress", progressPayload);
     audioManager.stop(AUDIO_SCOPE.POI);
     await panorama.value?.preloadTexture?.(target.imageSources?.[0]);
+    setSceneLoading(false);
     if (preloadScheduler.value && scenes.value.length) {
       preloadScheduler.value.schedule(scenes.value, target.id, 5);
     }
@@ -313,6 +333,7 @@ async function goToScene(sceneId, options = {}) {
     error("scene-change", cause);
   } finally {
     isTransitioning.value = false;
+    setSceneLoading(false);
   }
 }
 
@@ -370,7 +391,7 @@ function blockIntroKeyboard(event) {
 }
 
 function startIntro() {
-  if (hasCompletedInitialIntro.value || introPlayed.value || !activeScene.value) return;
+  if (hasCompletedInitialIntro.value || introPlayed.value || !activeScene.value || !isInitialPanoramaReady.value) return;
   introPlayed.value = true;
   publishCoreEvent('intro-start', getIntroState());
   setIntroPhase(INTRO_PHASE.CAMERA_MOVE);
@@ -398,14 +419,20 @@ function completeIntro() {
 }
 
 function onPanoramaTextureReady() {
-  // Do not compete with the critical first texture load. Start the initial
-  // background queue only after PanoramaViewer confirms that the active
-  // scene texture is ready.
+  if (!isInitialPanoramaReady.value && !hasCompletedInitialIntro.value && !introPlayed.value) {
+    isInitialPanoramaReady.value = true;
+  }
   if (preloadScheduler.value && scenes.value.length) {
     preloadScheduler.value.schedule(scenes.value, activeSceneId.value, 3);
   }
   if (hasCompletedInitialIntro.value || introPlayed.value) return;
   introCamera.prepare(intro.getInitialFrame(sceneViewForViewer()));
+}
+
+function onPanoramaTextureError() {
+  if (!hasCompletedInitialIntro.value && !introPlayed.value) {
+    initialPanoramaFailed.value = true;
+  }
 }
 
 function stopAutoTour() {
@@ -685,6 +712,12 @@ function getIntroState() {
 function dispose() {
   stopAutoTour();
   navigationGeneration += 1;
+  clearTimeout(sceneLoadingShowTimer);
+  sceneLoadingShowTimer = null;
+  isSceneLoading.value = false;
+  showSceneLoadingUI.value = false;
+  isInitialPanoramaReady.value = false;
+  initialPanoramaFailed.value = false;
   preloadScheduler.value?.dispose();
   intro.cancel();
   mobileViewportQuery?.removeEventListener?.('change', updateMobileViewport);
@@ -790,17 +823,28 @@ defineExpose({
           hotspot-display-mode="viewer"
           @hotspot-click="onHotspotClick"
           @texture-ready="onPanoramaTextureReady"
+          @texture-error="onPanoramaTextureError"
           @view-change="onViewChange"
         />
       </main>
 
       <div class="viewer-overlay" aria-hidden="true"></div>
+      <Transition name="scene-loading-fade">
+        <div v-if="showSceneLoadingUI" class="viewer-scene-loading" aria-live="polite">
+          <div class="viewer-scene-loading-card">
+            <span class="viewer-scene-loading-spinner" aria-hidden="true"></span>
+            <span class="viewer-scene-loading-text">Đang tải cảnh...</span>
+          </div>
+        </div>
+      </Transition>
       <Transition name="viewer-intro-fade" @after-leave="completeIntro">
         <IntroOverlay
           v-if="introPhase !== INTRO_PHASE.INTERACTIVE && introPhase !== INTRO_PHASE.FINISHING"
           :title="runtimeTour.title"
           :brand="options.brand || ''"
           :starting="introPhase !== INTRO_PHASE.WAITING_TO_START"
+          :ready="isInitialPanoramaReady && !initialPanoramaFailed"
+          :error="initialPanoramaFailed"
           @start="startIntro"
         />
       </Transition>
