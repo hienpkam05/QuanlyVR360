@@ -54,7 +54,7 @@ const props = defineProps({
   },
   autoRotateSpeed: {
     type: Number,
-    default: 2.5,
+    default: 6,
   },
   transition: {
     type: Object,

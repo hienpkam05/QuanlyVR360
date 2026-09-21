@@ -191,7 +191,7 @@ defineExpose({
     :point-hotspot-logo="pointHotspotLogo"
     :auto-rotate="options.autoRotate ?? false"
     :auto-rotate-delay="options.autoRotateDelay ?? 3000"
-    :auto-rotate-speed="options.autoRotateSpeed ?? 3"
+    :auto-rotate-speed="options.autoRotateSpeed ?? 6"
     hotspot-display-mode="viewer"
     @hotspot-click="onHotspotClick"
     @view-change="$emit('view-change', $event)"
