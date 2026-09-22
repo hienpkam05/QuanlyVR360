@@ -6,14 +6,14 @@ export const VIEW_MODE = Object.freeze({
 
 const MODE_FOV = Object.freeze({
   [VIEW_MODE.FIT_EYES]: 70,
-  [VIEW_MODE.MEGA_VIEW]: 100,
+  [VIEW_MODE.MEGA_VIEW]: 120,
 });
 
 function clampFov(value) {
-  return Math.min(120, Math.max(30, Number(value) || 75));
+  return Math.min(120, Math.max(30, Number(value) || 85));
 }
 
-export function createViewModeManager(initialNormalFov = 75) {
+export function createViewModeManager(initialNormalFov = 85) {
   let mode = VIEW_MODE.NORMAL;
   let normalFov = clampFov(initialNormalFov);
 

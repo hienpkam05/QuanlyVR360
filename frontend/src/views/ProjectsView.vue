@@ -13,6 +13,7 @@ const locations = ref([]);
 const versions = ref([]);
 const selectedProjectId = ref('');
 const selectedLocationId = ref('');
+const selectedVersionId = ref('');
 const loading = ref(false);
 const loadingLocations = ref(false);
 const loadingVersions = ref(false);
@@ -48,8 +49,8 @@ const editForm = reactive({
   longitude: '',
 });
 
-const selectedProject = computed(() => projects.value.find((project) => project.id === selectedProjectId.value) || null);
-const selectedLocation = computed(() => locations.value.find((location) => location.id === selectedLocationId.value) || null);
+const selectedProject = computed(() => projects.value.find((project) => String(project.id) === String(selectedProjectId.value)) || null);
+const selectedLocation = computed(() => locations.value.find((location) => String(location.id) === String(selectedLocationId.value)) || null);
 
 function normalizeResults(data) {
   if (Array.isArray(data)) return data;
@@ -77,6 +78,11 @@ function versionLabel(version) {
   return `v${version.version_number}${label}`;
 }
 
+function isPublishedVersion(version) {
+  const status = String(version?.status || '').trim().toLowerCase();
+  return status === 'published' || status === 'đã xuất bản' || status === 'da xuat ban';
+}
+
 function scheduleMessageAutoDismiss() {
   clearTimeout(messageTimer);
   if (!errorMessage.value && !successMessage.value) return;
@@ -102,8 +108,9 @@ async function loadProjects() {
 }
 
 async function selectProject(project) {
-  selectedProjectId.value = project.id;
+  selectedProjectId.value = String(project.id);
   selectedLocationId.value = '';
+  selectedVersionId.value = '';
   locations.value = [];
   versions.value = [];
   mobileTab.value = 'locations'; // Chuyển tab trên mobile
@@ -125,7 +132,8 @@ async function loadLocations(projectId = selectedProjectId.value) {
 }
 
 async function selectLocation(location) {
-  selectedLocationId.value = location.id;
+  selectedLocationId.value = String(location.id);
+  selectedVersionId.value = '';
   versions.value = [];
   mobileTab.value = 'versions'; // Chuyển tab trên mobile
   await loadVersionsForLocation(location.id);
@@ -291,7 +299,7 @@ async function submitEdit() {
       await updateProject(editForm.id, payload);
       successMessage.value = 'Đã cập nhật dự án.';
       await loadProjects();
-      if (selectedProjectId.value === editForm.id) await loadLocations();
+      if (String(selectedProjectId.value) === String(editForm.id)) await loadLocations();
     } else if (editForm.type === 'location') {
       payload.latitude = editForm.latitude === '' ? null : Number(editForm.latitude);
       payload.longitude = editForm.longitude === '' ? null : Number(editForm.longitude);
@@ -301,7 +309,7 @@ async function submitEdit() {
       }
       successMessage.value = 'Đã cập nhật địa điểm.';
       await loadLocations();
-      if (selectedLocationId.value === editForm.id) await loadVersionsForLocation();
+      if (String(selectedLocationId.value) === String(editForm.id)) await loadVersionsForLocation();
     } else if (editForm.type === 'create_location') {
       await submitLocation();
       return;
@@ -316,11 +324,11 @@ async function removeProject(project) {
   const ok = window.confirm(`Xác nhận xóa mềm dự án "${project.name}"?`);
   if (!ok) return;
   errorMessage.value = '';
-  successMessage.value = '';
+    successMessage.value = '';
   try {
     await deleteProject(project.id);
     successMessage.value = 'Đã xóa dự án.';
-    if (selectedProjectId.value === project.id) {
+    if (String(selectedProjectId.value) === String(project.id)) {
       selectedProjectId.value = '';
       selectedLocationId.value = '';
       locations.value = [];
@@ -337,11 +345,11 @@ async function removeLocation(location) {
   const ok = window.confirm(`Xác nhận xóa mềm địa điểm "${location.name}"?`);
   if (!ok) return;
   errorMessage.value = '';
-  successMessage.value = '';
+    successMessage.value = '';
   try {
     await deleteLocation(location.id);
     successMessage.value = 'Đã xóa địa điểm.';
-    if (selectedLocationId.value === location.id) {
+    if (String(selectedLocationId.value) === String(location.id)) {
       selectedLocationId.value = '';
       versions.value = [];
       mobileTab.value = 'locations';
@@ -438,16 +446,29 @@ function openViewer(version) {
 }
 
 function openBuilder(version = null) {
-  if (version?.status === 'published') {
+  const projectId = selectedProjectId.value ? String(selectedProjectId.value) : '';
+  const locationId = version?.location
+    ? String(version.location)
+    : selectedLocationId.value
+      ? String(selectedLocationId.value)
+      : '';
+  const versionId = version?.id ? String(version.id) : '';
+
+  if (!projectId || !locationId || !versionId) {
+    errorMessage.value = 'Không xác định được project, location hoặc version cần chỉnh sửa.';
+    return;
+  }
+  if (isPublishedVersion(version)) {
     errorMessage.value = 'Phiên bản đã xuất bản không thể chỉnh sửa trực tiếp. Vui lòng mở bản nháp.';
     return;
   }
+  selectedVersionId.value = versionId;
   router.push({
-    path: '/builder',
+    name: 'Builder',
     query: {
-      project: selectedProjectId.value || undefined,
-      location: selectedLocationId.value || undefined,
-      version: version?.id || undefined,
+      project: projectId,
+      location: locationId,
+      version: versionId,
     },
   });
 }
@@ -539,7 +560,7 @@ onBeforeUnmount(() => {
           v-for="project in projects"
           :key="project.id"
           class="flow-card"
-          :class="{ active: project.id === selectedProjectId }"
+          :class="{ active: String(project.id) === String(selectedProjectId) }"
           role="button"
           tabindex="0"
           @click="selectProject(project)"
@@ -588,7 +609,7 @@ onBeforeUnmount(() => {
           v-for="location in locations"
           :key="location.id"
           class="flow-card"
-          :class="{ active: location.id === selectedLocationId }"
+          :class="{ active: String(location.id) === String(selectedLocationId) }"
           role="button"
           tabindex="0"
           @click="selectLocation(location)"
@@ -645,8 +666,9 @@ onBeforeUnmount(() => {
             <button
               class="secondary-action-btn"
               type="button"
-              :disabled="version.status === 'published'"
-              @click="openBuilder(version)"
+              :aria-disabled="isPublishedVersion(version) ? 'true' : 'false'"
+              :title="isPublishedVersion(version) ? 'Version published không thể chỉnh sửa' : 'Chỉnh sửa version'"
+              @click.stop="openBuilder(version)"
             >
               Chỉnh Sửa
             </button>

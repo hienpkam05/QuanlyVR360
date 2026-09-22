@@ -9,6 +9,7 @@ export function createTextureManager({ scene, mesh, renderer, getTransition, has
   let loadGeneration = 0;
   let disposed = false;
   const cache = new Map();
+  const pending = new Map();
 
   function clearTransition() {
     if (transitionMesh) {
@@ -20,9 +21,11 @@ export function createTextureManager({ scene, mesh, renderer, getTransition, has
     transitionTexture = null;
   }
 
+  const MAX_CACHE = 6;
+
   function cacheTexture(url, loadedTexture) {
     cache.set(url, loadedTexture);
-    while (cache.size > 3) {
+    while (cache.size > MAX_CACHE) {
       const eviction = [...cache.entries()].find(([, value]) => value !== texture && value !== transitionTexture);
       if (!eviction) break;
       cache.delete(eviction[0]);
@@ -40,7 +43,9 @@ export function createTextureManager({ scene, mesh, renderer, getTransition, has
     transitionMesh = new THREE.Mesh(geometry, material);
     transitionMesh.renderOrder = 2;
     transitionTexture = oldTexture;
-    transitionDuration = Math.max(0, Number(transition?.duration) || 650);
+    transitionDuration = transition?.enabled === false || transition?.effect === 'none'
+      ? 0
+      : Math.min(1200, Math.max(800, Number(transition?.duration) || 1000));
     transitionStartedAt = performance.now();
     scene.add(transitionMesh);
   }
@@ -82,6 +87,24 @@ export function createTextureManager({ scene, mesh, renderer, getTransition, has
       applyTexture(cachedTexture, generation);
       return;
     }
+    const inflight = pending.get(imageUrl);
+    if (inflight) {
+      inflight.then((loaded) => {
+        if (disposed || generation !== loadGeneration) return;
+        if (loaded) {
+          applyTexture(loaded, generation);
+        } else if (candidateIndex + 1 < candidates.length) {
+          load(candidates, candidateIndex + 1, generation);
+        } else {
+          mesh.material.map = null;
+          mesh.material.color.set(0x111827);
+          mesh.material.needsUpdate = true;
+          onLoadingChange(false);
+          onError('Could not load panorama image.');
+        }
+      });
+      return;
+    }
     const loader = new THREE.TextureLoader();
     loader.setCrossOrigin('anonymous');
     loader.load(imageUrl, (loadedTexture) => {
@@ -102,7 +125,8 @@ export function createTextureManager({ scene, mesh, renderer, getTransition, has
 
   function preload(url) {
     if (!url || cache.has(url)) return Promise.resolve(cache.get(url) || null);
-    return new Promise((resolve) => {
+    if (pending.has(url)) return pending.get(url);
+    const request = new Promise((resolve) => {
       new THREE.TextureLoader().load(url, (loaded) => {
         if (disposed) { loaded.dispose(); resolve(null); return; }
         loaded.colorSpace = THREE.SRGBColorSpace;
@@ -113,6 +137,9 @@ export function createTextureManager({ scene, mesh, renderer, getTransition, has
         resolve(loaded);
       }, undefined, () => resolve(null));
     });
+    pending.set(url, request);
+    request.finally(() => pending.delete(url));
+    return request;
   }
 
   function updateTransition() {
@@ -130,6 +157,7 @@ export function createTextureManager({ scene, mesh, renderer, getTransition, has
     clearTransition();
     cache.forEach((cachedTexture) => cachedTexture.dispose());
     cache.clear();
+    pending.clear();
   }
 
   return { load, preload, updateTransition, dispose };

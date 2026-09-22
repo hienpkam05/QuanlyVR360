@@ -13,7 +13,7 @@ defineProps({
       <img :src="navArrowImg" alt="" draggable="false" />
     </span>
     <span v-if="thumbnail" class="viewer-nav-default-preview">
-      <img :src="thumbnail" alt="" draggable="false" />
+      <img :src="thumbnail" alt="" draggable="false" crossorigin="anonymous" />
       <span v-if="sceneName" class="viewer-nav-default-preview-name">{{ sceneName }}</span>
     </span>
   </span>

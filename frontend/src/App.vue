@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref, watch } from "vue";
+import { computed, onMounted, ref, watch } from "vue";
 import { RouterLink, RouterView, useRoute, useRouter } from "vue-router";
 import { useAuthStore } from "./stores/authStore";
 
@@ -43,6 +43,12 @@ function logout() {
   auth.logout();
   router.push("/login");
 }
+
+onMounted(() => {
+  if (auth.isAuthenticated) {
+    auth.ensureSession();
+  }
+});
 </script>
 
 <template>

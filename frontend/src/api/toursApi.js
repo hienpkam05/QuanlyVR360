@@ -74,3 +74,4 @@ export function exportVersion(locationId, versionId) {
 export function importVersion(locationId, payload) {
   return http.post(`/api/locations/${locationId}/versions/import/`, payload);
 }
+// 

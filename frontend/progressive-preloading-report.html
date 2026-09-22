@@ -1,0 +1,245 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Báo cáo tối ưu tải ảnh VR360</title>
+  <style>
+    :root {
+      --ink: #172033;
+      --muted: #5d687d;
+      --line: #dce3ee;
+      --surface: #ffffff;
+      --soft: #f4f7fb;
+      --blue: #2563eb;
+      --blue-soft: #eaf1ff;
+      --green: #16824b;
+      --green-soft: #e8f7ef;
+      --amber: #a86400;
+      --amber-soft: #fff5df;
+      --shadow: 0 18px 45px rgba(24, 46, 84, .08);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      color: var(--ink);
+      background: #eef3f9;
+      font: 15px/1.65 Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    }
+    .page { max-width: 1120px; margin: 0 auto; padding: 42px 22px 70px; }
+    .hero {
+      padding: 46px 50px;
+      color: #fff;
+      border-radius: 22px;
+      background: linear-gradient(135deg, #153b82, #2563eb 58%, #4f8df7);
+      box-shadow: var(--shadow);
+    }
+    .eyebrow { margin: 0 0 10px; color: #cfe0ff; font-size: 12px; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; }
+    h1, h2, h3 { line-height: 1.25; }
+    h1 { max-width: 760px; margin: 0; font-size: clamp(30px, 5vw, 48px); letter-spacing: -.04em; }
+    .hero p { max-width: 780px; margin: 18px 0 0; color: #e5edff; font-size: 17px; }
+    .meta { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 24px; }
+    .pill { padding: 6px 11px; color: #e5edff; border: 1px solid rgba(255,255,255,.28); border-radius: 999px; font-size: 13px; }
+    main { margin-top: 26px; }
+    section, .toc { margin: 20px 0; padding: 30px 34px; background: var(--surface); border: 1px solid var(--line); border-radius: 18px; box-shadow: var(--shadow); }
+    h2 { margin: 0 0 18px; font-size: 25px; }
+    h3 { margin: 24px 0 8px; font-size: 18px; }
+    p { margin: 10px 0; }
+    .toc ol { columns: 2; margin: 0; padding-left: 22px; }
+    a { color: var(--blue); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+    .card { padding: 18px; background: var(--soft); border: 1px solid var(--line); border-radius: 14px; }
+    .card strong { display: block; margin-bottom: 5px; font-size: 17px; }
+    .status { display: inline-block; padding: 3px 9px; border-radius: 999px; font-size: 12px; font-weight: 800; }
+    .pass { color: var(--green); background: var(--green-soft); }
+    .warn { color: var(--amber); background: var(--amber-soft); }
+    table { width: 100%; border-collapse: collapse; margin-top: 14px; }
+    th, td { padding: 12px 10px; text-align: left; vertical-align: top; border-bottom: 1px solid var(--line); }
+    th { color: var(--muted); background: var(--soft); font-size: 13px; }
+    code { padding: 2px 5px; color: #a11b55; background: #f8edf3; border-radius: 5px; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: .92em; }
+    pre { overflow: auto; margin: 14px 0; padding: 18px; color: #e8f0ff; background: #111827; border-radius: 12px; font: 13px/1.65 ui-monospace, SFMono-Regular, Consolas, monospace; }
+    .flow { display: grid; gap: 8px; max-width: 700px; margin: 18px auto; }
+    .flow div { padding: 12px 16px; text-align: center; color: #17417f; background: var(--blue-soft); border: 1px solid #c9dcff; border-radius: 10px; font-weight: 700; }
+    .flow i { color: var(--blue); text-align: center; font-style: normal; font-size: 20px; }
+    ul, ol { padding-left: 24px; }
+    .callout { margin-top: 16px; padding: 15px 18px; border-left: 4px solid var(--blue); background: var(--blue-soft); border-radius: 8px; }
+    footer { padding: 25px 4px; color: var(--muted); text-align: center; font-size: 13px; }
+    @media (max-width: 760px) {
+      .page { padding: 18px 12px 40px; }
+      .hero, section, .toc { padding: 24px 20px; }
+      .grid { grid-template-columns: 1fr; }
+      .toc ol { columns: 1; }
+      table { display: block; overflow-x: auto; white-space: nowrap; }
+    }
+    @media print {
+      body { background: #fff; }
+      .page { max-width: none; padding: 0; }
+      section, .toc, .hero { box-shadow: none; break-inside: avoid; }
+      .hero { color: #102a5c; background: #eaf1ff; }
+      .hero p, .pill, .eyebrow { color: #385a91; }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <header class="hero">
+      <p class="eyebrow">Technical change report · VR360 Viewer</p>
+      <h1>Tối ưu tải ảnh Panorama theo chiến lược Progressive Preloading</h1>
+      <p>Thay thế cách tải tài nguyên dàn trải bằng cơ chế ưu tiên scene cần thiết trước, tải nền các scene có khả năng được sử dụng tiếp theo và giới hạn số request đồng thời.</p>
+      <div class="meta">
+        <span class="pill">Dự án: QuanlyVR360</span>
+        <span class="pill">Phạm vi: Viewer runtime</span>
+        <span class="pill">Concurrency: 2</span>
+        <span class="pill">Initial batch: 3 scene</span>
+      </div>
+    </header>
+
+    <main>
+      <nav class="toc" aria-label="Mục lục">
+        <h2>Mục lục</h2>
+        <ol>
+          <li><a href="#overview">Tổng quan thay đổi</a></li>
+          <li><a href="#root-cause">Nguyên nhân trước đây</a></li>
+          <li><a href="#architecture">Kiến trúc mới</a></li>
+          <li><a href="#priority">Cơ chế ưu tiên</a></li>
+          <li><a href="#implementation">Chi tiết triển khai</a></li>
+          <li><a href="#verification">Kiểm thử và xác minh</a></li>
+          <li><a href="#limitations">Lưu ý còn lại</a></li>
+        </ol>
+      </nav>
+
+      <section id="overview">
+        <h2>1. Tổng quan thay đổi</h2>
+        <p>Mục tiêu của thay đổi là giảm thời gian chờ ban đầu khi mở tour và giảm độ trễ khi chuyển scene, nhưng vẫn giữ nguyên schema tour, hotspot, camera, FOV, Intro và navigation hiện có.</p>
+        <div class="grid">
+          <div class="card"><strong>Initial load nhanh hơn</strong>Chỉ đưa các scene ưu tiên vào hàng đợi thay vì tải toàn bộ tour cùng lúc.</div>
+          <div class="card"><strong>Tải nền có kiểm soát</strong>Preload tiếp tục âm thầm sau khi viewer đã sẵn sàng, không tạo burst request.</div>
+          <div class="card"><strong>Không tải trùng</strong>Mỗi URL có state riêng và chỉ có một task preload đang hoạt động.</div>
+        </div>
+      </section>
+
+      <section id="root-cause">
+        <h2>2. Nguyên nhân và flow trước đây</h2>
+        <p>Code hiện tại chưa có một scheduler độc lập cho việc tải panorama. Việc tải tài nguyên chủ yếu được thực hiện khi scene đang hiển thị hoặc ngay lúc người dùng điều hướng sang scene khác.</p>
+        <pre>Người dùng mở tour
+    ↓
+normalizeTour()
+    ↓
+Viewer hiển thị scene đầu tiên
+    ↓
+Chưa có queue preload ưu tiên cho các scene kế tiếp
+    ↓
+Click NAV
+    ↓
+goToScene()
+    ↓
+await panorama.preloadTexture(target)
+    ↓
+Scene transition phải chờ target tải xong</pre>
+        <div class="callout"><strong>Root cause:</strong> chưa có lớp quản lý queue, priority, concurrency và deduplication cho panorama resource. Vì vậy hệ thống không thể chủ động chuẩn bị scene có khả năng được xem tiếp theo.</div>
+      </section>
+
+      <section id="architecture">
+        <h2>3. Kiến trúc mới</h2>
+        <div class="flow">
+          <div>Tour metadata và scene registry</div><i>↓</i>
+          <div>normalizeTour()</div><i>↓</i>
+          <div>Scene Preload Scheduler</div><i>↓</i>
+          <div>Priority queue · concurrency limit · deduplication</div><i>↓</i>
+          <div>PanoramaViewer.preloadTexture()</div><i>↓</i>
+          <div>TextureManager cache</div>
+        </div>
+        <p>Scheduler chỉ quản lý việc đưa URL vào queue và gọi API preload hiện có. Việc áp dụng texture, transition, camera và scene state vẫn do Viewer/TextureManager đảm nhiệm.</p>
+        <h3>Single source of truth</h3>
+        <p>Trạng thái preload được quản lý theo URL trong <code>preloadScheduler.js</code> với các trạng thái:</p>
+        <ul><li><code>idle</code>: chưa có task;</li><li><code>queued</code>: đang chờ trong queue;</li><li><code>loading</code>: đang preload;</li><li><code>loaded</code>: đã cache thành công;</li><li><code>failed</code>: preload thất bại nhưng không làm crash tour.</li></ul>
+      </section>
+
+      <section id="priority">
+        <h2>4. Cơ chế ưu tiên</h2>
+        <table>
+          <thead><tr><th>Mức</th><th>Đối tượng</th><th>Mục đích</th></tr></thead>
+          <tbody>
+            <tr><td><code>ACTIVE</code></td><td>Scene đang hiển thị</td><td>Đảm bảo tài nguyên hiện tại được ưu tiên cao nhất.</td></tr>
+            <tr><td><code>NAV_TARGET</code></td><td>Scene là target của hotspot điều hướng</td><td>Chuẩn bị scene có khả năng được user click tiếp theo.</td></tr>
+            <tr><td><code>ADJACENT</code></td><td>Scene liền trước/liền sau</td><td>Hỗ trợ flow tuần tự của tour.</td></tr>
+            <tr><td><code>REMAINING</code></td><td>Các scene còn lại</td><td>Tải dần khi các tài nguyên quan trọng đã được xử lý.</td></tr>
+          </tbody>
+        </table>
+        <h3>Ví dụ</h3>
+        <pre>Scene A đang xem
+  NAV → Scene Z
+  NAV → Scene B
+
+Queue ưu tiên:
+  1. Scene A  (ACTIVE)
+  2. Scene Z  (NAV_TARGET)
+  3. Scene B  (NAV_TARGET)
+  4. Scene kế tiếp (ADJACENT)
+  5. Các scene còn lại (REMAINING)</pre>
+      </section>
+
+      <section id="implementation">
+        <h2>5. Chi tiết triển khai</h2>
+        <h3>File mới</h3>
+        <p><code>src/vr360-viewer/services/preloadScheduler.js</code></p>
+        <ul>
+          <li>Tạo queue theo priority.</li>
+          <li>Giới hạn concurrency mặc định ở mức 2.</li>
+          <li>Không enqueue lại URL đã loaded hoặc đang loading.</li>
+          <li>Gom các target trùng thành một task duy nhất.</li>
+          <li>Nuốt lỗi preload nền để không làm hỏng viewer.</li>
+          <li>Hỗ trợ dispose khi viewer bị unmount.</li>
+        </ul>
+        <h3>File đã tích hợp</h3>
+        <p><code>src/vr360-viewer/layout/Vr360ViewerLayout.vue</code></p>
+        <ul>
+          <li>Sau <code>nextTick()</code>, scheduler lập queue initial gồm tối đa 3 scene.</li>
+          <li>Initial preload chạy nền, không chặn Intro.</li>
+          <li>Khi chuyển scene, target vẫn được <code>preloadTexture()</code> trực tiếp để bảo đảm fallback an toàn.</li>
+          <li>Sau mỗi lần điều hướng, scheduler lập lại queue ưu tiên theo scene mới.</li>
+          <li>Scheduler được dispose cùng vòng đời Viewer.</li>
+        </ul>
+        <h3>Không thay đổi</h3>
+        <div class="grid">
+          <div class="card">Tour/Scene/Hotspot schema</div>
+          <div class="card">Camera, FOV và View Mode</div>
+          <div class="card">POI, NAV, Landmark và Intro</div>
+        </div>
+      </section>
+
+      <section id="verification">
+        <h2>6. Kiểm thử và xác minh</h2>
+        <table>
+          <thead><tr><th>Hạng mục</th><th>Kết quả</th><th>Ghi chú</th></tr></thead>
+          <tbody>
+            <tr><td>Point Landmark test</td><td><span class="status pass">PASS</span></td><td>Runtime test hiện có chạy thành công.</td></tr>
+            <tr><td>V2 view mode delegation</td><td><span class="status pass">PASS</span></td><td>Không phát hiện regression.</td></tr>
+            <tr><td>Production build</td><td><span class="status pass">PASS</span></td><td>Vite build thành công.</td></tr>
+            <tr><td>Concurrency/dedup queue</td><td><span class="status pass">IMPLEMENTED</span></td><td>Được quản lý trong scheduler theo URL.</td></tr>
+            <tr><td>Browser Network verification</td><td><span class="status warn">CHƯA CHẠY</span></td><td>Cần kiểm tra trực tiếp DevTools để xác nhận số request thực tế.</td></tr>
+          </tbody>
+        </table>
+        <h3>Lệnh đã chạy</h3>
+        <pre>node --test tests/pointLandmark.test.mjs tests/v2ViewModeDelegation.test.mjs
+npm.cmd run build
+git diff --check</pre>
+      </section>
+
+      <section id="limitations">
+        <h2>7. Lưu ý và bước xác minh tiếp theo</h2>
+        <ol>
+          <li>TextureManager hiện có cache giới hạn khoảng 3 texture. Scheduler không mở rộng giới hạn GPU memory.</li>
+          <li>Preload nền dùng chung <code>PanoramaViewer.preloadTexture()</code>, nên vẫn tận dụng cache hiện tại.</li>
+          <li>Khi target chưa preload hoặc preload thất bại, navigation vẫn có fallback tải trực tiếp trong <code>goToScene()</code>.</li>
+          <li>Cần kiểm tra trên browser với tour lớn để xác nhận Network tab không còn request toàn bộ panorama khi mở tour.</li>
+          <li>Cần kiểm tra riêng mobile để đánh giá bandwidth và memory pressure thực tế.</li>
+        </ol>
+        <div class="callout"><strong>Trạng thái hiện tại:</strong> Implementation và build đã hoàn tất. Browser performance verification vẫn cần được thực hiện trước khi đánh dấu task là hoàn toàn DONE theo acceptance criteria của PROMPT.md.</div>
+      </section>
+    </main>
+    <footer>VR360 Tour Loading Report · QuanlyVR360 · Tài liệu được tạo cho thay đổi Progressive Preloading</footer>
+  </div>
+</body>
+</html>

@@ -42,6 +42,7 @@
   pointer-events: auto;
   transition: box-shadow 220ms ease, transform 220ms cubic-bezier(.2, .8, .2, 1), background 220ms ease;
 }
+.tour-viewer-page .viewer-intro-start-label-short { display: none; }
 .tour-viewer-page .viewer-intro-start svg { fill: none; height: 18px; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.8; transition: transform 220ms ease; width: 18px; }
 .tour-viewer-page .viewer-intro-start:hover:not(:disabled) { background: #B91C1C; box-shadow: 0 17px 38px rgba(0, 0, 0, .36); transform: translateY(-2px) scale(1.015); }
 .tour-viewer-page .viewer-intro-start:hover:not(:disabled) svg { transform: translateX(3px); }
