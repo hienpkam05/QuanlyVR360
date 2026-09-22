@@ -1,0 +1,19 @@
+# Bản Đồ Tính Năng Định Vị Hệ Thống QuanlyVR360 (FEATURE_MAP.md)
+
+| feature_id | Tên tính năng | Route Path | Primary Component | UI Selectors (data-testid) | API Endpoints | Backend Models |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| **FEAT-AUTH-01** | Đăng nhập & Xác thực JWT | `/login` | `frontend/src/views/LoginView.vue` | `login-input-username`, `login-input-password`, `login-btn-submit` | `POST /api/auth/login/`, `POST /api/auth/refresh/` | `User` |
+| **FEAT-DASH-01** | Dashboard Tổng quan | `/dashboard` | `frontend/src/views/DashboardView.vue` | `dash-stat-projects`, `dash-stat-visits`, `dash-list-activity` | `GET /api/dashboard/overview/`, `GET /api/dashboard/recent-activity/` | `ActivityLog`, `TourVisit` |
+| **FEAT-PROJ-01** | Quản lý danh sách Dự án | `/projects` | `frontend/src/views/ProjectsView.vue` | `proj-btn-create`, `proj-input-search`, `proj-card-item` | `GET /api/projects/`, `POST /api/projects/` | `Project` |
+| **FEAT-PROJ-02** | Sửa & Upload Thumbnail Dự án | `/projects` | `frontend/src/views/ProjectsView.vue` | `proj-form-modal`, `proj-btn-upload-thumb` | `PATCH /api/projects/{id}/`, `POST /api/projects/{id}/upload-thumbnail/` | `Project` |
+| **FEAT-LOC-01** | Quản lý Địa điểm theo Dự án | `/locations` | `frontend/src/views/LocationsView.vue` | `loc-select-project`, `loc-btn-create`, `loc-card-item` | `GET /api/projects/{id}/locations/`, `POST /api/projects/{id}/locations/` | `Location` |
+| **FEAT-LOC-02** | Sắp xếp thứ tự Địa điểm (Drag-Drop) | `/locations` | `frontend/src/views/LocationsView.vue` | `loc-drag-card`, `loc-btn-reorder-save` | `PATCH /api/projects/{id}/locations/reorder/` | `Location` |
+| **FEAT-TOUR-01** | Quản lý Phiên bản Tour | `/versions` | `frontend/src/views/VersionsView.vue` | `ver-select-location`, `ver-btn-new-draft`, `ver-badge-status` | `GET /api/locations/{id}/versions/`, `POST /api/locations/{id}/versions/` | `TourVersion` |
+| **FEAT-TOUR-02** | So sánh & Export/Import Tour JSON | `/versions` | `frontend/src/views/VersionsView.vue` | `ver-btn-export`, `ver-btn-import`, `ver-btn-compare` | `GET /export/`, `POST /import/`, `GET /compare/` | `TourVersion` |
+| **FEAT-BLD-01** | Trình biên tập Tour 3D WYSIWYG | `/builder` | `frontend/src/vr360builder/pages/Vr360Builder.vue` | `builder-canvas-viewport`, `builder-btn-save`, `builder-btn-preview` | `PATCH /api/locations/{id}/versions/{id}/` | `TourVersion` |
+| **FEAT-BLD-02** | Quản lý Hotspots trên Quả cầu 3D | `/builder` | `frontend/src/vr360builder/components/HotspotPropertyPanel.vue` | `builder-btn-add-hotspot`, `builder-select-hotspot-type`, `builder-input-target-scene` | Three.js Raycaster (Client side save) | `TourVersion.data` |
+| **FEAT-MED-01** | Upload & Xử lý ảnh Panorama WebP | `/builder` | `frontend/src/vr360builder/components/MediaUploadModal.vue` | `media-file-input`, `media-progress-bar` | `POST /api/media/scenes/upload/`, `GET /api/media/scenes/{id}/status/` | `SceneAsset` |
+| **FEAT-PUB-01** | Xuất bản Tour & Whitelist Domain | `/publishing` | `frontend/src/views/PublishingView.vue` | `pub-btn-publish`, `pub-input-domain`, `pub-btn-regenerate-token` | `POST /api/locations/{id}/publish/`, `POST /publish/domains/` | `PublishConfig`, `WhitelistDomain` |
+| **FEAT-VIEW-01** | Public Tour Viewer (Production) | `/viewer` / `/vr360/:token` | `frontend/src/vr360-viewer/pages/ViewerProductionPage.vue` | `viewer-canvas-360`, `viewer-btn-audio`, `viewer-btn-fullscreen` | `GET /api/public/tour/{token}/`, `POST /track-visit/` | `TourVisit` |
+| **FEAT-VIEW-02** | Trình xem Tour V2 Thử nghiệm | `/viewer-v2` | `frontend/src/views/Vr360ViewerV2Page.vue` | `viewer-v2-container` | Three.js Custom Shader Client Pipeline | None |
+| **FEAT-STAT-01** | Thống kê & Phân tích truy cập | `/stats` | `frontend/src/views/StatsView.vue` | `stats-date-picker`, `stats-chart-visits`, `stats-chart-device` | `GET /api/locations/{id}/stats/summary/`, `GET /stats/timeseries/` | `DailyStat` |
