@@ -1703,6 +1703,8 @@ async function handleSave() {
       const initialSave = await apiSaveTour(buildJson(c));
       if (!initialSave) return;
       showToast("info", `⏳ Upload ${pending.length} ảnh...`);
+      const registered = await registerPendingSceneKeys(c);
+      if (!registered) return;
       const r = await uploadClone(c);
       if (!r.ok) {
         showToast("error", "❌ Upload thất bại");
@@ -1856,6 +1858,32 @@ function getSaveError(error) {
     if (field && value) return `${field}: ${value}`;
   }
   return error?.message || "Không thể lưu tour.";
+}
+
+function buildSceneRegistrationJson(c) {
+  const data = buildJson(c);
+  data.scenes = data.scenes.map((scene) => ({
+    ...scene,
+    image: typeof scene.image === "string" && scene.image.startsWith("blob:") ? "" : scene.image,
+    thumb: typeof scene.thumb === "string" && scene.thumb.startsWith("blob:") ? "" : scene.thumb,
+  }));
+  return data;
+}
+
+async function registerPendingSceneKeys(c) {
+  if (!api.connected || !requireBackendContext()) return false;
+  try {
+    const data = buildSceneRegistrationJson(c);
+    await updateVersion(backendContext.locationId, backendContext.versionId, {
+      label: data.title || "VR360 Virtual Tour",
+      data,
+    });
+    return true;
+  } catch (error) {
+    console.warn("Could not register scene keys before upload:", error.response?.data || error.message);
+    showToast("error", error.response?.data?.detail || "❌ Không thể chuẩn bị dữ liệu scene để upload");
+    return false;
+  }
 }
 
 function cleanHotspotForSave(hotspot) {
@@ -2151,6 +2179,106 @@ function syncBack(c) {
     });
   });
 }
+function hasPendingUploads(c) {
+  return c.some((x) => x._file && !x.exportUrl);
+}
+function pendingHotspotMediaUploads(c) {
+  return c.flatMap((scene) => (scene.hotspots || []).filter((hotspot) =>
+    hotspot?._infoImageFile ||
+    hotspot?._videoFile ||
+    hotspot?._areaMediaFile ||
+    (Array.isArray(hotspot?._galleryImageFiles) && hotspot._galleryImageFiles.some((item) => item?.file)),
+  ));
+}
+async function exportJSON() {
+  try {
+    if (tourAudio._file) {
+      showToast(
+        "error",
+        "⚠ Tour Audio chưa được tải lên. Hãy lưu tour vào server trước khi export JSON.",
+      );
+      return;
+    }
+    const scenesWithLocalAudio = scenes.filter(
+      (scene) => scene._audioLocalUrl,
+    );
+    if (scenesWithLocalAudio.length) {
+      showToast(
+        "error",
+        "⚠ Scene Audio đang là tệp cục bộ. Hãy dùng URL audio đã host trước khi export JSON.",
+      );
+      return;
+    }
+    const hotspotsWithPendingAudio = scenes.flatMap((scene) =>
+      (scene.hotspots || []).filter((hotspot) => hotspot?._audioFile),
+    );
+    if (hotspotsWithPendingAudio.length) {
+      showToast(
+        "error",
+        "⚠ POI Audio chưa được tải lên. Hãy lưu tour vào server trước khi export JSON.",
+      );
+      return;
+    }
+    const c = cloneForExport();
+    const pending = c.filter((x) => x._file && !x.exportUrl);
+    const pendingHotspotMedia = pendingHotspotMediaUploads(c);
+    if ((pending.length || pendingHotspotMedia.length) && !api.connected) {
+      showToast(
+        "error",
+        `⚠ Còn ${pending.length + pendingHotspotMedia.length} media chưa upload. Hãy kết nối API rồi export lại (không xuất blob).`,
+      );
+      openApiSettings();
+      return;
+    }
+    if (!pending.length && !pendingHotspotMedia.length) {
+      const json = buildJson(c);
+      if (JSON.stringify(json).includes("blob:")) {
+        showToast(
+          "error",
+          "⚠ Còn ảnh dạng blob chưa được host. Hãy import lại ảnh gốc rồi export khi đã kết nối API.",
+        );
+        openApiSettings();
+        return;
+      }
+      exportJsonText.value = JSON.stringify(json, null, 2);
+      modals.export = true;
+      return;
+    }
+    exportJsonText.value = "⏳ Đang tải lên...";
+    modals.export = true;
+    if (pending.length && !(await registerPendingSceneKeys(c))) {
+      exportJsonText.value = "❌ Không thể chuẩn bị dữ liệu scene để upload.";
+      return;
+    }
+    const sceneUpload = await uploadClone(c, (i, t, n) => {
+      exportJsonText.value = `⏳ ${i}/${t}: ${n}`;
+    });
+    if (!sceneUpload.ok) {
+      exportJsonText.value = `❌ Upload thất bại ${sceneUpload.fail} ảnh panorama — chưa thể export.`;
+      showToast("error", `❌ ${sceneUpload.fail} ảnh upload thất bại, chưa export`);
+      return;
+    }
+    const hotspotUpload = await uploadHotspotInfoImages(c);
+    if (!hotspotUpload.ok) {
+      exportJsonText.value = "❌ Upload media POI thất bại — chưa thể export vì không được xuất URL blob.";
+      showToast("error", "❌ Upload media POI thất bại, chưa export");
+      return;
+    }
+    syncBack(c);
+    const json = buildJson(c);
+    if (hasPendingUploads(c) || pendingHotspotMediaUploads(c).length || JSON.stringify(json).includes("blob:")) {
+      exportJsonText.value = "❌ Vẫn còn media cục bộ chưa được host — chưa thể export JSON.";
+      showToast("error", "❌ Còn media dạng blob, chưa thể export");
+      return;
+    }
+    exportJsonText.value = JSON.stringify(json, null, 2);
+    const uploaded = sceneUpload.up + hotspotUpload.up;
+    if (uploaded) showToast("success", `☁️ Đã upload ${uploaded} media`);
+  } catch (e) {
+    exportJsonText.value = "❌ " + e.message;
+    modals.export = true;
+  }
+}
 function copyExportJSON() {
   navigator.clipboard
     .writeText(exportJsonText.value)
@@ -2167,15 +2295,6 @@ function viewJSON() {
     modals.export = true;
   } catch (e) {
     showToast("error", "❌ Không thể tạo JSON: " + e.message);
-  }
-}
-function exportJSON() {
-  try {
-    serializeCurrentTour();
-    downloadExportJSON();
-    showToast("success", "✅ Đã tải JSON");
-  } catch (e) {
-    showToast("error", "❌ Không thể xuất JSON: " + e.message);
   }
 }
 function downloadExportJSON() {
