@@ -60,6 +60,7 @@ const uiState = reactive({
   fileMenuOpen: false,
   leftCollapsed: false,
   rightCollapsed: false,
+  mobilePanel: null,
   rightView: "scene", // 'scene' | 'point-list' | 'point-editor'
   collapsed: {
     sceneProps: false,
@@ -208,6 +209,7 @@ function triggerCanvasResize() {
 }
 watch(() => uiState.leftCollapsed, triggerCanvasResize);
 watch(() => uiState.rightCollapsed, triggerCanvasResize);
+watch(() => uiState.mobilePanel, triggerCanvasResize);
 
 const canvasLoading = ref(false);
 const hud = reactive({ lon: "0.0", lat: "0.0", fov: "75" });
@@ -2639,7 +2641,10 @@ onBeforeUnmount(() => {
 
     <div class="vb-main">
       <!-- LEFT: SCENE NAVIGATOR -->
-      <div class="vb-left" :class="{ collapsed: uiState.leftCollapsed }">
+      <div
+        class="vb-left"
+        :class="{ collapsed: uiState.leftCollapsed, 'mobile-open': uiState.mobilePanel === 'scenes' }"
+      >
         <div class="vb-panel-header">
           <template v-if="!uiState.leftCollapsed">
             <span class="vb-panel-title">Cảnh</span>
@@ -2662,6 +2667,12 @@ onBeforeUnmount(() => {
               <line x1="9" y1="3" x2="9" y2="21" />
             </svg>
           </button>
+          <button
+            class="vb-mobile-panel-close"
+            type="button"
+            aria-label="Đóng bảng cảnh"
+            @click="uiState.mobilePanel = null"
+          >×</button>
         </div>
         <template v-if="!uiState.leftCollapsed">
           <div class="vb-scene-list">
@@ -2816,6 +2827,18 @@ onBeforeUnmount(() => {
                 : "Click để đặt hotspot — ESC để hủy"
             }}
           </div>
+        </div>
+        <div class="vb-mobile-panel-actions">
+          <button
+            type="button"
+            :class="{ active: uiState.mobilePanel === 'scenes' }"
+            @click="uiState.mobilePanel = uiState.mobilePanel === 'scenes' ? null : 'scenes'"
+          >Cảnh ({{ scenes.length }})</button>
+          <button
+            type="button"
+            :class="{ active: uiState.mobilePanel === 'properties' }"
+            @click="uiState.mobilePanel = uiState.mobilePanel === 'properties' ? null : 'properties'"
+          >Thuộc tính</button>
         </div>
         <div v-if="drawingInfoArea" class="vb-info-area-toolbar">
           <span>{{ infoAreaDraftPoints.length }} điểm</span>
@@ -3001,7 +3024,10 @@ onBeforeUnmount(() => {
       </div>
 
       <!-- RIGHT: CONTEXT-SENSITIVE INSPECTOR -->
-      <div class="vb-right" :class="{ collapsed: uiState.rightCollapsed }">
+      <div
+        class="vb-right"
+        :class="{ collapsed: uiState.rightCollapsed, 'mobile-open': uiState.mobilePanel === 'properties' }"
+      >
         <div class="vb-panel-header vb-right-header">
           <template v-if="!uiState.rightCollapsed">
             <div class="vb-breadcrumb" v-if="activeScene">
@@ -3073,6 +3099,12 @@ onBeforeUnmount(() => {
               <line x1="15" y1="3" x2="15" y2="21" />
             </svg>
           </button>
+          <button
+            class="vb-mobile-panel-close"
+            type="button"
+            aria-label="Đóng bảng thuộc tính"
+            @click="uiState.mobilePanel = null"
+          >×</button>
         </div>
         <template v-if="!uiState.rightCollapsed">
           <div class="vb-right-scroll">
@@ -3135,6 +3167,7 @@ onBeforeUnmount(() => {
                 />
               </svg>
               <p>Chọn một cảnh để chỉnh sửa</p>
+              <small>Chọn “Cảnh” ở phía dưới, sau đó chạm vào cảnh muốn biên tập.</small>
             </div>
 
             <!-- VIEW: SCENE -->

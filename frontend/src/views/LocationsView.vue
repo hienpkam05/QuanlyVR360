@@ -115,7 +115,7 @@ async function submitLocation() {
 }
 
 async function removeLocation(location) {
-  if (!window.confirm(`Delete location "${location.name}"?`)) return;
+  if (!window.confirm(`Xác nhận xóa địa điểm "${location.name}"?`)) return;
   await deleteLocation(location.id);
   await loadLocation();
 }
@@ -133,57 +133,75 @@ onMounted(boot);
   <section class="page">
     <header class="page-header">
       <div>
-        <p class="eyebrow">Quan ly</p>
-        <h1>Location</h1>
+        <p class="eyebrow">Quản lý nội dung</p>
+        <h1>Địa điểm</h1>
       </div>
-      <button class="secondary-button" type="button" @click="loadLocation">Refresh</button>
+      <button class="secondary-button" type="button" @click="loadLocation">Làm mới</button>
     </header>
 
     <p v-if="errorMessage" class="error-message">{{ errorMessage }}</p>
 
     <section class="panel">
-      <h2>Select project</h2>
+      <h2>Chọn dự án</h2>
       <div class="inline-form">
-        <select v-model="selectedProjectId" @change="loadLocation">
-          <option value="">Select project</option>
+        <label class="form-field">
+          <span class="field-label">Dự án</span>
+          <select v-model="selectedProjectId" @change="loadLocation">
+            <option value="">Chọn dự án</option>
           <option v-for="project in projects" :key="project.id" :value="project.id">
             {{ project.name }}
           </option>
-        </select>
+          </select>
+        </label>
       </div>
     </section>
 
     <section class="panel">
-      <h2>{{ form.id ? 'Update location' : 'Create new location' }}</h2>
+      <h2>{{ form.id ? 'Cập nhật địa điểm' : 'Tạo địa điểm mới' }}</h2>
       <form class="grid-form" @submit.prevent="submitLocation">
-        <input v-model="form.name" placeholder="Ten location" required />
-        <input v-model="form.description" placeholder="Description" />
-        <input v-model.number="form.latitude" type="number" step="any" placeholder="Latitude" />
-        <input v-model.number="form.longitude" type="number" step="any" placeholder="Longitude" />
-        <input v-model.number="form.order" type="number" min="0" placeholder="Thu tu" />
+        <label class="form-field">
+          <span class="field-label">Tên địa điểm <span class="required">*</span></span>
+          <input v-model="form.name" placeholder="Ví dụ: Khu di tích Tràng An" required />
+        </label>
+        <label class="form-field">
+          <span class="field-label">Mô tả</span>
+          <input v-model="form.description" placeholder="Mô tả ngắn về địa điểm" />
+        </label>
+        <label class="form-field">
+          <span class="field-label">Vĩ độ</span>
+          <input v-model.number="form.latitude" type="number" step="any" placeholder="Ví dụ: 20.254" />
+        </label>
+        <label class="form-field">
+          <span class="field-label">Kinh độ</span>
+          <input v-model.number="form.longitude" type="number" step="any" placeholder="Ví dụ: 105.975" />
+        </label>
+        <label class="form-field">
+          <span class="field-label">Thứ tự hiển thị</span>
+          <input v-model.number="form.order" type="number" min="0" />
+        </label>
         <label class="checkbox-row">
           <input v-model="form.is_active" type="checkbox" />
-          Active
+          Đang hoạt động
         </label>
         <button class="primary-button" type="submit" :disabled="saving">
-          {{ saving ? 'Saving...' : form.id ? 'Save' : 'Create' }}
+          {{ saving ? 'Đang lưu...' : form.id ? 'Lưu thay đổi' : 'Tạo địa điểm' }}
         </button>
-        <button class="secondary-button" type="button" @click="resetForm">Lam moi</button>
+        <button class="secondary-button" type="button" @click="resetForm">Làm mới</button>
       </form>
     </section>
 
     <section class="panel">
-      <h2>Location list</h2>
-      <p v-if="loading" class="muted">Loading...</p>
+      <h2>Danh sách địa điểm</h2>
+      <p v-if="loading" class="muted">Đang tải...</p>
       <div class="table-wrap">
         <table>
           <thead>
             <tr>
               <th>ID</th>
-              <th>Ten</th>
+              <th>Tên</th>
               <th>Slug</th>
-              <th>Thu tu</th>
-              <th>Status</th>
+              <th>Thứ tự</th>
+              <th>Trạng thái</th>
               <th></th>
             </tr>
           </thead>
@@ -193,14 +211,14 @@ onMounted(boot);
               <td>{{ location.name }}</td>
               <td>{{ location.slug }}</td>
               <td>{{ location.order }}</td>
-              <td>{{ location.is_active ? 'Active' : 'Inactive' }}</td>
+              <td>{{ location.is_active ? 'Đang hoạt động' : 'Tạm dừng' }}</td>
               <td class="actions-cell">
-                <button class="secondary-button" type="button" @click="editLocation(location)">Edit</button>
-                <button class="danger-button" type="button" @click="removeLocation(location)">Delete</button>
+                <button class="secondary-action-btn" type="button" @click="editLocation(location)">Sửa</button>
+                <button class="ghost-danger-btn" type="button" @click="removeLocation(location)">Xóa</button>
               </td>
             </tr>
             <tr v-if="!locations.length && !loading">
-              <td colspan="6">Chua co location.</td>
+              <td colspan="6">Chưa có địa điểm nào.</td>
             </tr>
           </tbody>
         </table>
