@@ -1,16 +1,3 @@
-export function defaultNarration() {
-  return {
-    enabled: false,
-    duong_dan_file_audio: "",
-    tu_dong_phat: false,
-    thoi_luong_giay: 0,
-    volume: 1,
-    language: "",
-    loop: false,
-    description: "",
-  };
-}
-
 export function defaultTransition() {
   return { enabled: true, rotation: true, effect: "fade", duration: 1200, speed: 10 };
 }
@@ -81,14 +68,11 @@ export function normalizeScene(s, { generateId, resolveUrl } = {}) {
     exportUrl: rawImage || "",
     _serverThumb: rawThumb || "",
     _file: null,
-    _audioLocalUrl: "",
-    _audioFileName: "",
     info: s.info || "",
     gps: s.gps || null,
+    autoTour: s.autoTour ?? 0,
+    autoTourDuration: s.autoTourDuration ?? 20,
     initialView: { lon: 0, lat: 0, fov: 75, ...(s.initialView || {}) },
-    am_thanh_thuyet_minh: s.am_thanh_thuyet_minh
-      ? { ...defaultNarration(), ...s.am_thanh_thuyet_minh }
-      : defaultNarration(),
     transition: s.transition
       ? { ...defaultTransition(), ...s.transition }
       : defaultTransition(),

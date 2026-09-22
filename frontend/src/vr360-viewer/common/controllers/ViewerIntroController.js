@@ -71,6 +71,7 @@ export function createViewerIntroController(overrides = {}) {
   function createFrameFor(view = {}) {
     const targetLat = Number(view.lat) || 0;
     const targetLon = Number(view.lon) || 0;
+    const targetFov = Number(view.fov) || 75;
     const projectionStartAt = config.cameraDuration;
     const enterStartAt = projectionStartAt + config.projectionDuration;
 
@@ -104,7 +105,7 @@ export function createViewerIntroController(overrides = {}) {
         ? config.startFov
         : elapsed < enterStartAt
           ? config.startFov + (68 - config.startFov) * projectionRelaxEased
-          : 68 + (config.endFov - 68) * easeOutSine(enterProgress);
+          : 68 + (targetFov - 68) * easeOutSine(enterProgress);
       return {
         lon: targetLon,
         lat: targetLat,

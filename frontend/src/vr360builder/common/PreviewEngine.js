@@ -1,8 +1,9 @@
 import * as THREE from "three";
 import { HotspotRenderer } from "@/common/vr360/HotspotRenderer";
 import { AreaLandmarkRenderer } from "@/common/vr360/AreaLandmarkRenderer";
+import { PointLandmarkRenderer } from "@/common/vr360/PointLandmarkRenderer.js";
 import { AreaMediaRenderer } from "@/common/vr360/AreaMediaRenderer.js";
-import { isAreaLandmarkPoint, isAreaOverlayPoint } from "@/common/vr360/pointRendererRegistry.js";
+import { isAreaLandmarkPoint, isAreaOverlayPoint, isPointLandmarkPoint } from "@/common/vr360/pointRendererRegistry.js";
 import { AreaMediaEditorOverlay } from './AreaMediaEditorOverlay.js';
 
 // ══════════════════════════════════════
@@ -167,7 +168,8 @@ export class PreviewEngine {
     this.pointerDelta = { lon: 0, lat: 0 };
     this._cameraCommitTimer = 0;
     this.hasTexture = false;
-    this.placingHotspot = false;
+    this._activeTool = null;
+    this._toolCleanup = null;
     this.editMode = true; // Builder always in edit mode
 
     // Callbacks from builder
@@ -231,15 +233,15 @@ export class PreviewEngine {
 
     this.hotspotRenderer = new HotspotRenderer(hotspotContainer, {
       editMode: true,
+      canDrag: () => this._activeTool === 'move',
       onHotspotClick: (index, e) => {
         this.callbacks.onHotspotSelect?.(index, e);
       },
       onHotspotDblClick: (index, e) => {
-        // Navigate to hotspot target
         this.callbacks.onHotspotNav?.(index, e);
       },
       onHotspotDragEnd: (index, e) => {
-        // Calculate new position from screen coords
+        if (this._activeTool !== 'move') return;
         if (this.callbacks.onHotspotDragEnd) {
           const rect = this.canvas.getBoundingClientRect();
           const pos = this.hotspotRenderer.screenToSphere(
@@ -269,11 +271,19 @@ export class PreviewEngine {
     this.areaLandmarkRenderer = new AreaLandmarkRenderer(this.canvas.parentElement, {
       editMode: true,
       onClick: (annotation, event) => this.callbacks.onAreaLandmarkSelect?.(annotation, event),
-      onLabelDragEnd: (annotation, position) => this.callbacks.onAreaLandmarkLabelDragEnd?.(annotation, position),
+      onLabelDragEnd: (annotation, position) => {
+        if (this._activeTool !== 'move') return;
+        this.callbacks.onAreaLandmarkLabelDragEnd?.(annotation, position);
+      },
       onVertexDragEnd: (annotation, vertexIndex, position) => {
+        if (this._activeTool !== 'move') return;
         const sphere = this.screenToSphere(position.x + position.rect.left, position.y + position.rect.top);
         if (sphere) this.callbacks.onAreaLandmarkVertexDragEnd?.(annotation, vertexIndex, sphere);
       },
+    });
+    this.pointLandmarkRenderer = new PointLandmarkRenderer(this.canvas.parentElement, {
+      editMode: true,
+      onClick: (annotation, event) => this.callbacks.onAreaLandmarkSelect?.(annotation, event),
     });
   }
 
@@ -282,6 +292,7 @@ export class PreviewEngine {
     this.areaMediaEditorOverlay = new AreaMediaEditorOverlay(this.canvas.parentElement, {
       onSelect: (area) => this.callbacks.onAreaMediaSelect?.(area),
       onVertexDrop: (area, vertexIndex, position) => {
+        if (this._activeTool !== 'move') return;
         const sphere = this.screenToSphere(position.x, position.y);
         if (sphere) this.callbacks.onAreaMediaVertexDragEnd?.(area, vertexIndex, sphere);
       },
@@ -290,11 +301,12 @@ export class PreviewEngine {
 
   setHotspots(hotspots, selectedIndex = -1) {
     this._allHotspots = hotspots || [];
-    this._sceneHotspots = this._allHotspots.filter((hotspot) => !isAreaLandmarkPoint(hotspot) && !isAreaOverlayPoint(hotspot));
+    this._sceneHotspots = this._allHotspots.filter((hotspot) => !isAreaLandmarkPoint(hotspot) && !isPointLandmarkPoint(hotspot) && !isAreaOverlayPoint(hotspot));
     this._selectedHotspotIndex = selectedIndex;
     const selected = this._allHotspots[selectedIndex];
     this.areaLandmarkRenderer?.setSelectedAnnotation(isAreaLandmarkPoint(selected) ? selected : null);
     this.areaLandmarkRenderer?.setAnnotations(this._allHotspots.filter(isAreaLandmarkPoint));
+    this.pointLandmarkRenderer?.setAnnotations(this._allHotspots);
     this.areaMediaRenderer?.setAreas(this._allHotspots);
     this.areaMediaEditorOverlay?.setAreas(this._allHotspots);
     this.areaMediaEditorOverlay?.setSelectedArea(isAreaOverlayPoint(selected) ? selected : null);
@@ -459,6 +471,7 @@ export class PreviewEngine {
       p.clientHeight
     );
     this.areaLandmarkRenderer?.update(this.camera, p.clientWidth, p.clientHeight);
+    this.pointLandmarkRenderer?.update(this.camera, p.clientWidth, p.clientHeight);
     this.areaMediaEditorOverlay?.update(this.camera, p.clientWidth, p.clientHeight);
   }
 
@@ -496,33 +509,12 @@ export class PreviewEngine {
     };
   }
 
+  get placingHotspot() {
+    return this._activeTool === 'place';
+  }
+
   _initEvents() {
     const c = this.canvas;
-    c.addEventListener("pointerdown", (e) => {
-      if (this.placingHotspot) return;
-      this.isInteracting = true;
-      this.pointerStart = { x: e.clientX, y: e.clientY };
-      this.pointerDelta = { lon: this.targetLon, lat: this.targetLat };
-      try {
-        c.setPointerCapture(e.pointerId);
-      } catch {
-        // Invalid/inactive pointer id
-      }
-      this.requestRender();
-    });
-    c.addEventListener("pointermove", (e) => {
-      if (!this.isInteracting) return;
-      const s = 0.15 * (this.fov / 75);
-      this.targetLon = this.pointerDelta.lon - (e.clientX - this.pointerStart.x) * s;
-      this.targetLat = Math.max(-85, Math.min(85, this.pointerDelta.lat + (e.clientY - this.pointerStart.y) * s));
-      this.requestRender();
-    });
-    c.addEventListener("pointerup", () => {
-      if (!this.isInteracting) return;
-      this.isInteracting = false;
-      this._commitCameraState();
-      this.requestRender();
-    });
     c.addEventListener(
       "wheel",
       (e) => {
@@ -534,16 +526,6 @@ export class PreviewEngine {
       },
       { passive: false }
     );
-    c.addEventListener("click", (e) => {
-      if (!this.placingHotspot) return;
-      const coords = this.screenToSphere(e.clientX, e.clientY);
-      if (coords) this.callbacks.onHotspotPlace?.(coords.lon, coords.lat);
-    });
-    c.addEventListener("dblclick", (e) => {
-      if (this.placingHotspot) return;
-      const coords = this.screenToSphere(e.clientX, e.clientY);
-      if (coords) this.callbacks.onHotspotDblClick?.(coords.lon, coords.lat, e.clientX, e.clientY);
-    });
     this._onResize = () => {
       const p = this.canvas.parentElement;
       this.camera.aspect = p.clientWidth / p.clientHeight;
@@ -552,20 +534,92 @@ export class PreviewEngine {
       this.requestRender();
     };
     window.addEventListener("resize", this._onResize);
-    this._onKeydown = (e) => {
-      if (e.key === "Escape" && this.placingHotspot) this.callbacks.onCancelPlacing?.();
-    };
-    window.addEventListener("keydown", this._onKeydown);
+
+    this._handleViewPointerDown = this._onViewPointerDown.bind(this);
+    this._handleViewPointerMove = this._onViewPointerMove.bind(this);
+    this._handleViewPointerUp = this._onViewPointerUp.bind(this);
+    this._handlePlaceClick = this._onPlaceClick.bind(this);
+    this._handlePlaceKeyDown = this._onPlaceKeyDown.bind(this);
+
+    this.activateTool('view');
+  }
+
+  _onViewPointerDown(e) {
+    this.isInteracting = true;
+    this.pointerStart = { x: e.clientX, y: e.clientY };
+    this.pointerDelta = { lon: this.targetLon, lat: this.targetLat };
+    try { this.canvas.setPointerCapture(e.pointerId); } catch {}
+    this.requestRender();
+  }
+
+  _onViewPointerMove(e) {
+    if (!this.isInteracting) return;
+    const s = 0.15 * (this.fov / 75);
+    this.targetLon = this.pointerDelta.lon - (e.clientX - this.pointerStart.x) * s;
+    this.targetLat = Math.max(-85, Math.min(85, this.pointerDelta.lat + (e.clientY - this.pointerStart.y) * s));
+    this.requestRender();
+  }
+
+  _onViewPointerUp() {
+    if (!this.isInteracting) return;
+    this.isInteracting = false;
+    this._commitCameraState();
+    this.requestRender();
+  }
+
+  _onPlaceClick(e) {
+    const coords = this.screenToSphere(e.clientX, e.clientY);
+    if (coords) this.callbacks.onHotspotPlace?.(coords.lon, coords.lat);
+  }
+
+  _onPlaceKeyDown(e) {
+    if (e.key === 'Escape') this.callbacks.onCancelPlacing?.();
+  }
+
+  activateTool(name) {
+    if (this._activeTool === name) return;
+    this.deactivateTool();
+    this._activeTool = name;
+    const c = this.canvas;
+    if (name === 'view') {
+      c.addEventListener('pointerdown', this._handleViewPointerDown);
+      c.addEventListener('pointermove', this._handleViewPointerMove);
+      c.addEventListener('pointerup', this._handleViewPointerUp);
+      this._toolCleanup = () => {
+        c.removeEventListener('pointerdown', this._handleViewPointerDown);
+        c.removeEventListener('pointermove', this._handleViewPointerMove);
+        c.removeEventListener('pointerup', this._handleViewPointerUp);
+      };
+    } else if (name === 'move') {
+      this._toolCleanup = () => {};
+    } else if (name === 'place') {
+      c.addEventListener('click', this._handlePlaceClick);
+      window.addEventListener('keydown', this._handlePlaceKeyDown);
+      this._toolCleanup = () => {
+        c.removeEventListener('click', this._handlePlaceClick);
+        window.removeEventListener('keydown', this._handlePlaceKeyDown);
+      };
+    }
+  }
+
+  deactivateTool() {
+    if (this._toolCleanup) {
+      this._toolCleanup();
+      this._toolCleanup = null;
+    }
+    this.isInteracting = false;
+    this._activeTool = null;
   }
 
   dispose() {
+    this.deactivateTool();
     if (this._rafId) cancelAnimationFrame(this._rafId);
     if (this._loadAbort) this._loadAbort.abort();
     clearTimeout(this._cameraCommitTimer);
     window.removeEventListener("resize", this._onResize);
-    window.removeEventListener("keydown", this._onKeydown);
     this.hotspotRenderer?.dispose();
     this.areaLandmarkRenderer?.dispose();
+    this.pointLandmarkRenderer?.dispose();
     this.areaMediaRenderer?.dispose();
     this.areaMediaEditorOverlay?.dispose();
     this.textureCache.clear();

@@ -54,7 +54,7 @@ const props = defineProps({
   },
   autoRotateSpeed: {
     type: Number,
-    default: 2.5,
+    default: 6,
   },
   transition: {
     type: Object,
@@ -70,7 +70,7 @@ const props = defineProps({
   },
 });
 
-const emit = defineEmits(['panorama-click', 'hotspot-click', 'hotspot-dblclick', 'view-change', 'texture-ready']);
+const emit = defineEmits(['panorama-click', 'hotspot-click', 'hotspot-dblclick', 'view-change', 'texture-ready', 'texture-error']);
 
 const container = ref(null);
 const projectedHotspots = ref([]);
@@ -112,6 +112,9 @@ let projectionState;
 let projectionRenderCount = 0;
 let componentUpdateCount = 0;
 let introRotationClock = 0;
+let dragVelocityX = 0;
+let dragVelocityY = 0;
+let lastMoveAt = 0;
 
 function emitViewChange() {
   emit('view-change', cameraController?.getRoundedView() || { lon: 0, lat: 0, fov: 75 });
@@ -187,13 +190,17 @@ function renderLoop() {
     mesh?.material.setProjectionState?.(projectionState?.state);
     needsProjection = true;
   }
-  if (cameraController.tick(now)) needsProjection = true;
+  if (cameraController.tick(now)) {
+    needsProjection = true;
+    if (cameraController.isInertiaActive()) lastInteractionAt = now;
+  }
   if (
     props.autoRotate &&
     hasImage.value &&
     !isDragging &&
     !isPointerOver &&
     !cameraController.isAnimating() &&
+    !cameraController.isInertiaActive() &&
     now - lastInteractionAt >= props.autoRotateDelay
   ) {
     cameraController.dragBy(-props.autoRotateSpeed * deltaSeconds / 0.12, 0);
@@ -215,6 +222,7 @@ function renderLoop() {
 
 function animateToView(targetView = {}, duration = 520) {
   markInteraction();
+  cameraController.stopInertia();
   return cameraController.animateTo(targetView, duration);
 }
 
@@ -285,6 +293,7 @@ function dispose() {
   resizeObserver?.disconnect();
   cancelAnimationFrame(animationId);
   cameraController?.cancelTween?.();
+  cameraController?.stopInertia?.();
   textureManager?.dispose();
   textureManager = null;
   projectionState = null;
@@ -322,6 +331,7 @@ function textureCandidates() {
 
 function loadTexture() {
   if (!mesh) return;
+  cameraController?.stopInertia?.();
   isTextureLoading.value = true;
   projectedHotspots.value = [];
   projectedInfoAreas.value = [];
@@ -365,7 +375,7 @@ function initThree() {
     getTransition: () => props.transition,
     hasPrimaryImage: () => Boolean(props.imageUrl),
     onLoadingChange: (value) => { isTextureLoading.value = value; },
-    onError: (value) => { textureError.value = value; },
+    onError: (value) => { textureError.value = value; if (value) emit('texture-error', value); },
     onApplied: () => {
       needsProjection = true;
       resize();
@@ -395,7 +405,7 @@ function onPointerLeave(event) {
 
 function isViewerControlTarget(target) {
   return target instanceof Element && Boolean(target.closest(
-    '.panorama-hotspot, .panorama-info-area, .area-landmark, .area-landmark-label',
+    '.panorama-hotspot, .panorama-info-area, .area-landmark, .area-landmark-label, .landmark-presentation, .landmark-label',
   ));
 }
 
@@ -456,6 +466,10 @@ function onPointerDown(event) {
   ) return;
   markInteraction();
   cameraController.cancelTween();
+  cameraController.stopInertia();
+  dragVelocityX = 0;
+  dragVelocityY = 0;
+  lastMoveAt = 0;
   isDragging = true;
   const pointerState = {
     id: event.pointerId,
@@ -483,6 +497,15 @@ function onPointerMove(event) {
       event.clientX - pointerDown.startX,
       event.clientY - pointerDown.startY,
     ) >= TAP_MOVEMENT_THRESHOLD;
+    const now = performance.now();
+    const dt = lastMoveAt ? (now - lastMoveAt) / 1000 : 0;
+    lastMoveAt = now;
+    if (dt > 0 && dt < 0.1) {
+      const instantVx = deltaX / dt;
+      const instantVy = deltaY / dt;
+      dragVelocityX = dragVelocityX * 0.7 + instantVx * 0.3;
+      dragVelocityY = dragVelocityY * 0.7 + instantVy * 0.3;
+    }
     cameraController.dragBy(deltaX, deltaY);
   } else if (activePointers.size >= 2) {
     const currentDistance = pointerDistance();
@@ -514,6 +537,15 @@ function finishPointerGesture(event, { cancelled = false } = {}) {
   gestureMode = 'idle';
   pinchDistance = 0;
   pointerDown = null;
+  if (!cancelled && !gestureHadMultiplePointers && finishedPointerDown && finishedPointerDown.moved) {
+    const timeSinceLastMove = performance.now() - lastMoveAt;
+    if (timeSinceLastMove < 80) {
+      cameraController.startInertia(dragVelocityX, dragVelocityY);
+    }
+  }
+  dragVelocityX = 0;
+  dragVelocityY = 0;
+  lastMoveAt = 0;
   if (!cancelled && !gestureHadMultiplePointers && finishedPointerDown && !finishedPointerDown.moved && hasImage.value) {
     emitPanoramaClick(event);
   }
@@ -679,7 +711,10 @@ defineExpose({
         <span v-else-if="!resolvePointVisual(hotspot).video && !resolvePointVisual(hotspot).audio && !resolvePointVisual(hotspot).nav" class="viewer-point-dot">{{ hotspot.index + 1 }}</span>
         <span v-if="!resolvePointVisual(hotspot).video" class="hotspot-label">{{ hotspot.label || 'Hotspot' }}</span>
         <template v-if="hotspotDisplayMode === 'viewer' && !resolvePointVisual(hotspot).video">
-          <span v-if="resolvePointPreview(hotspot).kind === 'tooltip' && resolvePointPreview(hotspot).text" class="viewer-hotspot-tooltip">{{ resolvePointPreview(hotspot).text }}</span>
+          <span v-if="resolvePointPreview(hotspot).kind === 'tooltip' && (resolvePointPreview(hotspot).title || resolvePointPreview(hotspot).description)" class="viewer-hotspot-tooltip">
+            <strong v-if="resolvePointPreview(hotspot).title" class="viewer-hotspot-tooltip-title">{{ resolvePointPreview(hotspot).title }}</strong>
+            <span v-if="resolvePointPreview(hotspot).description" class="viewer-hotspot-tooltip-description">{{ resolvePointPreview(hotspot).description }}</span>
+          </span>
           <span v-else-if="resolvePointPreview(hotspot).kind === 'image' && resolvePointPreview(hotspot).imageUrl" class="viewer-hotspot-image-preview" :style="{ backgroundImage: `url(${resolvePointPreview(hotspot).imageUrl})` }"></span>
         </template>
       </template>

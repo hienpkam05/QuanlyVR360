@@ -91,6 +91,7 @@ export class HotspotRenderer {
       onHotspotDragStart: null, // (index, event) => void
       onHotspotDrag: null,     // (index, lon, lat, event) => void
       onHotspotDragEnd: null,  // (index, event) => void
+      canDrag: null,           // () => boolean — when set, drag only starts if true
       onHotspotHover: null,    // (index, hs, el) => void
       onHotspotHoverEnd: null, // () => void
       resolveNavTarget: null, // (targetId) => scene
@@ -273,7 +274,7 @@ export class HotspotRenderer {
       el.onpointerdown = (ev) => {
         if (ev.button !== 0) return;
         ev.stopPropagation();
-        // Fix #3: không cho drag nếu hotspot đang locked
+        if (opts.canDrag && !opts.canDrag()) return;
         if (el.classList.contains("hotspot-locked")) return;
         dragState = {
           startX: ev.clientX,

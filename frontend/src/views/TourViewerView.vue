@@ -10,6 +10,8 @@ import { listProjects } from '../api/projectsApi';
 import { getPublicTour } from '../api/publicApi';
 import { getVersion, listVersions } from '../api/toursApi';
 import { useAuthStore } from '../stores/authStore';
+import InfoPoiPopup from '../vr360-viewer/components/popups/InfoPoiPopup.vue';
+import '../vr360-viewer/assets/viewer.css';
 
 const route = useRoute();
 const router = useRouter();
@@ -33,12 +35,10 @@ const isTransitioning = ref(false);
 const transitionMessage = ref('');
 const backgroundAudioPlaying = ref(false);
 const backgroundAudioBlocked = ref(false);
-const sceneAudioBlocked = ref(false);
 const selectedInfoHotspot = ref(null);
 const viewState = reactive({ lon: 0, lat: 0, fov: 75 });
 let hotspotAudioPlayer = null;
 let backgroundAudioPlayer = null;
-let sceneAudioPlayer = null;
 
 const activeScene = computed(() => scenes.value.find((scene) => scene.id === activeSceneId.value) || null);
 const isPublicViewerMode = computed(() => !auth.isAuthenticated || auth.isGuest);
@@ -48,6 +48,26 @@ const sceneImage = computed(() => resolveSceneImage(activeScene.value));
 const sceneImageFallbacks = computed(() => resolveSceneImageSources(activeScene.value));
 const backgroundAudioUrl = computed(() => resolveUrl(version.value?.background_audio || ''));
 const pointHotspotLogoUrl = computed(() => resolveUrl(version.value?.hotspot_point_logo || ''));
+const selectedInfoPoint = computed(() => {
+  const hotspot = selectedInfoHotspot.value;
+  if (!hotspot) return null;
+  return {
+    ...hotspot,
+    content: {
+      title: hotspot.info?.title || hotspot.label || 'Điểm tham quan',
+      shortDescription: hotspot.info?.short_description || '',
+      description: hotspot.info?.description || '',
+      link: hotspot.info?.link_url || '',
+    },
+    media: {
+      imageUrl: hotspot.info?.image_url || '',
+      images: hotspot.info?.images || [],
+      videoUrl: hotspot.info?.video_url || '',
+      youtubeUrl: hotspot.info?.youtube_url || '',
+    },
+    audio: hotspot.info?.audio_url ? { url: resolveUrl(hotspot.info.audio_url) } : null,
+  };
+});
 const displayHotspots = computed(() => {
   const scene = activeScene.value;
   if (!scene) return [];
@@ -62,10 +82,14 @@ const displayHotspots = computed(() => {
       audio_url: resolveUrl(hotspot.audio_url || hotspot.audio || ''),
       info: {
         title: hotspot.info?.title || hotspot.info_title || hotspot.label || '',
+        short_description: hotspot.info?.short_description || hotspot.info_short_description || hotspot.noi_dung?.mo_ta_ngan || '',
         description: hotspot.info?.description || hotspot.info_description || hotspot.description || '',
         image_url: resolveUrl(hotspot.info?.image_url || hotspot.info_image_url || hotspot.image_url || ''),
+        images: (hotspot.info?.images || hotspot.noi_dung?.danh_sach_anh || []).map(resolveUrl).filter(Boolean),
         video_url: resolveUrl(hotspot.info?.video_url || hotspot.info_video_url || hotspot.video_url || ''),
         youtube_url: hotspot.info?.youtube_url || hotspot.info_youtube_url || hotspot.youtube_url || '',
+        link_url: hotspot.info?.link_url || hotspot.info?.lien_ket || hotspot.noi_dung?.lien_ket || '',
+        audio_url: hotspot.audio_url || hotspot.audio || hotspot.noi_dung?.audio_url || '',
       },
     };
   });
@@ -155,8 +179,10 @@ function normalizeHotspotInfo(hotspot) {
       hotspot.youtube_url ||
       (String(videoUrl).includes('youtu') ? videoUrl : '') ||
       '',
+    short_description: hotspot.info?.short_description || hotspot.info_short_description || content.mo_ta_ngan || '',
     link_url: hotspot.info?.link_url || hotspot.info?.lien_ket || content.lien_ket || '',
-    gallery_images: Array.isArray(content.danh_sach_anh) ? content.danh_sach_anh : [],
+    images: Array.isArray(content.danh_sach_anh) ? content.danh_sach_anh.map(resolveUrl).filter(Boolean) : [],
+    audio_url: hotspot.audio_url || hotspot.audio || content.audio_url || '',
   };
 }
 
@@ -193,12 +219,6 @@ function stopHotspotAudio() {
   hotspotAudioPlayer = null;
 }
 
-function stopSceneAudio() {
-  disposeAudio(sceneAudioPlayer);
-  sceneAudioPlayer = null;
-  sceneAudioBlocked.value = false;
-}
-
 function stopBackgroundAudio() {
   disposeAudio(backgroundAudioPlayer);
   backgroundAudioPlayer = null;
@@ -208,7 +228,6 @@ function stopBackgroundAudio() {
 
 function stopTourAudio() {
   stopHotspotAudio();
-  stopSceneAudio();
   stopBackgroundAudio();
 }
 
@@ -218,7 +237,6 @@ function normalizeScene(scene, index = 0) {
     name: scene.name || scene.title || `Scene ${index + 1}`,
     group: scene.group || 'Default',
     description: scene.description || scene.info || '',
-    audio_url: scene.audio_url || scene.audio || scene.entry_audio_url || scene.narration_audio || '',
     image_url: scene.image_url || '',
     optimized_file: scene.optimized_file || '',
     preview_file: scene.preview_file || '',
@@ -233,7 +251,7 @@ function normalizeScene(scene, index = 0) {
     hotspots: (scene.hotspots || []).map((hotspot, hotspotIndex) => ({
       id: String(hotspot.id || `hotspot-${index + 1}-${hotspotIndex + 1}`),
       label: hotspot.label || hotspot.title || `Hotspot ${hotspotIndex + 1}`,
-      type: ['nav', 'point', 'info', 'info_area'].includes(hotspot.type) ? hotspot.type : hotspot.type === 'navigate' ? 'nav' : 'point',
+      type: ['nav', 'point', 'info', 'info_area', 'gallery', 'video', 'audio'].includes(hotspot.type) ? hotspot.type : hotspot.type === 'navigate' ? 'nav' : 'point',
       target_scene_id: String(hotspot.target_scene_id || hotspot.target || hotspot.scene_id || ''),
       lon: Number(hotspot.lon ?? 0),
       lat: Number(hotspot.lat ?? 0),
@@ -268,14 +286,6 @@ function applyTourPayload(payload) {
   scenes.value = normalizeTourData(payload.data || payload);
   activeSceneId.value = scenes.value[0]?.id || '';
   selectedInfoHotspot.value = null;
-}
-
-function getSceneAudioUrl(scene) {
-  if (!scene) return '';
-  const sceneAudio = scene.audio_url || scene.audio || scene.entry_audio_url || scene.narration_audio || '';
-  if (sceneAudio) return resolveUrl(sceneAudio);
-  const firstHotspotAudio = (scene.hotspots || []).find((hotspot) => hotspot.audio_url || hotspot.audio);
-  return firstHotspotAudio ? resolveUrl(firstHotspotAudio.audio_url || firstHotspotAudio.audio) : '';
 }
 
 async function tryPlayBackgroundAudio() {
@@ -314,9 +324,6 @@ function onViewerFirstInteraction(event) {
   if (event?.target?.closest?.('.viewer-background-audio')) return;
   if (backgroundAudioBlocked.value && backgroundAudioUrl.value) {
     tryPlayBackgroundAudio();
-  }
-  if (sceneAudioBlocked.value) {
-    playActiveSceneAudio();
   }
 }
 
@@ -444,7 +451,6 @@ async function loadVersionDetail() {
   try {
     const response = await getVersion(selectedLocationId.value, selectedVersionId.value);
     applyTourPayload(response.data);
-    await playActiveSceneAudio();
     await tryPlayBackgroundAudio();
   } catch (error) {
     errorMessage.value = error.response?.data?.detail || 'Could not load version.';
@@ -456,7 +462,6 @@ async function loadPublishedTourByToken(publicToken) {
   stopTourAudio();
   const response = await getPublicTour(publicToken);
   applyTourPayload(response.data);
-  await playActiveSceneAudio();
   await tryPlayBackgroundAudio();
   return true;
 }
@@ -525,22 +530,6 @@ async function changeLocation() {
   await loadVersionDetail();
 }
 
-async function playActiveSceneAudio() {
-  stopSceneAudio();
-  const audioUrl = getSceneAudioUrl(activeScene.value);
-  if (!audioUrl) {
-    sceneAudioBlocked.value = false;
-    return;
-  }
-  sceneAudioPlayer = new Audio(audioUrl);
-  try {
-    await sceneAudioPlayer.play();
-    sceneAudioBlocked.value = false;
-  } catch {
-    sceneAudioBlocked.value = true;
-  }
-}
-
 async function goToScene(sceneId, options = {}) {
   if (!sceneId || isTransitioning.value) return;
   const targetScene = scenes.value.find((scene) => scene.id === sceneId);
@@ -553,7 +542,6 @@ async function goToScene(sceneId, options = {}) {
   selectedPointHotspot.value = null;
   selectedInfoHotspot.value = null;
   stopHotspotAudio();
-  stopSceneAudio();
 
   const targetImageUrl = resolveSceneImage(targetScene);
   const entryView = options.targetView || targetScene.view || targetScene.initialView || { lon: 0, lat: 0, fov: 75 };
@@ -564,7 +552,6 @@ async function goToScene(sceneId, options = {}) {
     sidebarOpen.value = false;
     await nextTick();
     await panoramaRef.value?.animateToView?.(entryView, 180);
-    await playActiveSceneAudio();
   } finally {
     await sleep(80);
     isTransitioning.value = false;
@@ -602,6 +589,15 @@ function playHotspotAudio(hotspot) {
 }
 
 async function onHotspotClick(hotspot) {
+  // Point landmarks are rendered by the shared runtime renderer. Accept the
+  // canonical payload as well as legacy aliases at this boundary so a target
+  // cannot be lost between the renderer and the scene handler.
+  hotspot = hotspot?.hotspot || hotspot || {};
+  hotspot = {
+    ...hotspot,
+    target_scene_id: String(hotspot.target_scene_id || hotspot.targetSceneId || hotspot.target || hotspot.scene_id || ''),
+    target_view: hotspot.target_view || hotspot.targetView || hotspot.view,
+  };
   if (isTransitioning.value) return;
   errorMessage.value = '';
   selectedPointHotspot.value = null;
@@ -745,13 +741,6 @@ onBeforeUnmount(stopTourAudio);
       @view-change="updateViewState"
     />
 
-    <div class="viewer-transition-overlay" :class="{ active: isTransitioning }">
-      <div class="viewer-transition-card">
-        <span></span>
-        <strong>{{ transitionMessage || 'Loading scene' }}</strong>
-      </div>
-    </div>
-
     <button
       v-if="backgroundAudioUrl"
       class="viewer-background-audio"
@@ -777,44 +766,11 @@ onBeforeUnmount(stopTourAudio);
       </div>
     </div>
 
-    <div
-      v-if="selectedInfoHotspot"
-      class="viewer-info-modal-backdrop"
-      @click.self="selectedInfoHotspot = null"
-    >
-      <article class="viewer-info-modal">
-        <button class="viewer-info-close" type="button" @click="selectedInfoHotspot = null">×</button>
-        <div v-if="youtubeEmbedUrl(selectedInfoHotspot.info?.youtube_url)" class="viewer-info-media">
-          <iframe
-            :src="youtubeEmbedUrl(selectedInfoHotspot.info.youtube_url)"
-            title="YouTube video"
-            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-            allowfullscreen
-          ></iframe>
-        </div>
-        <video
-          v-else-if="selectedInfoHotspot.info?.video_url"
-          class="viewer-info-video"
-          :src="selectedInfoHotspot.info.video_url"
-          controls
-          playsinline
-        ></video>
-        <span
-          v-else-if="selectedInfoHotspot.info?.image_url"
-          class="viewer-info-image"
-          :style="{ backgroundImage: `url(${selectedInfoHotspot.info.image_url})` }"
-        ></span>
-        <small>INFO HOTSPOT</small>
-        <h2>{{ selectedInfoHotspot.info?.title || selectedInfoHotspot.label || 'Information' }}</h2>
-        <p>
-          {{
-            selectedInfoHotspot.info?.description ||
-            selectedInfoHotspot.description ||
-            'No information has been added for this hotspot yet.'
-          }}
-        </p>
-      </article>
-    </div>
+    <InfoPoiPopup
+      v-if="selectedInfoPoint"
+      :point="selectedInfoPoint"
+      @close="selectedInfoHotspot = null"
+    />
 
     <aside class="viewer-sidebar" :class="{ open: sidebarOpen }">
       <div class="viewer-sidebar-header">

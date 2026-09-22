@@ -59,14 +59,14 @@ function toggle() {
           :aria-label="`${scene.name}${scene.id === activeSceneId ? ', current scene' : ''}${visitedSceneIds?.has?.(scene.id) ? ', visited' : ''}`"
           @click="emit('select-scene', scene.id)"
         >
-          <span
-            class="scenes-sidebar-thumb"
-            :style="
-              scene.thumbnailSource
-                ? { backgroundImage: `url(${scene.thumbnailSource})` }
-                : {}
-            "
-          ></span>
+          <span class="scenes-sidebar-thumb">
+            <img
+              v-if="scene.thumbnailSource"
+              :src="scene.thumbnailSource"
+              alt=""
+              crossorigin="anonymous"
+            />
+          </span>
           <span class="scenes-sidebar-name">{{ scene.name }}</span>
           <span
             v-if="visitedSceneIds?.has?.(scene.id)"
@@ -294,13 +294,19 @@ function toggle() {
   width: 100px;
   height: 70px;
   background-color: #d5d5d5;
-  background-position: center;
-  background-size: cover;
-  background-repeat: no-repeat;
   border-radius: 4px;
   border: 2px solid transparent;
   flex-shrink: 0;
+  overflow: hidden;
   transition: border-color 140ms ease;
+}
+
+.scenes-sidebar-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+  display: block;
 }
 
 .scenes-sidebar-item.active .scenes-sidebar-thumb {
