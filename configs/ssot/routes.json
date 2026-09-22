@@ -1,0 +1,15 @@
+[
+  { "id": "ROUTE-LOGIN", "name": "Login", "path": "/login", "auth_required": false, "staff_only": false, "immersive": false },
+  { "id": "ROUTE-HOME", "name": "Home", "path": "/", "auth_required": false, "staff_only": false, "immersive": false },
+  { "id": "ROUTE-DASHBOARD", "name": "Dashboard", "path": "/dashboard", "auth_required": true, "staff_only": true, "immersive": false },
+  { "id": "ROUTE-PROJECTS", "name": "Projects", "path": "/projects", "auth_required": true, "staff_only": true, "immersive": false },
+  { "id": "ROUTE-LOCATIONS", "name": "Locations", "path": "/locations", "auth_required": true, "staff_only": true, "immersive": false },
+  { "id": "ROUTE-VERSIONS", "name": "Versions", "path": "/versions", "auth_required": true, "staff_only": true, "immersive": false },
+  { "id": "ROUTE-BUILDER", "name": "Builder", "path": "/builder", "auth_required": true, "staff_only": true, "immersive": true },
+  { "id": "ROUTE-VIEWER", "name": "TourViewer", "path": "/viewer", "auth_required": false, "staff_only": false, "immersive": true },
+  { "id": "ROUTE-VIEWER-V2", "name": "TourViewerV2", "path": "/viewer-v2", "auth_required": false, "staff_only": false, "immersive": true },
+  { "id": "ROUTE-PUBLIC-TOKEN", "name": "PublicTourViewer", "path": "/vr360/:token", "auth_required": false, "staff_only": false, "immersive": true },
+  { "id": "ROUTE-PUBLISHING", "name": "Publishing", "path": "/publishing", "auth_required": true, "staff_only": true, "immersive": false },
+  { "id": "ROUTE-STATS", "name": "Stats", "path": "/stats", "auth_required": true, "staff_only": true, "immersive": false },
+  { "id": "ROUTE-PUBLIC-VIEWER", "name": "PublicViewer", "path": "/public-viewer", "auth_required": false, "staff_only": false, "immersive": true }
+]

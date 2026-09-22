@@ -53,7 +53,8 @@ function goToManagement() {
 const scenes = reactive([]);
 const activeSceneIndex = ref(-1);
 const selectedHotspotIndex = ref(-1);
-const placingHotspot = ref(false);
+const activeTool = ref('view');
+const placingHotspot = computed(() => activeTool.value === 'place');
 
 const uiState = reactive({
   fileMenuOpen: false,
@@ -460,7 +461,8 @@ async function selectScene(index) {
   previewMode.active = false;
   activeSceneIndex.value = index;
   selectedHotspotIndex.value = -1;
-  cancelPlacingHotspot();
+  if (activeTool.value === 'place') cancelPlacingHotspot();
+  closeQuickMenu();
   const s = scenes[index];
   await engine.value.loadPanorama(s.image, s._file);
   engine.value.setView(s.initialView.lon, s.initialView.lat, s.initialView.fov);
@@ -498,15 +500,26 @@ function onDrop(toIndex, event) {
 // ══════════════════════════════════════
 //  HOTSPOT PLACEMENT
 // ══════════════════════════════════════
+function setActiveTool(name) {
+  if (activeTool.value === name) return;
+  if (activeTool.value === 'place') {
+    if (drawingInfoArea.value) {
+      drawingInfoArea.value = false;
+      infoAreaDraftPoints.value = [];
+      requestAreaOverlayUpdate();
+    }
+    closeQuickMenu();
+  }
+  activeTool.value = name;
+  engine.value?.activateTool(name);
+}
 function startPlacingHotspot() {
   if (activeSceneIndex.value < 0 || previewMode.active) return;
-  placingHotspot.value = true;
-  if (engine.value) engine.value.placingHotspot = true;
+  setActiveTool('place');
   showToast("info", "🎯 Click vào panorama để đặt hotspot");
 }
 function cancelPlacingHotspot() {
-  placingHotspot.value = false;
-  if (engine.value) engine.value.placingHotspot = false;
+  setActiveTool('view');
   closeQuickMenu();
 }
 function placeNewHotspot(lon, lat) {
@@ -532,8 +545,7 @@ function startDrawingInfoArea(seedLon = null, seedLat = null, type = 'area_landm
     });
   }
   drawingInfoArea.value = true;
-  placingHotspot.value = true;
-  if (engine.value) engine.value.placingHotspot = true;
+  setActiveTool('place');
   closeQuickMenu();
   requestAreaOverlayUpdate();
   showToast(
@@ -1848,10 +1860,6 @@ function getSaveError(error) {
   return error?.message || "Không thể lưu tour.";
 }
 
-// A SceneAsset upload is tied to a scene_key already present in the saved
-// version data. Newly added scenes only exist in the browser at first, so
-// register their IDs before uploading files. Do not persist temporary blob
-// URLs during that short registration request.
 function buildSceneRegistrationJson(c) {
   const data = buildJson(c);
   data.scenes = data.scenes.map((scene) => ({
@@ -2367,7 +2375,6 @@ onMounted(() => {
     },
     onFrame: () => requestAreaOverlayUpdate(),
     onHotspotPlace: (lon, lat) => placeNewHotspot(lon, lat),
-    onHotspotDblClick: (lon, lat, sx, sy) => openQuickMenu(lon, lat, sx, sy),
     onCancelPlacing: () => cancelPlacingHotspot(),
     onHotspotSelect: (index) => selectHotspot(index),
     onHotspotNav: (index) => goToHotspotTarget(index),
@@ -2837,9 +2844,9 @@ onBeforeUnmount(() => {
         >
           <button
             class="vb-tool-btn"
-            :class="{ active: !placingHotspot }"
-            @click="cancelPlacingHotspot"
-            title="Xoay (V)"
+            :class="{ active: activeTool === 'view' }"
+            @click="setActiveTool('view')"
+            title="Xoay"
           >
             <svg
               viewBox="0 0 24 24"
@@ -2858,9 +2865,25 @@ onBeforeUnmount(() => {
           <div class="vb-tool-sep"></div>
           <button
             class="vb-tool-btn"
-            :class="{ active: placingHotspot }"
+            :class="{ active: activeTool === 'move' }"
+            @click="setActiveTool('move')"
+            title="Di chuyển POI"
+          >
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+            >
+              <path d="M5 9l-3 3 3 3M9 5l3-3 3 3M15 19l-3 3-3-3M19 9l3 3-3 3M2 12h20M12 2v20" />
+            </svg>
+          </button>
+          <div class="vb-tool-sep"></div>
+          <button
+            class="vb-tool-btn"
+            :class="{ active: activeTool === 'place' }"
             @click="startPlacingHotspot"
-            title="Đặt Hotspot (H)"
+            title="Đặt Hotspot"
           >
             <svg
               viewBox="0 0 24 24"

@@ -1,0 +1,27 @@
+{
+  "LIMITS": {
+    "MAX_PANORAMA_SIZE_BYTES": 52428800,
+    "MAX_AUDIO_SIZE_BYTES": 10485760,
+    "MAX_THUMBNAIL_SIZE_BYTES": 5242880,
+    "ALLOWED_PANORAMA_MIME_TYPES": ["image/jpeg", "image/png", "image/webp"],
+    "ALLOWED_AUDIO_MIME_TYPES": ["audio/mpeg", "audio/mp3", "audio/wav", "audio/ogg"]
+  },
+  "IMAGE_RESOLUTIONS": {
+    "OPTIMIZED_MAX_WIDTH": 4096,
+    "PREVIEW_MAX_WIDTH": 1024,
+    "THUMBNAIL_MAX_WIDTH": 256,
+    "OUTPUT_FORMAT": "WEBP",
+    "WEBP_QUALITY": 85
+  },
+  "PAGINATION": {
+    "DEFAULT_PAGE_SIZE": 20,
+    "MAX_PAGE_SIZE": 100
+  },
+  "CAMERA_DEFAULTS": {
+    "DEFAULT_FOV": 75,
+    "MIN_FOV": 30,
+    "MAX_FOV": 110,
+    "DEFAULT_LAT": 0,
+    "DEFAULT_LON": 0
+  }
+}
