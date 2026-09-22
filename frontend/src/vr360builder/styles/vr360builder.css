@@ -505,7 +505,7 @@
 }
 .vb-info-area-toolbar {
   position: absolute;
-  top: 88px;
+  bottom: 58px;
   left: 50%;
   z-index: 24;
   transform: translateX(-50%);
@@ -816,7 +816,7 @@
 }
 .vb-canvas-toolbar {
   position: absolute;
-  top: 12px;
+  bottom: 12px;
   left: 50%;
   transform: translateX(-50%);
   z-index: 18;
