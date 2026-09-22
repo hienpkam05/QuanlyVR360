@@ -20,6 +20,7 @@ const errorMessage = ref('');
 const successMessage = ref('');
 const editModal = ref(null);
 const versionModal = ref(false);
+const mobileTab = ref('projects'); // 'projects' | 'locations' | 'versions'
 let messageTimer = null;
 
 const projectForm = reactive({
@@ -84,7 +85,7 @@ function scheduleMessageAutoDismiss() {
   messageTimer = setTimeout(() => {
     if (errorMessage.value === currentError) errorMessage.value = '';
     if (successMessage.value === currentSuccess) successMessage.value = '';
-  }, 2000);
+  }, 2500);
 }
 
 async function loadProjects() {
@@ -94,7 +95,7 @@ async function loadProjects() {
     const response = await listProjects();
     projects.value = normalizeResults(response.data);
   } catch (error) {
-    errorMessage.value = error.response?.data?.detail || 'Could not load project list.';
+    errorMessage.value = error.response?.data?.detail || 'Không thể tải danh sách dự án.';
   } finally {
     loading.value = false;
   }
@@ -105,6 +106,7 @@ async function selectProject(project) {
   selectedLocationId.value = '';
   locations.value = [];
   versions.value = [];
+  mobileTab.value = 'locations'; // Chuyển tab trên mobile
   await loadLocations(project.id);
 }
 
@@ -116,7 +118,7 @@ async function loadLocations(projectId = selectedProjectId.value) {
     const response = await listProjectLocations(projectId);
     locations.value = normalizeResults(response.data);
   } catch (error) {
-    errorMessage.value = error.response?.data?.detail || 'Could not load locations.';
+    errorMessage.value = error.response?.data?.detail || 'Không thể tải danh sách địa điểm.';
   } finally {
     loadingLocations.value = false;
   }
@@ -125,6 +127,7 @@ async function loadLocations(projectId = selectedProjectId.value) {
 async function selectLocation(location) {
   selectedLocationId.value = location.id;
   versions.value = [];
+  mobileTab.value = 'versions'; // Chuyển tab trên mobile
   await loadVersionsForLocation(location.id);
 }
 
@@ -136,7 +139,7 @@ async function loadVersionsForLocation(locationId = selectedLocationId.value) {
     const response = await listVersions(locationId);
     versions.value = normalizeResults(response.data);
   } catch (error) {
-    errorMessage.value = error.response?.data?.detail || 'Could not load versions.';
+    errorMessage.value = error.response?.data?.detail || 'Không thể tải danh sách phiên bản.';
   } finally {
     loadingVersions.value = false;
   }
@@ -144,31 +147,35 @@ async function loadVersionsForLocation(locationId = selectedLocationId.value) {
 
 async function submitProject() {
   if (!projectForm.name.trim()) {
-    errorMessage.value = 'Project name is required.';
+    errorMessage.value = 'Tên dự án là bắt buộc.';
     return;
   }
   errorMessage.value = '';
   successMessage.value = '';
-  const response = await createProject({
-    name: projectForm.name.trim(),
-    description: projectForm.description.trim(),
-    is_active: true,
-  });
-  projectForm.name = '';
-  projectForm.description = '';
-  successMessage.value = 'Project created.';
-  await loadProjects();
-  const project = projects.value.find((item) => item.id === response.data.id);
-  if (project) await selectProject(project);
+  try {
+    const response = await createProject({
+      name: projectForm.name.trim(),
+      description: projectForm.description.trim(),
+      is_active: true,
+    });
+    projectForm.name = '';
+    projectForm.description = '';
+    successMessage.value = 'Đã tạo dự án thành công.';
+    await loadProjects();
+    const project = projects.value.find((item) => item.id === response.data.id);
+    if (project) await selectProject(project);
+  } catch (error) {
+    errorMessage.value = extractApiError(error, 'Không thể tạo dự án.');
+  }
 }
 
 async function submitLocation() {
   if (!selectedProjectId.value) {
-    errorMessage.value = 'Select a project first.';
+    errorMessage.value = 'Vui lòng chọn một dự án trước.';
     return;
   }
   if (!editForm.name.trim()) {
-    errorMessage.value = 'Location name is required.';
+    errorMessage.value = 'Tên địa điểm là bắt buộc.';
     return;
   }
   errorMessage.value = '';
@@ -186,13 +193,13 @@ async function submitLocation() {
     if (editForm.thumbnail_file) {
       await uploadLocationThumbnail(response.data.id, editForm.thumbnail_file);
     }
-    successMessage.value = 'Location created.';
+    successMessage.value = 'Đã tạo địa điểm thành công.';
     await loadLocations();
     const location = locations.value.find((item) => item.id === response.data.id);
     if (location) await selectLocation(location);
     closeEditModal();
   } catch (error) {
-    errorMessage.value = extractApiError(error, 'Could not create location.');
+    errorMessage.value = extractApiError(error, 'Không thể tạo địa điểm.');
   }
 }
 
@@ -224,7 +231,7 @@ function openLocationEdit(location) {
 
 function openLocationCreate() {
   if (!selectedProjectId.value) {
-    errorMessage.value = 'Select a project first.';
+    errorMessage.value = 'Vui lòng chọn một dự án trước.';
     return;
   }
   clearEditThumbnailPreview();
@@ -269,7 +276,7 @@ function onEditThumbnailChange(event) {
 
 async function submitEdit() {
   if (!editForm.name.trim()) {
-    errorMessage.value = 'Name is required.';
+    errorMessage.value = 'Tên là bắt buộc.';
     return;
   }
   errorMessage.value = '';
@@ -282,7 +289,7 @@ async function submitEdit() {
   try {
     if (editForm.type === 'project') {
       await updateProject(editForm.id, payload);
-      successMessage.value = 'Project updated.';
+      successMessage.value = 'Đã cập nhật dự án.';
       await loadProjects();
       if (selectedProjectId.value === editForm.id) await loadLocations();
     } else if (editForm.type === 'location') {
@@ -292,7 +299,7 @@ async function submitEdit() {
       if (editForm.thumbnail_file) {
         await uploadLocationThumbnail(editForm.id, editForm.thumbnail_file);
       }
-      successMessage.value = 'Location updated.';
+      successMessage.value = 'Đã cập nhật địa điểm.';
       await loadLocations();
       if (selectedLocationId.value === editForm.id) await loadVersionsForLocation();
     } else if (editForm.type === 'create_location') {
@@ -301,65 +308,67 @@ async function submitEdit() {
     }
     closeEditModal();
   } catch (error) {
-    errorMessage.value = error.response?.data?.detail || 'Could not update.';
+    errorMessage.value = error.response?.data?.detail || 'Không thể cập nhật.';
   }
 }
 
 async function removeProject(project) {
-  const ok = window.confirm(`Soft delete project "${project.name}"?`);
+  const ok = window.confirm(`Xác nhận xóa mềm dự án "${project.name}"?`);
   if (!ok) return;
   errorMessage.value = '';
   successMessage.value = '';
   try {
     await deleteProject(project.id);
-    successMessage.value = 'Project deleted.';
+    successMessage.value = 'Đã xóa dự án.';
     if (selectedProjectId.value === project.id) {
       selectedProjectId.value = '';
       selectedLocationId.value = '';
       locations.value = [];
       versions.value = [];
+      mobileTab.value = 'projects';
     }
     await loadProjects();
   } catch (error) {
-    errorMessage.value = error.response?.data?.detail || 'Could not delete project.';
+    errorMessage.value = error.response?.data?.detail || 'Không thể xóa dự án.';
   }
 }
 
 async function removeLocation(location) {
-  const ok = window.confirm(`Soft delete location "${location.name}"?`);
+  const ok = window.confirm(`Xác nhận xóa mềm địa điểm "${location.name}"?`);
   if (!ok) return;
   errorMessage.value = '';
   successMessage.value = '';
   try {
     await deleteLocation(location.id);
-    successMessage.value = 'Location deleted.';
+    successMessage.value = 'Đã xóa địa điểm.';
     if (selectedLocationId.value === location.id) {
       selectedLocationId.value = '';
       versions.value = [];
+      mobileTab.value = 'locations';
     }
     await loadLocations();
   } catch (error) {
-    errorMessage.value = error.response?.data?.detail || 'Could not delete location.';
+    errorMessage.value = error.response?.data?.detail || 'Không thể xóa địa điểm.';
   }
 }
 
 async function removeVersion(version) {
-  const ok = window.confirm(`Soft delete ${versionLabel(version)}? Only draft versions can be deleted.`);
+  const ok = window.confirm(`Xác nhận xóa ${versionLabel(version)}? Chỉ bản nháp mới có thể xóa.`);
   if (!ok) return;
   errorMessage.value = '';
   successMessage.value = '';
   try {
     await deleteVersion(selectedLocationId.value, version.id);
-    successMessage.value = 'Version deleted.';
+    successMessage.value = 'Đã xóa bản nháp phiên bản.';
     await loadVersionsForLocation();
   } catch (error) {
-    errorMessage.value = error.response?.data?.detail || 'Could not delete version.';
+    errorMessage.value = error.response?.data?.detail || 'Không thể xóa phiên bản.';
   }
 }
 
 function openVersionModal() {
   if (!selectedLocationId.value) {
-    errorMessage.value = 'Select a location first.';
+    errorMessage.value = 'Vui lòng chọn địa điểm trước.';
     return;
   }
   versionForm.label = '';
@@ -387,16 +396,16 @@ function onVersionLogoChange(event) {
 
 async function submitVersion() {
   if (!selectedLocationId.value) {
-    errorMessage.value = 'Select a location first.';
+    errorMessage.value = 'Vui lòng chọn địa điểm trước.';
     return;
   }
   errorMessage.value = '';
   successMessage.value = '';
   try {
-    const label = versionForm.label.trim() || `${selectedLocation.value?.name || 'Tour'} draft`;
+    const label = versionForm.label.trim() || `${selectedLocation.value?.name || 'Tour'} bản nháp`;
     const payload = {
       label,
-      changelog: 'Created from Projects flow.',
+      changelog: 'Khởi tạo từ luồng quản trị Projects.',
       background_audio_file: versionForm.background_audio_file,
       hotspot_point_logo_file: versionForm.hotspot_point_logo_file,
     };
@@ -410,10 +419,10 @@ async function submitVersion() {
     }
     await createVersion(selectedLocationId.value, payload);
     closeVersionModal();
-    successMessage.value = 'Version created.';
+    successMessage.value = 'Đã tạo phiên bản mới thành công.';
     await loadVersionsForLocation();
   } catch (error) {
-    errorMessage.value = extractApiError(error, 'Could not create version.');
+    errorMessage.value = extractApiError(error, 'Không thể tạo phiên bản.');
   }
 }
 
@@ -430,7 +439,7 @@ function openViewer(version) {
 
 function openBuilder(version = null) {
   if (version?.status === 'published') {
-    errorMessage.value = 'Published versions cannot be edited. Open an archived or draft version.';
+    errorMessage.value = 'Phiên bản đã xuất bản không thể chỉnh sửa trực tiếp. Vui lòng mở bản nháp.';
     return;
   }
   router.push({
@@ -457,31 +466,75 @@ onBeforeUnmount(() => {
   <section class="page projects-page">
     <header class="page-header">
       <div>
-        <p class="eyebrow">Management</p>
-        <h1>Projects</h1>
-        <p class="muted">Choose a project, then a location, then open a tour version in VR360 Viewer.</p>
+        <p class="eyebrow">Quản lý nội dung</p>
+        <h1>Dự án & Không gian VR360</h1>
+        <p class="muted">Chọn dự án, chọn địa điểm, sau đó biên tập hoặc xem trước phiên bản trong Viewer.</p>
       </div>
-      <button class="secondary-button" type="button" @click="loadProjects">Refresh</button>
+      <button class="secondary-button" type="button" @click="loadProjects">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 6px;">
+          <polyline points="23 4 23 10 17 10"></polyline>
+          <polyline points="1 20 1 14 7 14"></polyline>
+          <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+        </svg>
+        Làm mới
+      </button>
     </header>
 
     <p v-if="errorMessage" class="error-message">{{ errorMessage }}</p>
     <p v-if="successMessage" class="success-message">{{ successMessage }}</p>
 
+    <!-- Form Tạo Nhanh Dự Án có nhãn Label tiếp cận chuẩn a11y -->
     <section class="panel project-quick-create">
       <form class="inline-form" @submit.prevent="submitProject">
-        <input v-model="projectForm.name" placeholder="New project name" />
-        <input v-model="projectForm.description" placeholder="Short description" />
-        <button class="primary-button" type="submit">Create project</button>
+        <div class="form-field">
+          <label for="quick-proj-name" class="field-label">Tên dự án mới <span class="required">*</span></label>
+          <input id="quick-proj-name" v-model="projectForm.name" placeholder="Ví dụ: Dự án Du lịch Tràng An" />
+        </div>
+        <div class="form-field">
+          <label for="quick-proj-desc" class="field-label">Mô tả ngắn</label>
+          <input id="quick-proj-desc" v-model="projectForm.description" placeholder="Mô tả tóm tắt mục tiêu dự án" />
+        </div>
+        <button class="primary-button self-end" type="submit">+ Tạo Dự Án</button>
       </form>
     </section>
 
+    <!-- Mobile Flow Tabs Segmented Control (Chỉ hiển thị trên mobile để tránh tràn lề ngang) -->
+    <div class="mobile-flow-tabs">
+      <button
+        type="button"
+        :class="{ active: mobileTab === 'projects' }"
+        @click="mobileTab = 'projects'"
+      >
+        1. Dự án ({{ projects.length }})
+      </button>
+      <button
+        type="button"
+        :class="{ active: mobileTab === 'locations' }"
+        @click="mobileTab = 'locations'"
+      >
+        2. Địa điểm ({{ locations.length }})
+      </button>
+      <button
+        type="button"
+        :class="{ active: mobileTab === 'versions' }"
+        @click="mobileTab = 'versions'"
+      >
+        3. Phiên bản ({{ versions.length }})
+      </button>
+    </div>
+
+    <!-- 3-Column Project Flow Grid -->
     <section class="project-flow">
-      <div class="panel project-flow-column">
+      <!-- Cột 1: Danh Sách Dự Án -->
+      <div
+        class="panel project-flow-column"
+        :class="{ 'mobile-hidden': mobileTab !== 'projects' }"
+      >
         <div class="panel-title-row">
-          <h2>1. Projects</h2>
-          <span class="muted">{{ projects.length }}</span>
+          <h2>1. Dự án</h2>
+          <span class="muted badge-count">{{ projects.length }}</span>
         </div>
-        <p v-if="loading" class="muted">Loading projects...</p>
+        <p v-if="loading" class="muted">Đang tải danh sách dự án...</p>
         <article
           v-for="project in projects"
           :key="project.id"
@@ -494,33 +547,43 @@ onBeforeUnmount(() => {
           @keydown.space.prevent="selectProject(project)"
         >
           <strong>{{ project.name }}</strong>
-          <span>{{ project.description || 'No description' }}</span>
-          <small>{{ project.locations_count || 0 }} locations · {{ project.is_active ? 'Active' : 'Inactive' }}</small>
-          <div class="actions-row">
-            <button class="secondary-button compact-button" type="button" @click.stop="openProjectEdit(project)">Edit</button>
-            <button class="danger-button compact-button" type="button" @click.stop="removeProject(project)">Delete</button>
+          <span>{{ project.description || 'Chưa có mô tả' }}</span>
+          <small>{{ project.locations_count || 0 }} địa điểm · {{ project.is_active ? 'Đang hoạt động' : 'Tạm dừng' }}</small>
+          
+          <!-- Action Hierarchy: Sửa là nút phụ viền rõ, Xóa là Ghost Destructive xám nhạt -->
+          <div class="actions-row mt-2">
+            <button class="secondary-action-btn" type="button" @click.stop="openProjectEdit(project)">
+              Sửa
+            </button>
+            <button class="ghost-danger-btn" type="button" @click.stop="removeProject(project)">
+              Xóa
+            </button>
           </div>
         </article>
-        <p v-if="!projects.length && !loading" class="muted">No project yet.</p>
+        <p v-if="!projects.length && !loading" class="muted">Chưa có dự án nào.</p>
       </div>
 
-      <div class="panel project-flow-column">
+      <!-- Cột 2: Danh Sách Địa Điểm -->
+      <div
+        class="panel project-flow-column"
+        :class="{ 'mobile-hidden': mobileTab !== 'locations' }"
+      >
         <div class="panel-title-row">
-          <h2>2. Locations</h2>
-          <span class="muted">{{ locations.length }}</span>
+          <h2>2. Địa điểm</h2>
+          <span class="muted badge-count">{{ locations.length }}</span>
         </div>
 
         <button
           v-if="selectedProject"
-          class="secondary-button"
+          class="secondary-button mb-2"
           type="button"
           @click="openLocationCreate"
         >
-          + Create location
+          + Thêm địa điểm mới
         </button>
 
-        <p v-if="!selectedProject" class="muted">Select a project to see its locations.</p>
-        <p v-else-if="loadingLocations" class="muted">Loading locations...</p>
+        <p v-if="!selectedProject" class="muted">Chọn một dự án ở cột 1 để xem địa điểm.</p>
+        <p v-else-if="loadingLocations" class="muted">Đang tải địa điểm...</p>
         <article
           v-for="location in locations"
           :key="location.id"
@@ -534,25 +597,39 @@ onBeforeUnmount(() => {
         >
           <strong>{{ location.name }}</strong>
           <span>{{ location.description || selectedProject?.name }}</span>
-          <small>{{ location.is_active ? 'Active' : 'Inactive' }}</small>
-          <div class="actions-row">
-            <button class="secondary-button compact-button" type="button" @click.stop="openLocationEdit(location)">Edit</button>
-            <button class="danger-button compact-button" type="button" @click.stop="removeLocation(location)">Delete</button>
+          <small>{{ location.is_active ? 'Đang hoạt động' : 'Tạm dừng' }}</small>
+          
+          <div class="actions-row mt-2">
+            <button class="secondary-action-btn" type="button" @click.stop="openLocationEdit(location)">
+              Sửa
+            </button>
+            <button class="ghost-danger-btn" type="button" @click.stop="removeLocation(location)">
+              Xóa
+            </button>
           </div>
         </article>
-        <p v-if="selectedProject && !locations.length && !loadingLocations" class="muted">No location yet.</p>
+        <p v-if="selectedProject && !locations.length && !loadingLocations" class="muted">Chưa có địa điểm nào trong dự án này.</p>
       </div>
 
-      <div class="panel project-flow-column">
+      <!-- Cột 3: Danh Sách Phiên Bản Tour -->
+      <div
+        class="panel project-flow-column"
+        :class="{ 'mobile-hidden': mobileTab !== 'versions' }"
+      >
         <div class="panel-title-row">
-          <h2>3. Versions</h2>
-          <span class="muted">{{ versions.length }}</span>
+          <h2>3. Phiên bản</h2>
+          <span class="muted badge-count">{{ versions.length }}</span>
         </div>
-        <button v-if="selectedLocation" class="secondary-button" type="button" @click="openVersionModal">
-          + Create version
+        <button
+          v-if="selectedLocation"
+          class="secondary-button mb-2"
+          type="button"
+          @click="openVersionModal"
+        >
+          + Tạo phiên bản mới
         </button>
-        <p v-if="!selectedLocation" class="muted">Select a location to see versions.</p>
-        <p v-else-if="loadingVersions" class="muted">Loading versions...</p>
+        <p v-if="!selectedLocation" class="muted">Chọn một địa điểm ở cột 2 để xem phiên bản tour.</p>
+        <p v-else-if="loadingVersions" class="muted">Đang tải phiên bản...</p>
         <article
           v-for="version in versions"
           :key="version.id"
@@ -560,83 +637,88 @@ onBeforeUnmount(() => {
         >
           <strong>{{ versionLabel(version) }}</strong>
           <span>{{ version.changelog || selectedLocation?.name }}</span>
-          <small>{{ version.status }} · {{ version.scene_assets_count || 0 }} assets</small>
-          <div class="actions-row">
-            <button class="primary-button" type="button" @click="openViewer(version)">View</button>
+          <small>Trạng thái: {{ version.status }} · {{ version.scene_assets_count || 0 }} cảnh</small>
+          <div class="actions-row mt-2">
+            <button class="primary-button compact-button" type="button" @click="openViewer(version)">
+              Xem Tour
+            </button>
             <button
-              class="secondary-button"
+              class="secondary-action-btn"
               type="button"
               :disabled="version.status === 'published'"
               @click="openBuilder(version)"
             >
-              Edit
+              Chỉnh Sửa
             </button>
-            <button class="danger-button" type="button" @click="removeVersion(version)">Delete</button>
+            <button class="ghost-danger-btn" type="button" @click="removeVersion(version)">
+              Xóa
+            </button>
           </div>
         </article>
         <div v-if="selectedLocation && !versions.length && !loadingVersions" class="empty-flow-card">
-          <p class="muted">No version yet.</p>
+          <p class="muted">Chưa có phiên bản tour nào.</p>
         </div>
       </div>
     </section>
 
+    <!-- Modal Tạo Phiên Bản Mới -->
     <div v-if="versionModal" class="builder-modal-backdrop" @click.self="closeVersionModal">
       <div class="builder-modal builder-modal-small">
         <div class="builder-modal-header">
-          <h2>Create version</h2>
-          <button type="button" @click="closeVersionModal">×</button>
+          <h2>Tạo phiên bản tour mới</h2>
+          <button type="button" @click="closeVersionModal" aria-label="Đóng">×</button>
         </div>
         <form class="form" @submit.prevent="submitVersion">
-          <label>
-            Version label
-            <input v-model="versionForm.label" placeholder="Leave empty to auto-name" />
-          </label>
-          <label>
-            Inherit from version
+          <div class="form-field">
+            <label class="field-label">Tên nhãn phiên bản</label>
+            <input v-model="versionForm.label" placeholder="Để trống sẽ tự động đặt tên theo thứ tự" />
+          </div>
+          <div class="form-field">
+            <label class="field-label">Kế thừa từ phiên bản trước</label>
             <select v-model="versionForm.source_version_id">
-              <option value="">Create empty version</option>
+              <option value="">Tạo phiên bản rỗng</option>
               <option v-for="item in versions" :key="item.id" :value="item.id">
                 {{ versionLabel(item) }} - {{ item.status }}
               </option>
             </select>
-          </label>
-          <p class="muted">
-            If selected, the new draft will copy scenes, hotspots, audio, logo and media assets from that version.
+          </div>
+          <p class="muted text-sm">
+            Nếu chọn kế thừa, bản nháp mới sẽ sao chép toàn bộ cảnh, điểm chuyển cảnh (hotspot), âm thanh và logo từ phiên bản nguồn.
           </p>
-          <label>
-            Background audio
+          <div class="form-field">
+            <label class="field-label">Âm thanh nền (Background Audio)</label>
             <input type="file" accept="audio/*" @change="onVersionAudioChange" />
-          </label>
-          <label>
-            Point hotspot logo
+          </div>
+          <div class="form-field">
+            <label class="field-label">Logo điểm chuyển cảnh (Hotspot Logo)</label>
             <input type="file" accept="image/*" @change="onVersionLogoChange" />
-          </label>
-          <p class="muted">Logo nay se dung cho hotspot loai point trong viewer.</p>
-          <div class="actions-row">
-            <button class="primary-button" type="submit">Create version</button>
-            <button class="secondary-button" type="button" @click="closeVersionModal">Cancel</button>
+          </div>
+          <div class="actions-row mt-4">
+            <button class="primary-button" type="submit">Tạo Bản Nháp</button>
+            <button class="secondary-button" type="button" @click="closeVersionModal">Hủy Bỏ</button>
           </div>
         </form>
       </div>
     </div>
 
+    <!-- Modal Chỉnh Sửa Dự Án / Địa Điểm -->
     <div v-if="editModal" class="builder-modal-backdrop">
       <div class="builder-modal builder-modal-small">
         <div class="builder-modal-header">
-          <h2>{{ editForm.type === 'create_location' ? 'Create location' : `Edit ${editModal}` }}</h2>
-          <button type="button" @click="closeEditModal">×</button>
+          <h2>{{ editForm.type === 'create_location' ? 'Tạo địa điểm mới' : `Chỉnh sửa ${editModal}` }}</h2>
+          <button type="button" @click="closeEditModal" aria-label="Đóng">×</button>
         </div>
         <form class="form" @submit.prevent="submitEdit">
-          <label>
-            Name
+          <div class="form-field">
+            <label class="field-label">Tên <span class="required">*</span></label>
             <input v-model="editForm.name" />
-          </label>
-          <label>
-            Description
+          </div>
+          <div class="form-field">
+            <label class="field-label">Mô tả</label>
             <textarea v-model="editForm.description" rows="4"></textarea>
-          </label>
+          </div>
           <div v-if="editForm.type === 'location' || editForm.type === 'create_location'" class="thumbnail-edit-block">
-            <span class="form-label">Thumbnail</span>
+            <span class="field-label">Ảnh đại diện (Thumbnail)</span>
             <div class="thumbnail-edit-grid">
               <div
                 class="thumbnail-preview"
@@ -646,42 +728,42 @@ onBeforeUnmount(() => {
                     : {}
                 "
               >
-                <span v-if="!editForm.thumbnail_preview && !editForm.thumbnail">No thumbnail</span>
+                <span v-if="!editForm.thumbnail_preview && !editForm.thumbnail">Chưa có ảnh</span>
               </div>
               <label class="thumbnail-upload-button">
                 <input type="file" accept="image/*" @change="onEditThumbnailChange" />
-                <strong>Upload thumbnail</strong>
-                <small>JPG/PNG/WebP, dùng làm ảnh card khi publish.</small>
+                <strong>Tải ảnh lên</strong>
+                <small>Định dạng JPG/PNG/WebP, hiển thị làm ảnh bìa khi xuất bản.</small>
               </label>
             </div>
           </div>
           <div v-if="editForm.type === 'location' || editForm.type === 'create_location'" class="two-inputs">
-            <label>
-              Latitude
+            <div class="form-field">
+              <label class="field-label">Vĩ độ (Latitude)</label>
               <input
                 v-model="editForm.latitude"
                 type="number"
                 step="0.000001"
                 placeholder="VD: 21.402514"
               />
-            </label>
-            <label>
-              Longitude
+            </div>
+            <div class="form-field">
+              <label class="field-label">Kinh độ (Longitude)</label>
               <input
                 v-model="editForm.longitude"
                 type="number"
                 step="0.000001"
                 placeholder="VD: 105.807476"
               />
-            </label>
+            </div>
           </div>
-          <label class="checkbox-row">
+          <label class="checkbox-row mt-2">
             <input v-model="editForm.is_active" type="checkbox" />
-            Active
+            Đang kích hoạt
           </label>
-          <div class="actions-row">
-            <button class="primary-button" type="submit">Save</button>
-            <button class="secondary-button" type="button" @click="closeEditModal">Cancel</button>
+          <div class="actions-row mt-4">
+            <button class="primary-button" type="submit">Lưu Thay Đổi</button>
+            <button class="secondary-button" type="button" @click="closeEditModal">Hủy Bỏ</button>
           </div>
         </form>
       </div>
