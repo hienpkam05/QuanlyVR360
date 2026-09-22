@@ -9,7 +9,7 @@ defineProps({
 });
 
 const emit = defineEmits([
-  'update:scene', 'update:view', 'update:transition',
+  'update:scene', 'update:view',
   'save-view', 'replace-image',
   'navigate-to-points','update:collapsed'
 ]);
@@ -19,9 +19,6 @@ function update(key, value) {
 }
 function updateView(key, value) {
   emit('update:view', key, value);
-}
-function updateTransition(key, value) {
-  emit('update:transition', key, value);
 }
 </script>
 
@@ -102,53 +99,6 @@ function updateTransition(key, value) {
         <div class="vb-prop-row"><label class="vb-prop-label">FOV</label><input class="vb-prop-input vb-prop-input-mono" type="number" step="1" min="30" max="120" :value="scene.initialView.fov" @input="updateView('fov', +$event.target.value)" /></div>
       </div>
       <button class="vb-prop-btn vb-prop-btn-primary" @click="emit('save-view')">Lưu góc nhìn hiện tại</button>
-    </BaseAccordion>
-
-    <!-- Auto Tour -->
-    <BaseAccordion title="Auto Tour" :open="!collapsed.autoTour" @toggle="emit('update:collapsed', 'autoTour', !collapsed.autoTour)">
-      <template #icon>
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><polygon points="5 3 19 12 5 21 5 3" /></svg>
-      </template>
-      <div class="vb-prop-row">
-        <label class="vb-prop-label vb-hover-toggle-label"><input type="checkbox" :checked="scene.autoTour === 1" @change="update('autoTour', $event.target.checked ? 1 : 0)" /> Bật Auto Tour</label>
-      </div>
-      <template v-if="scene.autoTour === 1">
-        <div class="vb-prop-row" style="margin-bottom:0">
-          <label class="vb-prop-label">Thời gian hiển thị (giây)</label>
-          <input class="vb-prop-input vb-prop-input-mono" type="number" min="1" step="1" :value="scene.autoTourDuration ?? 20" @change="update('autoTourDuration', +$event.target.value)" />
-        </div>
-      </template>
-    </BaseAccordion>
-
-    <!-- Transition -->
-    <BaseAccordion title="Hiệu ứng chuyển cảnh" :open="!collapsed.transition" @toggle="emit('update:collapsed', 'transition', !collapsed.transition)">
-      <template #icon>
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><polyline points="17 1 21 5 17 9" /><path d="M3 11V9a4 4 0 014-4h14" /><polyline points="7 23 3 19 7 15" /><path d="M21 13v2a4 4 0 01-4 4H3" /></svg>
-      </template>
-      <div class="vb-prop-row">
-        <label class="vb-prop-label vb-hover-toggle-label"><input type="checkbox" :checked="scene.transition?.enabled !== false" @change="updateTransition('enabled', $event.target.checked)" /> Bật hiệu ứng</label>
-      </div>
-      <template v-if="scene.transition?.enabled !== false">
-        <div class="vb-prop-row">
-          <label class="vb-prop-label">Kiểu hiệu ứng</label>
-          <select class="vb-prop-input" :value="scene.transition?.effect || 'fade'" @change="updateTransition('effect', $event.target.value)">
-            <option value="fade">Mờ dần (Fade)</option>
-            <option value="black">Tối màn hình</option>
-            <option value="white">Sáng màn hình</option>
-          </select>
-        </div>
-        <div class="vb-prop-row">
-          <label class="vb-prop-label">Thời lượng (ms)</label>
-          <input class="vb-prop-input vb-prop-input-mono" type="number" min="200" step="100" :value="scene.transition?.duration ?? 2000" @change="updateTransition('duration', +$event.target.value)" />
-        </div>
-        <div class="vb-prop-row">
-          <label class="vb-prop-label vb-hover-toggle-label"><input type="checkbox" :checked="scene.transition?.rotation !== false" @change="updateTransition('rotation', $event.target.checked)" /> Xoay camera khi chuyển</label>
-        </div>
-        <div v-if="scene.transition?.rotation !== false" class="vb-prop-row" style="margin-bottom:0">
-          <label class="vb-prop-label">Tốc độ xoay (vòng/phút)</label>
-          <input class="vb-prop-input vb-prop-input-mono" type="number" min="1" step="1" :value="scene.transition?.speed ?? 10" @change="updateTransition('speed', +$event.target.value)" />
-        </div>
-      </template>
     </BaseAccordion>
 
   </div>

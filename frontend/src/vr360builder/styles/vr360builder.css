@@ -2015,3 +2015,40 @@ textarea.vb-form-input {
   color: var(--vb-text-dim);
   font-size: 11px;
 }
+
+/* ── Mode Tabs (Builder / Cấu hình tour) ── */
+.vb-mode-tabs {
+  display: flex;
+  gap: 2px;
+  margin-left: 6px;
+  background: var(--vb-bg-3);
+  border-radius: 6px;
+  padding: 2px;
+  flex-shrink: 0;
+}
+.vb-mode-tab {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 12px;
+  border: none;
+  background: transparent;
+  color: var(--vb-text-dim);
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 500;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+.vb-mode-tab:hover {
+  color: var(--vb-text-muted);
+  background: var(--vb-bg-4);
+}
+.vb-mode-tab.active {
+  background: var(--vb-primary-dim);
+  color: var(--vb-text);
+}
+.vb-mode-tab svg {
+  flex-shrink: 0;
+}

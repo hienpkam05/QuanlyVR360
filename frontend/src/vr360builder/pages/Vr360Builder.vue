@@ -17,7 +17,6 @@ import { readGpsFromFile } from "../common/exifGps.js";
 import { DEFAULT_NAV_ICON } from "@/common/hotspotIcons.js";
 import {
   normalizeScene,
-  defaultTransition,
   defaultHoverState,
   NAV_STYLES,
 } from "@/common/vr360/tourDataMapper.js";
@@ -27,6 +26,7 @@ import SceneEditor from "../components/scene/SceneEditor.vue";
 import BaseAccordion from "../components/common/BaseAccordion.vue";
 import PointList from "../components/point/PointList.vue";
 import PointEditor from "../components/point/PointEditor.vue";
+import TourConfigView from "../components/tour-config/TourConfigView.vue";
 import { apiBaseURL, http } from "@/api/http.js";
 import { createProject, listProjects } from "@/api/projectsApi.js";
 import { createLocation, listProjectLocations } from "@/api/locationsApi.js";
@@ -64,9 +64,6 @@ const uiState = reactive({
   collapsed: {
     sceneProps: false,
     initialView: false,
-    autoTour: true,
-    transition: true,
-    tourAudio: true,
   },
   hsAcc: { chung: true, audio: true, noiDung: true, navTarget: true, hover: false },
 });
@@ -105,6 +102,15 @@ const draftInfoAreaOverlay = computed(() => {
 
 const previewMode = reactive({ active: false });
 
+const builderMode = ref('builder'); // 'builder' | 'tour-config'
+const tourTransition = reactive({
+  enabled: true,
+  rotation: true,
+  effect: 'fade',
+  duration: 1200,
+  speed: 10,
+});
+
 watch(selectedHotspotIndex, (v) => {
   if (v >= 0) {
     uiState.rightView = "point-editor";
@@ -114,7 +120,6 @@ watch(selectedHotspotIndex, (v) => {
     uiState.hsAcc.hover = false;
     uiState.collapsed.sceneProps = true;
     uiState.collapsed.initialView = true;
-    uiState.collapsed.transition = true;
   } else {
     uiState.rightView = "point-list";
   }
@@ -281,7 +286,7 @@ const saveState = ref("saved");
 const lastSavedAt = ref(null);
 
 watch(
-  [scenes, tourAudio],
+  [scenes, tourAudio, tourTransition],
   () => {
     if (
       !suppressDirtyTracking.value &&
@@ -426,7 +431,7 @@ async function addScene(file) {
     hotspots: [],
     autoTour: 0,
     autoTourDuration: 20,
-    transition: defaultTransition(),
+    transition: { ...tourTransition },
     gps,
     _file: procFile,
     _originalSize: originalSize,
@@ -1142,15 +1147,39 @@ const handleReplaceImage = async (ev) => {
 };
 
 // ══════════════════════════════════════
-//  TRANSITION
+//  TRANSITION (tour-level)
 // ══════════════════════════════════════
-function ensureTransition(s) {
-  if (!s.transition) s.transition = defaultTransition();
-  return s.transition;
+function updateTourTransition(key, value) {
+  tourTransition[key] = value;
 }
-function updateTransition(key, value) {
-  if (activeSceneIndex.value < 0) return;
-  ensureTransition(scenes[activeSceneIndex.value])[key] = value;
+function initTourTransitionFromScenes() {
+  const first = scenes.find(s => s.transition) || scenes[0];
+  if (first?.transition) {
+    Object.assign(tourTransition, {
+      enabled: first.transition.enabled !== false,
+      rotation: first.transition.rotation !== false,
+      effect: first.transition.effect || 'fade',
+      duration: first.transition.duration ?? 1200,
+      speed: first.transition.speed ?? 10,
+    });
+  }
+}
+function applyTourTransitionToScenes() {
+  const t = { ...tourTransition };
+  for (const s of scenes) {
+    s.transition = { ...t };
+  }
+}
+
+// ══════════════════════════════════════
+//  TOUR CONFIG VIEW HANDLERS
+// ══════════════════════════════════════
+function handleTourAudioFieldUpdate(key, value) {
+  tourAudio[key] = value;
+}
+function handleSceneFieldUpdate(index, key, value) {
+  if (index < 0 || index >= scenes.length) return;
+  scenes[index][key] = value;
 }
 
 // ══════════════════════════════════════
@@ -1765,6 +1794,17 @@ async function loadTourById(id) {
   resetTourAudio(d.audio, resolveUrl(d.background_audio));
   disposeAllScenes();
   scenes.splice(0, scenes.length, ...mapped);
+  if (d.transition) {
+    Object.assign(tourTransition, {
+      enabled: d.transition.enabled !== false,
+      rotation: d.transition.rotation !== false,
+      effect: d.transition.effect || 'fade',
+      duration: d.transition.duration ?? 1200,
+      speed: d.transition.speed ?? 10,
+    });
+  } else {
+    initTourTransitionFromScenes();
+  }
   api.currentTourId = id;
   activeSceneIndex.value = -1;
   selectedHotspotIndex.value = -1;
@@ -1793,7 +1833,7 @@ function cloneForExport() {
     initialView: { ...s.initialView },
     autoTour: s.autoTour ?? 0,
     autoTourDuration: s.autoTourDuration ?? 20,
-    transition: s.transition ? { ...s.transition } : null,
+    transition: { ...tourTransition },
     // Keep upload File handles, but deep-copy every persisted POI field so
     // save/export work cannot mutate the selected editor's reactive object.
     hotspots: s.hotspots.map((h) => ({
@@ -1815,6 +1855,7 @@ function clonePlain(value, fallback = null) {
 }
 
 function buildJson(c) {
+  const tt = { ...tourTransition };
   return {
     title: "VR360 Virtual Tour",
     ...(tourAudio.file
@@ -1830,6 +1871,7 @@ function buildJson(c) {
           },
         }
       : {}),
+    transition: tt,
     scenes: c.map((s) => ({
       id: s.id,
       name: s.name,
@@ -1841,9 +1883,7 @@ function buildJson(c) {
       initialView: { ...s.initialView },
       autoTour: s.autoTour ?? 0,
       autoTourDuration: s.autoTourDuration ?? 20,
-      ...(s.transition?.enabled !== false
-        ? { transition: { ...s.transition } }
-        : {}),
+      transition: { ...tt },
       hotspots: s.hotspots.map(cleanHotspotForSave),
     })),
   };
@@ -2320,6 +2360,17 @@ function doImportJSON() {
     resetTourAudio(d.audio);
     disposeAllScenes();
     scenes.splice(0, scenes.length, ...mapped);
+    if (d.transition) {
+      Object.assign(tourTransition, {
+        enabled: d.transition.enabled !== false,
+        rotation: d.transition.rotation !== false,
+        effect: d.transition.effect || 'fade',
+        duration: d.transition.duration ?? 1200,
+        speed: d.transition.speed ?? 10,
+      });
+    } else {
+      initTourTransitionFromScenes();
+    }
     activeSceneIndex.value = -1;
     selectedHotspotIndex.value = -1;
     modals.import = false;
@@ -2461,6 +2512,24 @@ onBeforeUnmount(() => {
         <span class="vb-back-label">Quản lý</span>
       </button>
       <div class="vb-brand">VR360 BUILDER</div>
+      <div class="vb-mode-tabs">
+        <button
+          class="vb-mode-tab"
+          :class="{ active: builderMode === 'builder' }"
+          @click="builderMode = 'builder'"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="8.5" cy="8.5" r="1.5" /><path d="M21 15l-5-5L5 21" /></svg>
+          Nội dung
+        </button>
+        <button
+          class="vb-mode-tab"
+          :class="{ active: builderMode === 'tour-config' }"
+          @click="builderMode = 'tour-config'"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z" /></svg>
+          Cấu hình tour
+        </button>
+      </div>
       <div class="vb-save-state" :class="`vb-save-state-${saveState}`" aria-live="polite">
         <span class="vb-save-state-icon" aria-hidden="true">
           {{ saveState === "saving" ? "⟳" : saveState === "error" ? "⚠" : saveState === "dirty" ? "●" : "✓" }}
@@ -2637,7 +2706,22 @@ onBeforeUnmount(() => {
       <div class="vb-spacer"></div>
     </div>
 
-    <div class="vb-main">
+    <!-- TOUR CONFIG VIEW -->
+    <TourConfigView
+      v-if="builderMode === 'tour-config'"
+      :tour-audio="tourAudio"
+      :tour-audio-preview-src="tourAudioPreviewSrc"
+      :scenes="scenes"
+      :tour-transition="tourTransition"
+      @pick-tour-audio="pickTourAudioFile"
+      @clear-tour-audio="clearTourAudio"
+      @update:tour-audio="handleTourAudioFieldUpdate"
+      @update:scene="handleSceneFieldUpdate"
+      @update:tour-transition="updateTourTransition"
+      class="vb-main"
+    />
+
+    <div v-else class="vb-main">
       <!-- LEFT: SCENE NAVIGATOR -->
       <div class="vb-left" :class="{ collapsed: uiState.leftCollapsed }">
         <div class="vb-panel-header">
@@ -3076,52 +3160,6 @@ onBeforeUnmount(() => {
         </div>
         <template v-if="!uiState.rightCollapsed">
           <div class="vb-right-scroll">
-            <BaseAccordion
-              title="Tour Audio"
-              :open="!uiState.collapsed.tourAudio"
-              :badge="tourAudioPreviewSrc ? 'Đã chọn' : ''"
-              @toggle="uiState.collapsed.tourAudio = !uiState.collapsed.tourAudio"
-            >
-              <template #icon>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13">
-                  <path d="M9 18V5l12-2v13" />
-                  <circle cx="6" cy="18" r="3" />
-                  <circle cx="18" cy="16" r="3" />
-                </svg>
-              </template>
-              <div class="vb-prop-row">
-                <button class="vb-prop-btn vb-prop-btn-accent" @click="pickTourAudioFile">
-                  {{ tourAudioPreviewSrc ? 'Thay file âm thanh' : 'Chọn file âm thanh' }}
-                </button>
-                <span v-if="tourAudio._fileName" class="vb-prop-filename">{{ tourAudio._fileName }}</span>
-              </div>
-              <div class="vb-prop-row">
-                <label class="vb-prop-label">URL audio đã host</label>
-                <input v-model.trim="tourAudio.file" class="vb-prop-input vb-prop-input-mono" placeholder="https://.../tour-audio.mp3" />
-              </div>
-              <div v-if="tourAudioPreviewSrc" class="vb-prop-row">
-                <audio class="vb-audio-player" controls :src="tourAudioPreviewSrc"></audio>
-              </div>
-              <div class="vb-prop-row">
-                <label class="vb-prop-label vb-hover-toggle-label"><input v-model="tourAudio.enabled" type="checkbox" :disabled="!tourAudioPreviewSrc" /> Bật Tour Audio</label>
-              </div>
-              <div class="vb-prop-row-inline">
-                <div class="vb-prop-row" style="flex:1"><label class="vb-prop-label">Âm lượng cấu hình</label><input v-model.number="tourAudio.volume" class="vb-prop-input vb-prop-input-mono" type="number" min="0" max="1" step="0.1" /></div>
-                <div class="vb-prop-row" style="flex:1"><label class="vb-prop-label">Ngôn ngữ</label><input v-model.trim="tourAudio.language" class="vb-prop-input" placeholder="vi" /></div>
-              </div>
-              <div class="vb-prop-row-inline">
-                <div class="vb-prop-row" style="flex:1"><label class="vb-prop-label vb-hover-toggle-label"><input v-model="tourAudio.loop" type="checkbox" /> Lặp lại</label></div>
-                <div class="vb-prop-row" style="flex:1"><label class="vb-prop-label vb-hover-toggle-label"><input v-model="tourAudio.autoplay" type="checkbox" /> Tự động phát</label></div>
-              </div>
-              <div class="vb-prop-row">
-                <label class="vb-prop-label">Mô tả</label>
-                <input v-model.trim="tourAudio.description" class="vb-prop-input" placeholder="Mô tả audio (tuỳ chọn)" />
-              </div>
-              <div v-if="tourAudioPreviewSrc" class="vb-prop-row">
-                <button class="vb-prop-btn vb-prop-btn-danger" @click="clearTourAudio">Xoá cấu hình audio</button>
-              </div>
-            </BaseAccordion>
-
             <!-- EMPTY STATE -->
             <div v-if="!activeScene" class="vb-empty-state">
               <svg
@@ -3144,7 +3182,6 @@ onBeforeUnmount(() => {
               :collapsed="uiState.collapsed"
               @update:scene="updateScene"
               @update:view="updateView"
-              @update:transition="updateTransition"
               @save-view="saveCurrentView"
               @replace-image="replaceImage"
               @navigate-to-points="navToPointList"
