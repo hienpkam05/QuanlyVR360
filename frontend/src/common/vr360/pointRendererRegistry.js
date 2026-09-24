@@ -27,7 +27,6 @@ export function resolvePointRenderer(point) {
     if (import.meta.env?.DEV) console.warn('[POI Registry] Missing renderer mapping:', kind, point?.type, point?.id);
     return pointRendererRegistry.generic;
   }
-  if (import.meta.env?.DEV) console.debug('[POI Registry] Viewer render type:', point?.id || 'unknown', kind, renderer.renderer);
   return renderer;
 }
 

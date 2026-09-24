@@ -1,5 +1,5 @@
 <script setup>
-import { computed, nextTick, onBeforeUnmount, onMounted, onUpdated, ref, watch } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import * as THREE from 'three';
 import NavRenderer from './nav/NavRenderer.vue';
 import { createCameraController } from '../common/runtime/cameraController.js';
@@ -72,15 +72,15 @@ const props = defineProps({
 
 const emit = defineEmits(['panorama-click', 'hotspot-click', 'hotspot-dblclick', 'view-change', 'texture-ready', 'texture-error']);
 
+const EMPTY_HOTSPOTS = Object.freeze([]);
 const container = ref(null);
-const projectedHotspots = ref([]);
-const projectedInfoAreas = ref([]);
+const projectedHotspots = ref(EMPTY_HOTSPOTS);
+const projectedInfoAreas = ref(EMPTY_HOTSPOTS);
 const isTextureLoading = ref(false);
 const textureError = ref('');
 const projectionBlend = ref(0);
 const hasImage = computed(() => Boolean(props.imageUrl));
 const hotspotsVisible = computed(() => projectionBlend.value >= 0.92);
-const EMPTY_HOTSPOTS = Object.freeze([]);
 const drawingBufferSize = new THREE.Vector2();
 
 let renderer;
@@ -110,11 +110,11 @@ let cameraController;
 let textureManager;
 let projectionState;
 let projectionRenderCount = 0;
-let componentUpdateCount = 0;
 let introRotationClock = 0;
 let dragVelocityX = 0;
 let dragVelocityY = 0;
 let lastMoveAt = 0;
+let lastRendererInput = null;
 
 function emitViewChange() {
   emit('view-change', cameraController?.getRoundedView() || { lon: 0, lat: 0, fov: 75 });
@@ -149,9 +149,9 @@ function youtubeEmbedUrl(url) {
 
 function updateProjectedHotspots() {
   if (!container.value || !camera || isTextureLoading.value || !hotspotsVisible.value) {
-    projectedHotspots.value = [];
-    projectedInfoAreas.value = [];
-    if (container.value && camera) {
+    projectedHotspots.value = EMPTY_HOTSPOTS;
+    projectedInfoAreas.value = EMPTY_HOTSPOTS;
+    if (lastRendererInput !== EMPTY_HOTSPOTS && container.value && camera) {
       areaLandmarkRenderer?.update(
         EMPTY_HOTSPOTS,
         camera,
@@ -160,22 +160,21 @@ function updateProjectedHotspots() {
       );
       areaMediaRenderer?.update(EMPTY_HOTSPOTS);
     }
+    lastRendererInput = EMPTY_HOTSPOTS;
     return;
   }
 
   const width = container.value.clientWidth || 1;
   const height = container.value.clientHeight || 1;
   projectionRenderCount += 1;
-  if (import.meta.env?.DEV) console.debug('[Viewer Render] pointProjection()', projectionRenderCount);
   const projection = projectViewerPoints(props.hotspots, camera, width, height, youtubeEmbedUrl);
-  projectedHotspots.value = projection.markers;
-  if (import.meta.env?.DEV) {
-    const audioMarkers = projection.markers.filter((hotspot) => hotspot.type === 'audio');
-    if (audioMarkers.length) console.debug('[Audio Renderer] render()', audioMarkers.map((hotspot) => hotspot.id));
-  }
-  projectedInfoAreas.value = projection.infoAreas;
+  projectedHotspots.value = projection.markers.length ? projection.markers : EMPTY_HOTSPOTS;
+  projectedInfoAreas.value = projection.infoAreas.length ? projection.infoAreas : EMPTY_HOTSPOTS;
   areaLandmarkRenderer?.update(props.hotspots, camera, width, height);
-  areaMediaRenderer?.update(props.hotspots);
+  if (lastRendererInput !== props.hotspots) {
+    areaMediaRenderer?.update(props.hotspots);
+    lastRendererInput = props.hotspots;
+  }
 }
 
 function renderLoop() {
@@ -283,8 +282,8 @@ function resetProjectionIntro() {
   projectionState?.reset();
   projectionBlend.value = projectionState?.state.projectionBlend ?? 0;
   mesh?.material.setProjectionState?.(projectionState?.state);
-  projectedHotspots.value = [];
-  projectedInfoAreas.value = [];
+  projectedHotspots.value = EMPTY_HOTSPOTS;
+  projectedInfoAreas.value = EMPTY_HOTSPOTS;
   needsProjection = true;
 }
 
@@ -333,8 +332,8 @@ function loadTexture() {
   if (!mesh) return;
   cameraController?.stopInertia?.();
   isTextureLoading.value = true;
-  projectedHotspots.value = [];
-  projectedInfoAreas.value = [];
+  projectedHotspots.value = EMPTY_HOTSPOTS;
+  projectedInfoAreas.value = EMPTY_HOTSPOTS;
   textureError.value = '';
   textureManager.load(textureCandidates());
 }
@@ -567,7 +566,8 @@ function onLostPointerCapture(event) {
 
 function onHotspotClick(hotspot, event) {
   if (!props.interactive) return;
-  if (hotspot.type === 'audio' && import.meta.env?.DEV) console.debug('[Audio Renderer] click()', hotspot.id);
+  const btn = event.currentTarget;
+  if (btn) btn.classList.add('is-navigating');
   markInteraction();
   emit('hotspot-click', hotspot, event);
 }
@@ -623,11 +623,6 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   dispose();
-});
-
-onUpdated(() => {
-  componentUpdateCount += 1;
-  if (import.meta.env?.DEV) console.debug('[Viewer Render] PanoramaViewer updated()', componentUpdateCount);
 });
 
 defineExpose({

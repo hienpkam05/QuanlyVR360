@@ -323,10 +323,6 @@ export function normalizePoint(rawPoint = {}, options = {}) {
     locked: Boolean(raw.locked),
     raw,
   };
-  if (import.meta.env?.DEV) {
-    console.debug('[POI Normalize] Normalize type:', normalized.id, normalized.type, normalized.kind);
-    if (normalized.kind === 'area') console.debug('[AreaMedia] Normalize', normalized.id, normalized.areaMedia.type, normalized.areaMedia.src);
-  }
   return normalized;
 }
 

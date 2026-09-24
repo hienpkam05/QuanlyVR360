@@ -1083,14 +1083,20 @@
 
 .panorama-viewer .viewer-nav-default {
   align-items: center;
+  /* The legacy global navigation rule rotates this wrapper.  Keep the
+     wrapper flat so its thumbnail remains a screen-facing billboard; the
+     arrow itself is tilted by the rule below. */
   display: inline-flex;
   justify-content: center;
   padding: 6px;
   position: relative;
+  transform: none;
 }
 
 .panorama-viewer .viewer-nav-default-arrow {
   display: inline-flex;
+  transform: perspective(420px) rotateX(56deg);
+  transform-origin: center bottom;
 }
 
 .panorama-viewer .viewer-nav-default-arrow img {
@@ -1119,14 +1125,15 @@
   -webkit-backdrop-filter: blur(20px);
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 10px;
+  bottom: 100%;
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
   left: 50%;
+  margin-bottom: 8px;
   opacity: 0;
   overflow: hidden;
   pointer-events: none;
   position: absolute;
-  top: 0;
-  transform: translate(-50%, calc(-100% - 14px));
+  transform: translateX(-50%) translateY(6px);
   transition: opacity 200ms ease, transform 200ms ease;
   width: 180px;
   z-index: var(--viewer-z-label);
@@ -1150,7 +1157,23 @@
 .panorama-viewer .viewer-hotspot-nav:hover .viewer-nav-default-preview,
 .panorama-viewer .viewer-hotspot-nav:focus-visible .viewer-nav-default-preview {
   opacity: 1;
-  transform: translate(-50%, calc(-100% - 20px));
+  transform: translateX(-50%) translateY(0);
+}
+
+.panorama-viewer .viewer-hotspot-nav:active .viewer-nav-default-preview,
+.panorama-viewer .viewer-hotspot-nav.is-navigating .viewer-nav-default-preview {
+  opacity: 0 !important;
+  visibility: hidden !important;
+  transition: none !important;
+}
+
+.panorama-viewer .viewer-hotspot-nav:active .nav-preview-expand-media,
+.panorama-viewer .viewer-hotspot-nav:active .nav-preview-expand-name,
+.panorama-viewer .viewer-hotspot-nav.is-navigating .nav-preview-expand-media,
+.panorama-viewer .viewer-hotspot-nav.is-navigating .nav-preview-expand-name {
+  opacity: 0 !important;
+  visibility: hidden !important;
+  transition: none !important;
 }
 
 .panorama-viewer .viewer-hotspot-preview {

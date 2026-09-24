@@ -11,7 +11,7 @@ defineProps({
 const emit = defineEmits([
   'update:scene', 'update:view',
   'save-view', 'replace-image',
-  'navigate-to-points','update:collapsed'
+  'update:collapsed'
 ]);
 
 function update(key, value) {
@@ -24,20 +24,6 @@ function updateView(key, value) {
 
 <template>
   <div>
-    <!-- Shortcut to point list -->
-    <div class="vb-scene-nav-shortcut" @click="emit('navigate-to-points')">
-      <div class="vb-sns-left">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
-          <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z" /><circle cx="12" cy="10" r="3" />
-        </svg>
-        <span>Điểm nóng</span>
-      </div>
-      <div class="vb-sns-right">
-        <span class="vb-sns-count">{{ scene.hotspots.length }}</span>
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12"><path d="M9 18l6-6-6-6" /></svg>
-      </div>
-    </div>
-
     <!-- Scene Properties -->
     <BaseAccordion title="Thuộc tính cảnh" :open="!collapsed.sceneProps" @toggle="emit('update:collapsed', 'sceneProps', !collapsed.sceneProps)">
       <template #icon>

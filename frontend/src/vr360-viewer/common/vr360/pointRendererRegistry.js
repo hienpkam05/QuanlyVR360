@@ -16,7 +16,6 @@ export const pointRendererRegistry = Object.freeze({
   info_area: { renderer: 'info-area', interaction: 'info-panel', interactive: true },
   area_landmark: { renderer: 'area-landmark', interaction: 'navigate', interactive: true },
   point_landmark: { renderer: 'point-landmark', interaction: 'navigate', interactive: true },
-  point_landmark: { renderer: 'point-landmark', interaction: 'navigate', interactive: true },
   area: { renderer: 'area-media', interaction: 'none', interactive: false },
   generic: { renderer: 'generic-marker', interactive: true },
 });
@@ -28,7 +27,6 @@ export function resolvePointRenderer(point) {
     if (import.meta.env?.DEV) console.warn('[POI Registry] Missing renderer mapping:', kind, point?.type, point?.id);
     return pointRendererRegistry.generic;
   }
-  if (import.meta.env?.DEV) console.debug('[POI Registry] Viewer render type:', point?.id || 'unknown', kind, renderer.renderer);
   return renderer;
 }
 

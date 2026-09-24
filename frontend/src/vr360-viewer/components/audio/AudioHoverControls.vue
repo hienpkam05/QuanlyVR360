@@ -44,12 +44,10 @@ function onProgressClick(event) {
 
 function togglePlay() {
   if (hasAudio.value) {
-    if (import.meta.env?.DEV) console.debug('[Audio UI] Toggle active audio');
     props.audioService.toggle();
     return;
   }
   if (canStartTour.value) {
-    if (import.meta.env?.DEV) console.debug('[Audio UI] Start tour audio');
     props.audioService.playTour(props.tour.url, {
       sourceId: 'tour',
       title: props.tour.title || 'Tour narration',

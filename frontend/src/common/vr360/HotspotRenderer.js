@@ -19,6 +19,7 @@ const NAV_ARROW_SVG = `
 </svg>`;
 export const NAV_ARROW_IMG = `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(NAV_ARROW_SVG)}`;
 const AUDIO_ICON_SVG = '<path d="M6 9v6M10 6v12M14 3v18M18 8v8" stroke-linecap="round"/>';
+const DRAG_THRESHOLD_PX = 3;
 
 // ═══════════════════════════════════════════════════════════════
 //  Hotspot DOM Builder — creates the exact same HTML structure
@@ -89,7 +90,7 @@ export class HotspotRenderer {
       onHotspotClick: null,   // (index, event) => void
       onHotspotDblClick: null, // (index, event) => void
       onHotspotDragStart: null, // (index, event) => void
-      onHotspotDrag: null,     // (index, lon, lat, event) => void
+      onHotspotDrag: null,     // (index, event) => void; engine resolves spherical coordinates
       onHotspotDragEnd: null,  // (index, event) => void
       canDrag: null,           // () => boolean — when set, drag only starts if true
       onHotspotHover: null,    // (index, hs, el) => void
@@ -104,6 +105,8 @@ export class HotspotRenderer {
     this._draggingIndex = -1;
     this._dragStartPos = null;
     this._dragStartLonLat = null;
+    this._activeDrag = null;
+    this._interactionEnabled = true;
 
     // Reusable THREE objects for projection math
     this._proj = new THREE.Vector3();
@@ -132,6 +135,7 @@ export class HotspotRenderer {
     for (let i = 0; i < n; i++) {
       const el = this._els[i];
       const hs = hotspots[i];
+      el.style.pointerEvents = this._interactionEnabled ? "" : "none";
 
       // Rebuild DOM if hotspot data changed (type, icon, label, etc.)
   const kind = resolvePointKind(hs);
@@ -227,7 +231,6 @@ export class HotspotRenderer {
       if (kind === "audio") {
         el.classList.add("hotspot-audio-marker");
         marker.setAttribute("data-audio-renderer", "true");
-        if (import.meta.env?.DEV) console.debug('[Audio Renderer] render()', hs.id || index);
       }
     }
 
@@ -245,24 +248,34 @@ export class HotspotRenderer {
 
   _attachEvents(el, index) {
     const opts = this.options;
+    let suppressClick = false;
 
     el.onclick = (e) => {
       e.stopPropagation();
-      if (resolvePointKind(this._allHotspots?.[index] || {}) === 'audio' && import.meta.env?.DEV) console.debug('[Audio Renderer] click()', this._allHotspots[index]?.id || index);
+      if (!this._interactionEnabled) return;
+      if (suppressClick) {
+        suppressClick = false;
+        e.preventDefault();
+        return;
+      }
       opts.onHotspotClick?.(index, e);
     };
 
     el.ondblclick = (e) => {
       e.stopPropagation();
+      if (!this._interactionEnabled) return;
+      if (opts.canDrag?.()) return;
       opts.onHotspotDblClick?.(index, e);
     };
 
     el.onmouseenter = () => {
+      if (!this._interactionEnabled) return;
       this._hoveredEl = el;
       opts.onHotspotHover?.(index, el);
     };
 
     el.onmouseleave = () => {
+      if (!this._interactionEnabled) return;
       this._hoveredEl = null;
       opts.onHotspotHoverEnd?.();
     };
@@ -274,6 +287,7 @@ export class HotspotRenderer {
       el.onpointerdown = (ev) => {
         if (ev.button !== 0) return;
         ev.stopPropagation();
+        if (!this._interactionEnabled) return;
         if (opts.canDrag && !opts.canDrag()) return;
         if (el.classList.contains("hotspot-locked")) return;
         dragState = {
@@ -283,7 +297,15 @@ export class HotspotRenderer {
           startLat: parseFloat(ev.target.dataset.lat || el.dataset.lat),
           moved: false,
         };
-        el.setPointerCapture(ev.pointerId);
+        try { el.setPointerCapture(ev.pointerId); } catch {}
+        this._activeDrag = {
+          el,
+          pointerId: ev.pointerId,
+          cancel: () => {
+            suppressClick = true;
+            dragState = null;
+          },
+        };
         opts.onHotspotDragStart?.(index, ev);
       };
 
@@ -291,25 +313,34 @@ export class HotspotRenderer {
         if (!dragState) return;
         const dx = e.clientX - dragState.startX;
         const dy = e.clientY - dragState.startY;
-        if (Math.abs(dx) > 3 || Math.abs(dy) > 3) {
+        if (Math.abs(dx) > DRAG_THRESHOLD_PX || Math.abs(dy) > DRAG_THRESHOLD_PX) {
           dragState.moved = true;
         }
-        // We need the camera to convert screen delta to lon/lat delta
-        // This is handled by the engine, not here
+        if (dragState.moved) opts.onHotspotDrag?.(index, e);
       };
 
       el.onpointerup = (ev) => {
         if (!dragState) return;
-        el.releasePointerCapture(ev.pointerId);
+        ev.stopPropagation();
+        try {
+          if (el.hasPointerCapture?.(ev.pointerId)) el.releasePointerCapture(ev.pointerId);
+        } catch {}
         if (dragState.moved) {
-          // Drag completed — engine will have updated coords
           opts.onHotspotDragEnd?.(index, ev);
         }
+        // Selection in editing mode is resolved on pointerdown. Suppress the
+        // browser click that follows so it cannot toggle that selection.
+        suppressClick = true;
         dragState = null;
+        this._activeDrag = null;
       };
 
-      el.onpointercancel = () => {
+      el.onpointercancel = (ev) => {
+        try {
+          if (el.hasPointerCapture?.(ev.pointerId)) el.releasePointerCapture(ev.pointerId);
+        } catch {}
         dragState = null;
+        this._activeDrag = null;
       };
     }
   }
@@ -353,7 +384,28 @@ export class HotspotRenderer {
     };
   }
 
+  cancelDrag() {
+    const drag = this._activeDrag;
+    if (!drag) return;
+    try {
+      if (drag.el.hasPointerCapture?.(drag.pointerId)) {
+        drag.el.releasePointerCapture(drag.pointerId);
+      }
+    } catch {}
+    drag.cancel();
+    this._activeDrag = null;
+  }
+
+  setInteractionEnabled(enabled) {
+    this._interactionEnabled = Boolean(enabled);
+    this.container.classList.toggle('hotspots-locked', !enabled);
+    this._els.forEach((el) => {
+      el.style.pointerEvents = this._interactionEnabled ? "" : "none";
+    });
+  }
+
   dispose() {
+    this.cancelDrag();
     this._els.forEach((el) => el.remove());
     this._els = [];
   }

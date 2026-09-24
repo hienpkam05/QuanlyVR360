@@ -90,6 +90,10 @@ textarea {
   font: inherit;
 }
 
+button[type = "submit"]{
+  height: fit-content;
+  align-self: center;
+}
 .app-shell {
   display: flex;
   min-height: 100vh;

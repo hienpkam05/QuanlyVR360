@@ -25,6 +25,5 @@ export const pointEditorRegistry = Object.freeze({
 export function resolvePointEditor(hotspot) {
   const kind = resolvePointKind(hotspot);
   const editor = pointEditorRegistry[kind] || null;
-  if (import.meta.env?.DEV) console.debug('[POI Editor Registry]', hotspot?.id || 'unknown', kind, editor?.name || 'none');
   return editor;
 }

@@ -6,6 +6,8 @@ const props = defineProps({
   tourAudioPreviewSrc: { type: String, default: '' },
   scenes: { type: Array, required: true },
   tourTransition: { type: Object, required: true },
+  resizePresets: { type: Array, required: true },
+  imageResize: { type: Object, required: true },
 });
 
 const emit = defineEmits([
@@ -14,6 +16,7 @@ const emit = defineEmits([
   'update:tourAudio',
   'update:scene',
   'update:tourTransition',
+  'update:resizePreset',
 ]);
 
 function updateAudio(key, value) {
@@ -192,6 +195,28 @@ function updateTransition(key, value) {
           </div>
         </template>
       </BaseAccordion>
+
+      <!-- IMAGE RESIZE -->
+      <BaseAccordion title="Resize ảnh" :open="true">
+        <template #icon>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13">
+            <path d="M4 4h6M4 4v6M20 4h-6M20 4v6M4 20h6M4 20v-6M20 20h-6M20 20v-6" />
+          </svg>
+        </template>
+        <p class="vb-tc-section-desc">Chính sách này áp dụng cho mọi panorama được thêm hoặc thay thế trong tour.</p>
+        <div class="vb-prop-row" style="margin-bottom:0">
+          <label class="vb-prop-label">Chất lượng ảnh panorama</label>
+          <select
+            class="vb-prop-input"
+            :value="imageResize.presetId"
+            @change="emit('update:resizePreset', $event.target.value)"
+          >
+            <option v-for="preset in resizePresets" :key="preset.id" :value="preset.id">
+              {{ preset.label }}
+            </option>
+          </select>
+        </div>
+      </BaseAccordion>
     </div>
   </div>
 </template>
@@ -202,6 +227,7 @@ function updateTransition(key, value) {
   flex-direction: column;
   height: 100%;
   background: var(--vb-bg-0);
+  align-items: center;
 }
 .vb-tc-header {
   padding: 24px 32px 16px;

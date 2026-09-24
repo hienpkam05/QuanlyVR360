@@ -170,6 +170,7 @@ export class PreviewEngine {
     this.hasTexture = false;
     this._activeTool = null;
     this._toolCleanup = null;
+    this._cameraPointerId = null;
     this.editMode = true; // Builder always in edit mode
 
     // Callbacks from builder
@@ -235,25 +236,29 @@ export class PreviewEngine {
       editMode: true,
       canDrag: () => this._activeTool === 'move',
       onHotspotClick: (index, e) => {
-        this.callbacks.onHotspotSelect?.(index, e);
+        const sourceIndex = this._sourceHotspotIndex(index);
+        if (sourceIndex >= 0) this.callbacks.onHotspotSelect?.(sourceIndex, e);
       },
       onHotspotDblClick: (index, e) => {
-        this.callbacks.onHotspotNav?.(index, e);
+        const sourceIndex = this._sourceHotspotIndex(index);
+        if (sourceIndex >= 0) this.callbacks.onHotspotNav?.(sourceIndex, e);
+      },
+      onHotspotDragStart: (index, e) => {
+        if (this._activeTool !== 'move') return;
+        const sourceIndex = this._sourceHotspotIndex(index);
+        if (sourceIndex >= 0) this.callbacks.onHotspotDragStart?.(sourceIndex, e);
+      },
+      onHotspotDrag: (index, e) => {
+        if (this._activeTool !== 'move') return;
+        const sourceIndex = this._sourceHotspotIndex(index);
+        const pos = this._hotspotPositionFromPointer(e);
+        if (sourceIndex >= 0 && pos) this.callbacks.onHotspotDrag?.(sourceIndex, pos.lon, pos.lat);
       },
       onHotspotDragEnd: (index, e) => {
         if (this._activeTool !== 'move') return;
-        if (this.callbacks.onHotspotDragEnd) {
-          const rect = this.canvas.getBoundingClientRect();
-          const pos = this.hotspotRenderer.screenToSphere(
-            e.clientX,
-            e.clientY,
-            this.camera,
-            rect
-          );
-          if (pos) {
-            this.callbacks.onHotspotDragEnd(index, pos.lon, pos.lat);
-          }
-        }
+        const sourceIndex = this._sourceHotspotIndex(index);
+        const pos = this._hotspotPositionFromPointer(e);
+        if (sourceIndex >= 0 && pos) this.callbacks.onHotspotDragEnd?.(sourceIndex, pos.lon, pos.lat);
       },
       onHotspotHover: (index, el) => {
         if (this.callbacks.onHotspotHover) {
@@ -265,6 +270,7 @@ export class PreviewEngine {
       },
       resolveNavTarget: (targetId) => this.callbacks.resolveNavTarget?.(targetId),
     });
+    this.hotspotRenderer.setInteractionEnabled(this._activeTool !== 'view');
   }
 
   _initAreaLandmarkRenderer() {
@@ -320,6 +326,21 @@ export class PreviewEngine {
     this.areaLandmarkRenderer?.setSelectedAnnotation(isAreaLandmarkPoint(selected) ? selected : null);
     this.areaMediaEditorOverlay?.setSelectedArea(isAreaOverlayPoint(selected) ? selected : null);
     this.requestRender();
+  }
+
+  _sourceHotspotIndex(renderedIndex) {
+    const hotspot = this._sceneHotspots[renderedIndex];
+    return hotspot ? this._allHotspots.indexOf(hotspot) : -1;
+  }
+
+  _hotspotPositionFromPointer(event) {
+    const rect = this.canvas.getBoundingClientRect();
+    return this.hotspotRenderer.screenToSphere(
+      event.clientX,
+      event.clientY,
+      this.camera,
+      rect,
+    );
   }
 
   // ABORT-AWARE TEXTURE LOADING
@@ -463,7 +484,9 @@ export class PreviewEngine {
   _updateHotspots() {
     if (!this.hotspotRenderer || !this._sceneHotspots) return;
     const p = this.canvas.parentElement;
-    this.hotspotRenderer.options.selectedIndex = this._selectedHotspotIndex;
+    this.hotspotRenderer.options.selectedIndex = this._sceneHotspots.indexOf(
+      this._allHotspots?.[this._selectedHotspotIndex],
+    );
     this.hotspotRenderer.update(
       this._sceneHotspots,
       this.camera,
@@ -526,26 +549,35 @@ export class PreviewEngine {
       },
       { passive: false }
     );
-    this._onResize = () => {
-      const p = this.canvas.parentElement;
-      this.camera.aspect = p.clientWidth / p.clientHeight;
-      this.camera.updateProjectionMatrix();
-      this.renderer.setSize(p.clientWidth, p.clientHeight);
-      this.requestRender();
-    };
+    this._onResize = () => this.resize();
     window.addEventListener("resize", this._onResize);
 
     this._handleViewPointerDown = this._onViewPointerDown.bind(this);
     this._handleViewPointerMove = this._onViewPointerMove.bind(this);
     this._handleViewPointerUp = this._onViewPointerUp.bind(this);
+    this._handleViewPointerCancel = this._onViewPointerCancel.bind(this);
     this._handlePlaceClick = this._onPlaceClick.bind(this);
     this._handlePlaceKeyDown = this._onPlaceKeyDown.bind(this);
 
     this.activateTool('view');
   }
 
+  resize() {
+    const p = this.canvas.parentElement;
+    const { clientWidth: width, clientHeight: height } = p;
+    // The builder can be temporarily hidden by its top-level tab. Do not
+    // resize the WebGL drawing buffer to 0x0 while it is hidden.
+    if (!width || !height) return;
+    this.camera.aspect = width / height;
+    this.camera.updateProjectionMatrix();
+    this.renderer.setSize(width, height);
+    this.requestRender();
+  }
+
   _onViewPointerDown(e) {
+    if (e.button !== 0) return;
     this.isInteracting = true;
+    this._cameraPointerId = e.pointerId;
     this.pointerStart = { x: e.clientX, y: e.clientY };
     this.pointerDelta = { lon: this.targetLon, lat: this.targetLat };
     try { this.canvas.setPointerCapture(e.pointerId); } catch {}
@@ -560,11 +592,28 @@ export class PreviewEngine {
     this.requestRender();
   }
 
-  _onViewPointerUp() {
+  _onViewPointerUp(e) {
     if (!this.isInteracting) return;
-    this.isInteracting = false;
+    this._endCameraInteraction(e);
     this._commitCameraState();
     this.requestRender();
+  }
+
+  _onViewPointerCancel(e) {
+    if (!this.isInteracting) return;
+    this._endCameraInteraction(e);
+    this.requestRender();
+  }
+
+  _endCameraInteraction(event) {
+    const pointerId = event?.pointerId ?? this._cameraPointerId;
+    if (pointerId !== null && pointerId !== undefined) {
+      try {
+        if (this.canvas.hasPointerCapture?.(pointerId)) this.canvas.releasePointerCapture(pointerId);
+      } catch {}
+    }
+    this._cameraPointerId = null;
+    this.isInteracting = false;
   }
 
   _onPlaceClick(e) {
@@ -580,18 +629,34 @@ export class PreviewEngine {
     if (this._activeTool === name) return;
     this.deactivateTool();
     this._activeTool = name;
+    // Markers stay visible in Rotate mode but are transparent to pointer hit
+    // testing, so the canvas exclusively owns the camera gesture.
+    this.hotspotRenderer?.setInteractionEnabled(name !== 'view');
     const c = this.canvas;
     if (name === 'view') {
       c.addEventListener('pointerdown', this._handleViewPointerDown);
       c.addEventListener('pointermove', this._handleViewPointerMove);
       c.addEventListener('pointerup', this._handleViewPointerUp);
+      c.addEventListener('pointercancel', this._handleViewPointerCancel);
       this._toolCleanup = () => {
         c.removeEventListener('pointerdown', this._handleViewPointerDown);
         c.removeEventListener('pointermove', this._handleViewPointerMove);
         c.removeEventListener('pointerup', this._handleViewPointerUp);
+        c.removeEventListener('pointercancel', this._handleViewPointerCancel);
       };
     } else if (name === 'move') {
-      this._toolCleanup = () => {};
+      // A marker owns its own pointer gesture. Background drags reuse the
+      // established camera handler so editing mode never locks rotation.
+      c.addEventListener('pointerdown', this._handleViewPointerDown);
+      c.addEventListener('pointermove', this._handleViewPointerMove);
+      c.addEventListener('pointerup', this._handleViewPointerUp);
+      c.addEventListener('pointercancel', this._handleViewPointerCancel);
+      this._toolCleanup = () => {
+        c.removeEventListener('pointerdown', this._handleViewPointerDown);
+        c.removeEventListener('pointermove', this._handleViewPointerMove);
+        c.removeEventListener('pointerup', this._handleViewPointerUp);
+        c.removeEventListener('pointercancel', this._handleViewPointerCancel);
+      };
     } else if (name === 'place') {
       c.addEventListener('click', this._handlePlaceClick);
       window.addEventListener('keydown', this._handlePlaceKeyDown);
@@ -603,11 +668,12 @@ export class PreviewEngine {
   }
 
   deactivateTool() {
+    this.hotspotRenderer?.cancelDrag();
     if (this._toolCleanup) {
       this._toolCleanup();
       this._toolCleanup = null;
     }
-    this.isInteracting = false;
+    this._endCameraInteraction();
     this._activeTool = null;
   }
 

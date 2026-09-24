@@ -57,14 +57,6 @@ export function normalizeHotspot(rawHotspot = {}, sceneIndex = 0, hotspotIndex =
     fallbackLabel: `Hotspot ${hotspotIndex + 1}`,
     resolveAssetUrl: options.resolveAssetUrl,
   });
-  if (import.meta.env?.DEV && point.type === 'audio') {
-    console.debug('[Audio Viewer] Import Audio POI', point.id, raw.type, raw.loai_poi || '');
-    console.debug('[Audio Viewer] Normalize Audio POI', point.id, point.audio?.url || '');
-  }
-  if (import.meta.env?.DEV) {
-    console.debug('[POI Runtime] Runtime type:', point.id, point.type);
-    if (point.type === 'area') console.debug('[AreaMedia] Import/Runtime', point.id, point.areaMedia.type, point.areaMedia.src);
-  }
   return {
     ...point,
     navStyle: normalizeNavStyle(point.navStyle),
@@ -97,7 +89,6 @@ export function normalizeScene(rawScene = {}, sceneIndex = 0, options = {}) {
 export function normalizeTour(payload = {}, options = {}) {
   const { source, scenes } = sourceScenes(payload);
   const runtimeScenes = scenes.map((scene, index) => normalizeScene(scene, index, options));
-  if (import.meta.env?.DEV) console.debug('[Viewer Render] normalizeTour()', runtimeScenes.length, runtimeScenes.reduce((count, scene) => count + scene.hotspots.length, 0));
   validateTourPayload(payload, runtimeScenes);
   const version = payload.version || payload;
   return {
@@ -156,10 +147,7 @@ export function runtimeHotspotForViewer(hotspot, scenes, activeScene) {
     areaMedia: hotspot.areaMedia,
     vertices: hotspot.vertices, area_points: hotspot.areaPoints, polygon: hotspot.polygon, anchor: hotspot.anchor, label_config: hotspot.labelConfig, label_position: hotspot.labelPosition, line_height: hotspot.lineHeight, show_polygon_on_hover: hotspot.showPolygonOnHover, style: hotspot.annotationStyle || hotspot.style, glow: hotspot.style.glow, khi_dua_chuot_vao: hotspot.hover, loai_poi: hotspot.loaiPoi, chieu_cao_duong_ghim: hotspot.pinHeight,
   };
-  if (import.meta.env?.DEV) console.debug('[POI Viewer] Viewer render type:', hotspot.id, hotspot.type);
   runtimeHotspotCache.set(hotspot, { activeScene, scenes, signature, target, value });
-  if (import.meta.env?.DEV) console.debug('[Viewer Render] runtimeHotspotForViewer()', hotspot.id);
-  if (import.meta.env?.DEV && hotspot.type === 'area') console.debug('[AreaMedia] runtimeHotspotForViewer', hotspot.id, hotspot.areaMedia?.src || '');
   return value;
 }
 

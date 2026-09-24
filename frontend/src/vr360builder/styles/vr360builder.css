@@ -601,6 +601,11 @@
   z-index: 2;
   will-change: left, top, transform;
 }
+.preview-hotspot-container.hotspots-locked .hotspot,
+.preview-hotspot-container.hotspots-locked .hotspot * {
+  pointer-events: none !important;
+  cursor: default;
+}
 .preview-hotspot-container .hotspot.hidden {
   display: none;
 }

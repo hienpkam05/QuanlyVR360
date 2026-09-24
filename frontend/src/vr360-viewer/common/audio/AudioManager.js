@@ -37,7 +37,6 @@ export class AudioManager {
 
   #emit(type, scope, source, extra = {}) {
     const event = { type, scope, source, ...extra };
-    if (import.meta.env?.DEV && type !== 'audio:state') console.debug('[Audio Manager]', type, scope, source || '');
     this.#onEvent?.(event);
     this.#listeners.forEach((listener) => listener(event));
   }
@@ -108,7 +107,6 @@ export class AudioManager {
     if (current) this.#disposeRecord(scope, current);
 
     const player = new Audio(normalized);
-    if (import.meta.env?.DEV) console.debug('[Audio Manager] create player', scope, normalized);
     const record = {
       player,
       source: normalized,
@@ -214,16 +212,13 @@ export class AudioManager {
     record.pauseReason = null;
     this.#syncSession(scope, { status: AUDIO_STATUS.LOADING });
     try {
-      if (import.meta.env?.DEV) console.debug('[Audio Manager] player.play()', scope, record.source);
       await record.player.play();
-      if (import.meta.env?.DEV) console.debug('[Audio Manager] player.play() resolved', scope, record.source);
       this.#startProgress(scope);
       this.#emit(AUDIO_EVENT.PLAY, scope, record.source);
       this.#syncSession(scope, { status: AUDIO_STATUS.PLAYING });
       this.#syncBackgroundDucking();
       return this.#result(AUDIO_STATUS.PLAYING, record.source, { playing: true, blocked: false });
     } catch (cause) {
-      if (import.meta.env?.DEV) console.debug('[Audio Manager] player.play() rejected', scope, record.source, cause);
       this.#emit(AUDIO_EVENT.ERROR, scope, record.source, { cause });
       this.#syncBackgroundDucking();
       this.#syncSession(scope, { status: AUDIO_STATUS.ERROR, error: cause });
