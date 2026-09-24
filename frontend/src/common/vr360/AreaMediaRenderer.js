@@ -175,7 +175,6 @@ export class AreaMediaRenderer {
     });
     let item = this.items.get(id);
     if (!source) {
-      if (import.meta.env?.DEV) console.debug('[AreaMedia] Renderer skip empty source', id);
       if (item) {
         releaseItem(item);
         this.items.delete(id);
@@ -191,7 +190,6 @@ export class AreaMediaRenderer {
         mediaSource,
         () => applyFitMode(this.items.get(id), mediaSource),
       );
-      if (import.meta.env?.DEV) console.debug('[AreaMedia] Texture create', id, mediaSource.type, source);
       const material = new THREE.MeshBasicMaterial({
         map: texture,
         transparent: true,
@@ -235,7 +233,6 @@ export class AreaMediaRenderer {
   }
 
   dispose() {
-    if (import.meta.env?.DEV) console.debug('[AreaMedia] Dispose', this.items.size);
     this.items.forEach(releaseItem);
     this.items.clear();
   }

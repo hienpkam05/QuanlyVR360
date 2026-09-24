@@ -17,7 +17,6 @@ import { readGpsFromFile } from "../common/exifGps.js";
 import { DEFAULT_NAV_ICON } from "@/common/hotspotIcons.js";
 import {
   normalizeScene,
-  defaultTransition,
   defaultHoverState,
   NAV_STYLES,
 } from "@/common/vr360/tourDataMapper.js";
@@ -25,8 +24,8 @@ import { createPoint, resolvePointKind, clonePointValue } from "@/common/vr360/p
 
 import SceneEditor from "../components/scene/SceneEditor.vue";
 import BaseAccordion from "../components/common/BaseAccordion.vue";
-import PointList from "../components/point/PointList.vue";
 import PointEditor from "../components/point/PointEditor.vue";
+import TourConfigView from "../components/tour-config/TourConfigView.vue";
 import { apiBaseURL, http } from "@/api/http.js";
 import { createProject, listProjects } from "@/api/projectsApi.js";
 import { createLocation, listProjectLocations } from "@/api/locationsApi.js";
@@ -60,14 +59,9 @@ const uiState = reactive({
   fileMenuOpen: false,
   leftCollapsed: false,
   rightCollapsed: false,
-  mobilePanel: null,
-  rightView: "scene", // 'scene' | 'point-list' | 'point-editor'
   collapsed: {
     sceneProps: false,
     initialView: false,
-    autoTour: true,
-    transition: true,
-    tourAudio: true,
   },
   hsAcc: { chung: true, audio: true, noiDung: true, navTarget: true, hover: false },
 });
@@ -106,18 +100,26 @@ const draftInfoAreaOverlay = computed(() => {
 
 const previewMode = reactive({ active: false });
 
+const builderMode = ref('builder'); // 'builder' | 'tour-config'
+const tourTransition = reactive({
+  enabled: true,
+  rotation: true,
+  effect: 'fade',
+  duration: 1200,
+  speed: 10,
+});
+
 watch(selectedHotspotIndex, (v) => {
   if (v >= 0) {
-    uiState.rightView = "point-editor";
     uiState.hsAcc.chung = true;
     uiState.hsAcc.noiDung = true;
     uiState.hsAcc.navTarget = true;
     uiState.hsAcc.hover = false;
     uiState.collapsed.sceneProps = true;
     uiState.collapsed.initialView = true;
-    uiState.collapsed.transition = true;
   } else {
-    uiState.rightView = "point-list";
+    uiState.collapsed.sceneProps = false;
+    uiState.collapsed.initialView = false;
   }
 });
 
@@ -127,9 +129,7 @@ const replaceImageInputRef = ref(null);
 const tourAudioInputRef = ref(null);
 const hotspotAudioInputRef = ref(null);
 
-function audioDebug(...args) {
-  if (import.meta.env?.DEV) console.debug('[Audio Builder]', ...args);
-}
+function audioDebug() {}
 const engine = shallowRef(null);
 
 const tourAudio = reactive({
@@ -209,7 +209,15 @@ function triggerCanvasResize() {
 }
 watch(() => uiState.leftCollapsed, triggerCanvasResize);
 watch(() => uiState.rightCollapsed, triggerCanvasResize);
-watch(() => uiState.mobilePanel, triggerCanvasResize);
+
+// Keep the canvas and its WebGL context mounted while the tour settings are
+// visible. `v-show` only changes visibility, so restore the renderer size once
+// the builder is visible again instead of reloading the current panorama.
+watch(builderMode, async (mode) => {
+  if (mode !== 'builder') return;
+  await nextTick();
+  engine.value?.resize();
+});
 
 const canvasLoading = ref(false);
 const hud = reactive({ lon: "0.0", lat: "0.0", fov: "75" });
@@ -254,14 +262,31 @@ const RESIZE_PRESETS = [
     quality: 0.95,
   },
 ];
-const resizePresetId = ref("standard");
-const resizeSettings = reactive({ maxWidth: 8192, quality: 0.92 });
-function applyResizePreset() {
+const imageResize = reactive({
+  presetId: "standard",
+  maxWidth: 8192,
+  quality: 0.92,
+});
+
+function setImageResizePreset(presetId) {
   const p =
-    RESIZE_PRESETS.find((x) => x.id === resizePresetId.value) ||
+    RESIZE_PRESETS.find((x) => x.id === presetId) ||
     RESIZE_PRESETS.find((x) => x.id === "standard");
-  resizeSettings.maxWidth = p.maxWidth;
-  resizeSettings.quality = p.quality;
+  Object.assign(imageResize, {
+    presetId: p.id,
+    maxWidth: p.maxWidth,
+    quality: p.quality,
+  });
+}
+
+function restoreImageResize(config = {}) {
+  const preset = RESIZE_PRESETS.find((item) => item.id === config?.presetId);
+  if (preset) {
+    setImageResizePreset(preset.id);
+    return;
+  }
+  // Tours saved before this field existed use the established standard policy.
+  setImageResizePreset("standard");
 }
 const resizingCount = ref(0);
 
@@ -283,7 +308,7 @@ const saveState = ref("saved");
 const lastSavedAt = ref(null);
 
 watch(
-  [scenes, tourAudio],
+  [scenes, tourAudio, tourTransition, imageResize],
   () => {
     if (
       !suppressDirtyTracking.value &&
@@ -367,17 +392,9 @@ function ensureHotspotId(hotspot) {
   return hotspot.id;
 }
 
-function debugPoint(stage, hotspot) {
-  if (import.meta.env?.DEV) {
-    console.debug(`[POI Builder] ${stage}:`, hotspot?.id || 'new', hotspot?.type, resolvePointKind(hotspot));
-  }
-}
+function debugPoint() {}
 
-function areaMediaDebug(stage, hotspot, details = {}) {
-  if (import.meta.env?.DEV) {
-    console.debug(`[AreaMedia] Builder ${stage}`, hotspot?.id || 'new', hotspot?.areaMedia?.type || '', hotspot?.areaMedia?.src || '', details);
-  }
-}
+function areaMediaDebug() {}
 
 function requestAreaOverlayUpdate() {
   if (areaOverlayRaf) return;
@@ -388,7 +405,7 @@ function requestAreaOverlayUpdate() {
 }
 
 async function processIncomingFile(file) {
-  if (!resizeSettings.maxWidth)
+  if (!imageResize.maxWidth)
     return {
       file,
       originalSize: file.size,
@@ -397,7 +414,7 @@ async function processIncomingFile(file) {
     };
   resizingCount.value++;
   try {
-    return await resizeImageFile(file, resizeSettings);
+    return await resizeImageFile(file, imageResize);
   } catch (e) {
     console.error("resizeImageFile error:", e);
     return {
@@ -428,7 +445,7 @@ async function addScene(file) {
     hotspots: [],
     autoTour: 0,
     autoTourDuration: 20,
-    transition: defaultTransition(),
+    transition: { ...tourTransition },
     gps,
     _file: procFile,
     _originalSize: originalSize,
@@ -503,8 +520,14 @@ function onDrop(toIndex, event) {
 //  HOTSPOT PLACEMENT
 // ══════════════════════════════════════
 function setActiveTool(name) {
-  if (activeTool.value === name) return;
-  if (activeTool.value === 'place') {
+  const previousTool = activeTool.value;
+  if (name === 'view') {
+    // Rotate ends the selected-object editing context. The same selection ref
+    // drives both the marker highlight and the contextual right sidebar.
+    clearSelectedHotspot();
+  }
+  if (previousTool === name) return;
+  if (previousTool === 'place') {
     if (drawingInfoArea.value) {
       drawingInfoArea.value = false;
       infoAreaDraftPoints.value = [];
@@ -723,16 +746,24 @@ function quickCreateHotspot(loai_poi) {
   );
 }
 
-function selectHotspot(i) {
-  if (selectedHotspotIndex.value === i) {
+function selectHotspot(i, { toggle = true } = {}) {
+  if (toggle && selectedHotspotIndex.value === i) {
     selectedHotspotIndex.value = -1;
-    uiState.rightView = "point-list";
   } else {
     selectedHotspotIndex.value = i;
     debugPoint('Selected type', activeScene.value?.hotspots[i]);
   }
   syncHotspotsToEngine();
   requestAreaOverlayUpdate();
+}
+
+function moveHotspot(index, lon, lat) {
+  if (activeSceneIndex.value < 0) return;
+  const hotspot = scenes[activeSceneIndex.value].hotspots[index];
+  if (!hotspot || hotspot.locked) return;
+  hotspot.lon = lon;
+  hotspot.lat = lat;
+  engine.value?.requestRender();
 }
 
 function toggleLockHotspot(i) {
@@ -1023,19 +1054,8 @@ function handleAreaMediaFile(file) {
   showToast('info', 'Media Area sẽ được upload khi Save Tour.');
 }
 
-// Navigate right panel
-function navToPointList() {
+function clearSelectedHotspot() {
   selectedHotspotIndex.value = -1;
-  uiState.rightView = "point-list";
-  syncHotspotsToEngine();
-}
-function navToScene() {
-  selectedHotspotIndex.value = -1;
-  uiState.rightView = "scene";
-  syncHotspotsToEngine();
-}
-function navToPointDetail(i) {
-  selectedHotspotIndex.value = i;
   syncHotspotsToEngine();
 }
 
@@ -1144,15 +1164,39 @@ const handleReplaceImage = async (ev) => {
 };
 
 // ══════════════════════════════════════
-//  TRANSITION
+//  TRANSITION (tour-level)
 // ══════════════════════════════════════
-function ensureTransition(s) {
-  if (!s.transition) s.transition = defaultTransition();
-  return s.transition;
+function updateTourTransition(key, value) {
+  tourTransition[key] = value;
 }
-function updateTransition(key, value) {
-  if (activeSceneIndex.value < 0) return;
-  ensureTransition(scenes[activeSceneIndex.value])[key] = value;
+function initTourTransitionFromScenes() {
+  const first = scenes.find(s => s.transition) || scenes[0];
+  if (first?.transition) {
+    Object.assign(tourTransition, {
+      enabled: first.transition.enabled !== false,
+      rotation: first.transition.rotation !== false,
+      effect: first.transition.effect || 'fade',
+      duration: first.transition.duration ?? 1200,
+      speed: first.transition.speed ?? 10,
+    });
+  }
+}
+function applyTourTransitionToScenes() {
+  const t = { ...tourTransition };
+  for (const s of scenes) {
+    s.transition = { ...t };
+  }
+}
+
+// ══════════════════════════════════════
+//  TOUR CONFIG VIEW HANDLERS
+// ══════════════════════════════════════
+function handleTourAudioFieldUpdate(key, value) {
+  tourAudio[key] = value;
+}
+function handleSceneFieldUpdate(index, key, value) {
+  if (index < 0 || index >= scenes.length) return;
+  scenes[index][key] = value;
 }
 
 // ══════════════════════════════════════
@@ -1765,8 +1809,20 @@ async function loadTourById(id) {
     normalizeScene(s, { generateId, resolveUrl }),
   );
   resetTourAudio(d.audio, resolveUrl(d.background_audio));
+  restoreImageResize(d.imageResize || d.image_resize);
   disposeAllScenes();
   scenes.splice(0, scenes.length, ...mapped);
+  if (d.transition) {
+    Object.assign(tourTransition, {
+      enabled: d.transition.enabled !== false,
+      rotation: d.transition.rotation !== false,
+      effect: d.transition.effect || 'fade',
+      duration: d.transition.duration ?? 1200,
+      speed: d.transition.speed ?? 10,
+    });
+  } else {
+    initTourTransitionFromScenes();
+  }
   api.currentTourId = id;
   activeSceneIndex.value = -1;
   selectedHotspotIndex.value = -1;
@@ -1795,7 +1851,7 @@ function cloneForExport() {
     initialView: { ...s.initialView },
     autoTour: s.autoTour ?? 0,
     autoTourDuration: s.autoTourDuration ?? 20,
-    transition: s.transition ? { ...s.transition } : null,
+    transition: { ...tourTransition },
     // Keep upload File handles, but deep-copy every persisted POI field so
     // save/export work cannot mutate the selected editor's reactive object.
     hotspots: s.hotspots.map((h) => ({
@@ -1817,8 +1873,10 @@ function clonePlain(value, fallback = null) {
 }
 
 function buildJson(c) {
+  const tt = { ...tourTransition };
   return {
     title: "VR360 Virtual Tour",
+    imageResize: { ...imageResize },
     ...(tourAudio.file
       ? {
           audio: {
@@ -1832,6 +1890,7 @@ function buildJson(c) {
           },
         }
       : {}),
+    transition: tt,
     scenes: c.map((s) => ({
       id: s.id,
       name: s.name,
@@ -1843,9 +1902,7 @@ function buildJson(c) {
       initialView: { ...s.initialView },
       autoTour: s.autoTour ?? 0,
       autoTourDuration: s.autoTourDuration ?? 20,
-      ...(s.transition?.enabled !== false
-        ? { transition: { ...s.transition } }
-        : {}),
+      transition: { ...tt },
       hotspots: s.hotspots.map(cleanHotspotForSave),
     })),
   };
@@ -1949,7 +2006,7 @@ function cleanHotspotForSave(hotspot) {
     copy.mediaType = media.type || 'image';
     copy.media = media;
     copy.areaMedia = media;
-    if (import.meta.env?.DEV) console.debug('[AreaMedia] Export', copy.id, copy.mediaType, copy.media?.src || '');
+
   }
   debugPoint('Export type', copy);
   return copy;
@@ -2320,8 +2377,20 @@ function doImportJSON() {
     const mapped = sc.map((s) => normalizeScene(s, { generateId }));
     mapped.flatMap((scene) => scene.hotspots).forEach((hotspot) => debugPoint('Imported/Normalize type', hotspot));
     resetTourAudio(d.audio);
+    restoreImageResize(d.imageResize || d.image_resize);
     disposeAllScenes();
     scenes.splice(0, scenes.length, ...mapped);
+    if (d.transition) {
+      Object.assign(tourTransition, {
+        enabled: d.transition.enabled !== false,
+        rotation: d.transition.rotation !== false,
+        effect: d.transition.effect || 'fade',
+        duration: d.transition.duration ?? 1200,
+        speed: d.transition.speed ?? 10,
+      });
+    } else {
+      initTourTransitionFromScenes();
+    }
     activeSceneIndex.value = -1;
     selectedHotspotIndex.value = -1;
     modals.import = false;
@@ -2379,6 +2448,8 @@ onMounted(() => {
     onHotspotPlace: (lon, lat) => placeNewHotspot(lon, lat),
     onCancelPlacing: () => cancelPlacingHotspot(),
     onHotspotSelect: (index) => selectHotspot(index),
+    onHotspotDragStart: (index) => selectHotspot(index, { toggle: false }),
+    onHotspotDrag: moveHotspot,
     onHotspotNav: (index) => goToHotspotTarget(index),
     onAreaLandmarkSelect: (annotation) => {
       const index = scenes[activeSceneIndex.value]?.hotspots.findIndex(
@@ -2411,17 +2482,7 @@ onMounted(() => {
     },
     resolveNavTarget: (targetId) =>
       scenes.find((scene) => scene.id === targetId) || null,
-    onHotspotDragEnd: (index, lon, lat) => {
-      if (activeSceneIndex.value >= 0) {
-        const hs = scenes[activeSceneIndex.value].hotspots[index];
-        if (hs && !hs.locked) {
-          hs.lon = lon;
-          hs.lat = lat;
-        } else if (hs?.locked)
-          showToast("info", "🔒 Hotspot đang bị khóa vị trí");
-        syncHotspotsToEngine();
-      }
-    },
+    onHotspotDragEnd: moveHotspot,
   });
   window.addEventListener("keydown", onGlobalKeydown);
   initApi();
@@ -2463,6 +2524,24 @@ onBeforeUnmount(() => {
         <span class="vb-back-label">Quản lý</span>
       </button>
       <div class="vb-brand">VR360 BUILDER</div>
+      <div class="vb-mode-tabs">
+        <button
+          class="vb-mode-tab"
+          :class="{ active: builderMode === 'builder' }"
+          @click="builderMode = 'builder'"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="8.5" cy="8.5" r="1.5" /><path d="M21 15l-5-5L5 21" /></svg>
+          Nội dung
+        </button>
+        <button
+          class="vb-mode-tab"
+          :class="{ active: builderMode === 'tour-config' }"
+          @click="builderMode = 'tour-config'"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z" /></svg>
+          Cấu hình tour
+        </button>
+      </div>
       <div class="vb-save-state" :class="`vb-save-state-${saveState}`" aria-live="polite">
         <span class="vb-save-state-icon" aria-hidden="true">
           {{ saveState === "saving" ? "⟳" : saveState === "error" ? "⚠" : saveState === "dirty" ? "●" : "✓" }}
@@ -2639,7 +2718,25 @@ onBeforeUnmount(() => {
       <div class="vb-spacer"></div>
     </div>
 
-    <div class="vb-main">
+    <!-- TOUR CONFIG VIEW -->
+    <TourConfigView
+      v-show="builderMode === 'tour-config'"
+      :tour-audio="tourAudio"
+      :tour-audio-preview-src="tourAudioPreviewSrc"
+      :scenes="scenes"
+      :tour-transition="tourTransition"
+      :resize-presets="RESIZE_PRESETS"
+      :image-resize="imageResize"
+      @pick-tour-audio="pickTourAudioFile"
+      @clear-tour-audio="clearTourAudio"
+      @update:tour-audio="handleTourAudioFieldUpdate"
+      @update:scene="handleSceneFieldUpdate"
+      @update:tour-transition="updateTourTransition"
+      @update:resize-preset="setImageResizePreset"
+      class="vb-main"
+    />
+
+    <div v-show="builderMode === 'builder'" class="vb-main">
       <!-- LEFT: SCENE NAVIGATOR -->
       <div
         class="vb-left"
@@ -3032,33 +3129,11 @@ onBeforeUnmount(() => {
           <template v-if="!uiState.rightCollapsed">
             <div class="vb-breadcrumb" v-if="activeScene">
               <span
-                class="vb-breadcrumb-item"
-                :class="{ active: uiState.rightView === 'scene' }"
-                @click="navToScene()"
+                class="vb-breadcrumb-item active"
+                @click="clearSelectedHotspot()"
                 >{{ activeScene.name }}</span
               >
-              <template v-if="uiState.rightView !== 'scene'">
-                <svg
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="2"
-                  width="10"
-                  height="10"
-                  class="vb-breadcrumb-sep"
-                >
-                  <path d="M9 18l6-6-6-6" />
-                </svg>
-                <span
-                  class="vb-breadcrumb-item"
-                  :class="{ active: uiState.rightView === 'point-list' }"
-                  @click="navToPointList()"
-                  >Điểm nóng</span
-                >
-              </template>
-              <template
-                v-if="uiState.rightView === 'point-editor' && selectedHotspot"
-              >
+              <template v-if="selectedHotspot">
                 <svg
                   viewBox="0 0 24 24"
                   fill="none"
@@ -3108,52 +3183,6 @@ onBeforeUnmount(() => {
         </div>
         <template v-if="!uiState.rightCollapsed">
           <div class="vb-right-scroll">
-            <BaseAccordion
-              title="Tour Audio"
-              :open="!uiState.collapsed.tourAudio"
-              :badge="tourAudioPreviewSrc ? 'Đã chọn' : ''"
-              @toggle="uiState.collapsed.tourAudio = !uiState.collapsed.tourAudio"
-            >
-              <template #icon>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13">
-                  <path d="M9 18V5l12-2v13" />
-                  <circle cx="6" cy="18" r="3" />
-                  <circle cx="18" cy="16" r="3" />
-                </svg>
-              </template>
-              <div class="vb-prop-row">
-                <button class="vb-prop-btn vb-prop-btn-accent" @click="pickTourAudioFile">
-                  {{ tourAudioPreviewSrc ? 'Thay file âm thanh' : 'Chọn file âm thanh' }}
-                </button>
-                <span v-if="tourAudio._fileName" class="vb-prop-filename">{{ tourAudio._fileName }}</span>
-              </div>
-              <div class="vb-prop-row">
-                <label class="vb-prop-label">URL audio đã host</label>
-                <input v-model.trim="tourAudio.file" class="vb-prop-input vb-prop-input-mono" placeholder="https://.../tour-audio.mp3" />
-              </div>
-              <div v-if="tourAudioPreviewSrc" class="vb-prop-row">
-                <audio class="vb-audio-player" controls :src="tourAudioPreviewSrc"></audio>
-              </div>
-              <div class="vb-prop-row">
-                <label class="vb-prop-label vb-hover-toggle-label"><input v-model="tourAudio.enabled" type="checkbox" :disabled="!tourAudioPreviewSrc" /> Bật Tour Audio</label>
-              </div>
-              <div class="vb-prop-row-inline">
-                <div class="vb-prop-row" style="flex:1"><label class="vb-prop-label">Âm lượng cấu hình</label><input v-model.number="tourAudio.volume" class="vb-prop-input vb-prop-input-mono" type="number" min="0" max="1" step="0.1" /></div>
-                <div class="vb-prop-row" style="flex:1"><label class="vb-prop-label">Ngôn ngữ</label><input v-model.trim="tourAudio.language" class="vb-prop-input" placeholder="vi" /></div>
-              </div>
-              <div class="vb-prop-row-inline">
-                <div class="vb-prop-row" style="flex:1"><label class="vb-prop-label vb-hover-toggle-label"><input v-model="tourAudio.loop" type="checkbox" /> Lặp lại</label></div>
-                <div class="vb-prop-row" style="flex:1"><label class="vb-prop-label vb-hover-toggle-label"><input v-model="tourAudio.autoplay" type="checkbox" /> Tự động phát</label></div>
-              </div>
-              <div class="vb-prop-row">
-                <label class="vb-prop-label">Mô tả</label>
-                <input v-model.trim="tourAudio.description" class="vb-prop-input" placeholder="Mô tả audio (tuỳ chọn)" />
-              </div>
-              <div v-if="tourAudioPreviewSrc" class="vb-prop-row">
-                <button class="vb-prop-btn vb-prop-btn-danger" @click="clearTourAudio">Xoá cấu hình audio</button>
-              </div>
-            </BaseAccordion>
-
             <!-- EMPTY STATE -->
             <div v-if="!activeScene" class="vb-empty-state">
               <svg
@@ -3172,15 +3201,13 @@ onBeforeUnmount(() => {
 
             <!-- VIEW: SCENE -->
             <SceneEditor
-              v-else-if="uiState.rightView === 'scene'"
+              v-else-if="!selectedHotspot"
               :scene="activeScene"
               :collapsed="uiState.collapsed"
               @update:scene="updateScene"
               @update:view="updateView"
-              @update:transition="updateTransition"
               @save-view="saveCurrentView"
               @replace-image="replaceImage"
-              @navigate-to-points="navToPointList"
               @update:collapsed="
                 (key, value) => {
                   uiState.collapsed[key] = value;
@@ -3188,24 +3215,9 @@ onBeforeUnmount(() => {
               "
             />
 
-            <!-- VIEW: POINT LIST -->
-            <PointList
-              v-else-if="uiState.rightView === 'point-list'"
-              :scenes="scenes"
-              :scene="activeScene"
-              :selected-index="selectedHotspotIndex"
-              @select="navToPointDetail"
-              @remove="removeHotspot"
-              @duplicate="duplicateHotspot"
-              @toggle-lock="toggleLockHotspot"
-              @add-point="startPlacingHotspot"
-            />
-
-            <!-- VIEW: POINT EDITOR -->
+            <!-- VIEW: SELECTED OBJECT -->
             <PointEditor
-              v-else-if="
-                uiState.rightView === 'point-editor' && selectedHotspot
-              "
+              v-else-if="selectedHotspot"
               :hotspot="selectedHotspot"
               :hotspot-index="selectedHotspotIndex"
               :scenes="scenes"
@@ -3251,19 +3263,6 @@ onBeforeUnmount(() => {
         <span class="vb-status-chip"
           >FOV <b>{{ hud.fov }}</b></span
         >
-      </div>
-      <div class="vb-spacer"></div>
-      <div class="vb-status-group">
-        <select
-          class="vb-status-select"
-          v-model="resizePresetId"
-          @change="applyResizePreset"
-          title="Image resize preset"
-        >
-          <option v-for="p in RESIZE_PRESETS" :key="p.id" :value="p.id">
-            {{ p.label }}
-          </option>
-        </select>
       </div>
       <div class="vb-spacer"></div>
       <div class="vb-status-group">

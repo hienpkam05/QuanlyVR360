@@ -50,11 +50,6 @@ const isPointLandmark = computed(() => pointKind.value === 'point_landmark');
 const isArea = computed(() => pointKind.value === 'area');
 const isAudio = computed(() => pointKind.value === 'audio');
 
-if (import.meta.env?.DEV) {
-  // This is intentionally keyed by canonical kind, never by a shared
-  // reactive `selectedPoint` object or a loose `loai_poi` predicate.
-  console.debug('[POI Editor] render type:', props.hotspot?.id, pointKind.value, poiEditor.value?.name || 'none');
-}
 
 const typeLabel = computed(() => {
   if (isAudio.value) return 'Audio';

@@ -4,7 +4,6 @@ import {
   nextTick,
   onBeforeUnmount,
   onMounted,
-  onUpdated,
   ref,
   watch,
 } from "vue";
@@ -113,7 +112,6 @@ function subscribeCoreEvents(listener) {
 function handleAudioEvent(event) {
   emit(event.type, event);
   publishCoreEvent(event.type, event);
-  if (import.meta.env?.DEV) console.debug('[Audio Viewer]', event.type, event.scope || '', event.source || '');
 }
 
 const audioManager = new AudioManager({ onEvent: handleAudioEvent });
@@ -165,7 +163,6 @@ const activeAudioPoiId = computed(() => (
     ? audioStore.state.activeSession.sourceId
     : ''
 ));
-let layoutUpdateCount = 0;
 
 function error(phase, cause) {
   errorMessage.value = cause?.message || String(cause || "Viewer error.");
@@ -750,10 +747,6 @@ onMounted(() => {
   });
 });
 onBeforeUnmount(dispose);
-onUpdated(() => {
-  layoutUpdateCount += 1;
-  if (import.meta.env?.DEV) console.debug('[Viewer Render] ViewerLayout updated()', layoutUpdateCount);
-});
 
 defineExpose({
   goToScene,
