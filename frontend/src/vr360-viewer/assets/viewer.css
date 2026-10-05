@@ -1083,40 +1083,46 @@
 
 .panorama-viewer .viewer-nav-default {
   align-items: center;
-  /* The legacy global navigation rule rotates this wrapper.  Keep the
-     wrapper flat so its thumbnail remains a screen-facing billboard; the
-     arrow itself is tilted by the rule below. */
+  animation: none;
   display: inline-flex;
+  filter: none;
+  font-size: inherit;
+  height: auto;
   justify-content: center;
+  line-height: normal;
   padding: 6px;
-  position: relative;
+  text-shadow: none;
   transform: none;
+  width: auto;
 }
 
 .panorama-viewer .viewer-nav-default-arrow {
   display: inline-flex;
-  transform: perspective(420px) rotateX(56deg);
+  transform: perspective(420px) rotateX(15deg);
   transform-origin: center bottom;
 }
 
 .panorama-viewer .viewer-nav-default-arrow img {
-  animation: nav-arrow-walk-bob 1.6s ease-in-out infinite;
+  animation: nav-arrow-float 3s cubic-bezier(0.45, 0.05, 0.55, 0.95) infinite;
   display: block;
   filter: drop-shadow(0 3px 6px rgba(0, 0, 0, 0.55));
   height: auto;
+  opacity: 0.92;
   pointer-events: none;
-  transition: filter 0.25s ease;
+  transition: filter 0.25s ease, opacity 0.25s ease;
   user-select: none;
   width: 58px;
+  will-change: transform;
 }
 
 .panorama-viewer .viewer-hotspot-nav:hover .viewer-nav-default-arrow img {
   filter: drop-shadow(0 5px 12px rgba(0, 0, 0, 0.6)) brightness(1.25);
+  opacity: 1;
 }
 
-@keyframes nav-arrow-walk-bob {
-  0%, 100% { transform: translateY(0); opacity: 0.82; }
-  50% { transform: translateY(-4px); opacity: 1; }
+@keyframes nav-arrow-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-8px); }
 }
 
 .panorama-viewer .viewer-nav-default-preview {
@@ -1787,8 +1793,41 @@
   }
 
   .tour-viewer-page .viewer-bottom-bar {
+    background: rgba(10, 12, 22, 0.65);
+    backdrop-filter: blur(18px) saturate(140%);
+    -webkit-backdrop-filter: blur(18px) saturate(140%);
+    border: 1px solid rgba(255, 255, 255, 0.10);
+    border-radius: 50px;
+    bottom: calc(38px + env(safe-area-inset-bottom));
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
+    gap: 4px;
     max-width: calc(100% - 2 * var(--viewer-spacing));
     overflow-x: auto;
+    padding: 4px;
+  }
+
+  .tour-viewer-page .viewer-bottom-bar > span {
+    display: none;
+  }
+
+  .tour-viewer-page .viewer-bottom-bar button {
+    border-radius: 50%;
+    color: rgba(255, 255, 255, 0.88);
+    font-size: 20px;
+    height: 44px;
+    min-width: 44px;
+    width: 44px;
+  }
+
+  .tour-viewer-page .viewer-bottom-bar button:hover:not(:disabled),
+  .tour-viewer-page .viewer-bottom-bar button[aria-pressed="true"] {
+    background: rgba(255, 255, 255, 0.16);
+    color: #ffffff;
+  }
+
+  .tour-viewer-page .viewer-bottom-bar button:active:not(:disabled) {
+    background: rgba(255, 255, 255, 0.24);
+    transform: scale(0.92);
   }
 
   .tour-viewer-page .viewer-view-mode-trigger {

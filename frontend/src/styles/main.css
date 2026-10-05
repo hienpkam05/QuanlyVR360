@@ -3100,9 +3100,10 @@ th {
   align-items: center;
   background: rgba(20, 20, 28, 0.86);
   backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 999px;
-  bottom: 20px;
+  bottom: 28px;
   display: flex;
   gap: 8px;
   left: 50%;
@@ -4671,4 +4672,5 @@ th {
   .inline-form {
     grid-template-columns: 1fr !important;
   }
+
 }
