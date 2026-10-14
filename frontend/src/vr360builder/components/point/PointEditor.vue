@@ -20,6 +20,7 @@ const emit = defineEmits([
   'toggle-lock', 'duplicate', 'remove',
   'preview-target', 'save-entry-view', 'clear-entry-view',
   'toggle-acc', 'select-gallery-images', 'select-video', 'select-area-media',
+  'select-badge',
   'pick-audio', 'clear-audio', 'update-audio', 'select-audio',
 ]);
 
@@ -94,7 +95,7 @@ const typeLabel = computed(() => {
       @clear-entry-view="emit('clear-entry-view')"
       @toggle-acc="forwardAccToggle"
     />
-    <component v-if="isPointLandmark && poiEditor" :is="poiEditor" :hotspot="hotspot" :scenes="scenes" @update="forwardUpdate" />
+    <component v-if="isPointLandmark && poiEditor" :is="poiEditor" :hotspot="hotspot" :scenes="scenes" @update="forwardUpdate" @select-badge="emit('select-badge', $event)" />
 
     <!-- ── POI EDITOR ── -->
     <template v-if="isPoi">
@@ -194,7 +195,7 @@ const typeLabel = computed(() => {
       </BaseAccordion>
 
       <BaseAccordion v-if="isAreaLandmark && !isAudio" title="Địa danh" :open="accOpen.noiDung" @toggle="emit('toggle-acc', 'noiDung')">
-        <component :is="poiEditor" :hotspot="hotspot" :scenes="scenes" @update="forwardUpdate" />
+        <component :is="poiEditor" :hotspot="hotspot" :scenes="scenes" @update="forwardUpdate" @select-badge="emit('select-badge', $event)" />
       </BaseAccordion>
 
       <BaseAccordion v-if="isArea && !isAudio" title="General & Media" :open="accOpen.noiDung" @toggle="emit('toggle-acc', 'noiDung')">

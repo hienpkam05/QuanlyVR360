@@ -12,7 +12,7 @@ import {
 import { useRouter } from "vue-router";
 import "../styles/vr360builder.css";
 import { PreviewEngine, generateThumb } from "../common/PreviewEngine.js";
-import { resizeImageFile } from "../common/imageResize.js";
+import { resizeImageFile, preservingMimeType } from "../common/imageResize.js";
 import { readGpsFromFile } from "../common/exifGps.js";
 import { DEFAULT_NAV_ICON } from "@/common/hotspotIcons.js";
 import {
@@ -521,7 +521,9 @@ function onDrop(toIndex, event) {
 // ══════════════════════════════════════
 function setActiveTool(name) {
   const previousTool = activeTool.value;
-  if (name === 'view') {
+  // Entering the nav entry-view preview keeps the selected POI as the editing
+  // context, so the Rotate tool must not clear it there.
+  if (name === 'view' && !previewMode.active) {
     // Rotate ends the selected-object editing context. The same selection ref
     // drives both the marker highlight and the contextual right sidebar.
     clearSelectedHotspot();
@@ -1054,6 +1056,45 @@ function handleAreaMediaFile(file) {
   showToast('info', 'Media Area sẽ được upload khi Save Tour.');
 }
 
+async function handleBadgeFile(file) {
+  if (activeSceneIndex.value < 0 || selectedHotspotIndex.value < 0 || !file) return;
+  const hotspot = scenes[activeSceneIndex.value].hotspots[selectedHotspotIndex.value];
+  if (!["point_landmark", "area_landmark"].includes(resolvePointKind(hotspot))) return;
+  if (!file.type?.startsWith("image/")) {
+    showToast("error", "Vui lòng chọn file ảnh.");
+    return;
+  }
+  // The badge is drawn at 56px. Shipping the original would add megabytes per
+  // landmark on top of the panoramas for pixels nobody ever sees. A logo is
+  // usually a transparent PNG, so the output format has to keep its alpha:
+  // re-encoding one to JPEG flattens the background to black.
+  let badgeFile = file;
+  if (file.type === "image/svg+xml") {
+    // Vector art is already tiny and scales perfectly; rasterizing it here
+    // would only lose quality, and createImageBitmap is unreliable on SVG.
+  } else {
+    try {
+      ({ file: badgeFile } = await resizeImageFile(file, {
+        maxWidth: 320, quality: 0.85, skipBytes: 0, mimeType: preservingMimeType(file),
+      }));
+    } catch (error) {
+      console.warn("Badge resize failed, uploading original:", error);
+    }
+  }
+  if (hotspot._badgePreview?.startsWith("blob:")) URL.revokeObjectURL(hotspot._badgePreview);
+  hotspot._badgeFile = badgeFile;
+  hotspot._badgePreview = URL.createObjectURL(badgeFile);
+  hotspot.badge = {
+    preset: "photo",
+    icon: "",
+    ...(hotspot.badge || {}),
+    src: hotspot._badgePreview,
+    preview: hotspot._badgePreview,
+  };
+  syncHotspotsToEngine();
+  showToast("info", "Ảnh badge sẽ được upload khi Save Tour.");
+}
+
 function clearSelectedHotspot() {
   selectedHotspotIndex.value = -1;
   syncHotspotsToEngine();
@@ -1063,17 +1104,21 @@ function clearSelectedHotspot() {
 //  XEM TRƯỚC SCENE ĐÍCH & ĐẶT GÓC NHÌN KHI ĐẾN
 // ══════════════════════════════════════
 async function previewTargetScene() {
+  // Read the target scene and hotspot before any tool/selection side effect so
+  // the preview always refers to the POI the user clicked from.
+  const t = targetScene.value;
+  const hotspot = selectedHotspot.value;
   if (
-    !targetScene.value ||
+    !t ||
+    !hotspot ||
     activeSceneIndex.value < 0 ||
     selectedHotspotIndex.value < 0
   )
     return;
   previewMode.active = true;
   cancelPlacingHotspot();
-  const t = targetScene.value;
   await engine.value.loadPanorama(t.image, t._file);
-  const v = selectedHotspot.value.entryView || t.initialView;
+  const v = hotspot.entryView || t.initialView;
   engine.value.setView(v.lon, v.lat, v.fov);
   engine.value.setHotspots(t.hotspots, -1);
 }
@@ -1957,6 +2002,8 @@ function cleanHotspotForSave(hotspot) {
         key === "_videoName" ||
         key === "_areaMediaFile" ||
         key === "_areaMediaPreview" ||
+        key === "_badgeFile" ||
+        key === "_badgePreview" ||
         key === "_audioBlob" ||
         key === "audioFile" ||
         key === "localAudio"
@@ -1977,6 +2024,12 @@ function cleanHotspotForSave(hotspot) {
     delete copy.audio;
   }
   delete copy.audio_url;
+  if (copy.badge && typeof copy.badge === "object") {
+    delete copy.badge.preview;
+    // A blob url dies with the tab; never persist one as the badge source.
+    if (String(copy.badge.src || "").startsWith("blob:")) copy.badge.src = "";
+    if (!String(copy.badge.src || "").trim() && !String(copy.badge.icon || "").trim()) delete copy.badge;
+  }
   if (resolvePointKind(copy) === "area_landmark" || resolvePointKind(copy) === "area") {
     const vertices = Array.isArray(copy.vertices)
       ? copy.vertices
@@ -2077,6 +2130,10 @@ async function uploadHotspotInfoImages(c) {
           mode: "video",
         });
       }
+      if (hotspot?._badgeFile) {
+        ensureHotspotId(hotspot);
+        pending.push({ hotspot, file: hotspot._badgeFile, mode: 'badge' });
+      }
       if (hotspot?._areaMediaFile) {
         ensureHotspotId(hotspot);
         pending.push({
@@ -2149,6 +2206,12 @@ async function uploadHotspotInfoImages(c) {
         if (hotspot._areaMediaPreview?.startsWith("blob:")) URL.revokeObjectURL(hotspot._areaMediaPreview);
         delete hotspot._areaMediaFile;
         delete hotspot._areaMediaPreview;
+        } else if (item.mode === 'badge') {
+        const { preview, ...badge } = hotspot.badge || {};
+        hotspot.badge = { ...badge, src: uploadedUrl };
+        if (hotspot._badgePreview?.startsWith("blob:")) URL.revokeObjectURL(hotspot._badgePreview);
+        delete hotspot._badgeFile;
+        delete hotspot._badgePreview;
         }
       }
       up++;
@@ -3200,6 +3263,7 @@ onBeforeUnmount(() => {
               @select-gallery-images="handleGalleryImageFiles"
               @select-video="handleHotspotVideoFile"
               @select-area-media="handleAreaMediaFile"
+              @select-badge="handleBadgeFile"
               @pick-audio="pickHotspotAudio"
               @clear-audio="clearHotspotAudio"
               @select-audio="pickHotspotAudio"

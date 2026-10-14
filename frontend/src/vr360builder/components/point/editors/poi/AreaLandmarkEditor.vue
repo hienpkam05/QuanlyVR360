@@ -1,6 +1,8 @@
 <script setup>
+import LandmarkBadgeFields from './LandmarkBadgeFields.vue';
+
 defineProps({ hotspot: { type: Object, required: true }, scenes: { type: Array, default: () => [] } });
-const emit = defineEmits(['update']);
+const emit = defineEmits(['update', 'select-badge']);
 </script>
 
 <template>
@@ -32,6 +34,7 @@ const emit = defineEmits(['update']);
     <div class="vb-prop-row"><label class="vb-prop-label">Kiểu line</label><input class="vb-prop-input" value="Thẳng đứng" disabled /></div>
     <div class="vb-prop-row"><label class="vb-prop-label vb-hover-toggle-label"><input type="checkbox" :checked="hotspot.show_polygon_on_hover !== false" @change="emit('update', 'show_polygon_on_hover', $event.target.checked)" /> Hiển thị polygon khi hover</label></div>
     <div class="vb-prop-row"><label class="vb-prop-label">Metadata</label><textarea class="vb-prop-input" :value="hotspot.metadata?.description || ''" @change="emit('update', 'metadata', { ...(hotspot.metadata || {}), description: $event.target.value })"></textarea></div>
+    <LandmarkBadgeFields :hotspot="hotspot" @update="(key, value) => emit('update', key, value)" @select-badge="emit('select-badge', $event)" />
     <small class="vb-hs-shortcuts">Vùng có {{ hotspot.vertices?.length || 0 }} đỉnh. Kéo các đỉnh trực tiếp trên panorama để chỉnh sửa.</small>
   </div>
 </template>

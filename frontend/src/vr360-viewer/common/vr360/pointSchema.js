@@ -309,6 +309,15 @@ export function normalizePoint(rawPoint = {}, options = {}) {
         playbackRate: Math.min(2, Math.max(0.5, toNumber(audio.playbackRate, 1))),
       };
     })(),
+    // Badge medallion for landmark points. Absent on every point created
+    // before this feature, and `null` keeps those rendering unchanged.
+    badge: (() => {
+      const badge = asObject(raw.badge);
+      const src = resolveAsset(firstValue(badge.src, badge.url, badge.image, ''));
+      const icon = typeof badge.icon === 'string' ? badge.icon.trim() : '';
+      if (!src && !icon) return null;
+      return { src, preset: badge.preset === 'logo' ? 'logo' : 'photo', icon };
+    })(),
     hover: {
       enabled: Boolean(hoverRaw.hien_thi_anh_thu_nho),
       showPolygon: raw.show_polygon_on_hover !== false,
@@ -345,6 +354,7 @@ export function normalizeBuilderPoint(rawPoint = {}, options = {}) {
     loai_poi: point.loaiPoi,
     icon: point.icon,
     ...(point.audio ? { audio: { ...point.audio } } : {}),
+    ...(point.badge ? { badge: { ...point.badge } } : {}),
     entryView: point.entryView,
     ...(point.navStyle ? { navStyle: point.navStyle } : {}),
     ...(point.pinHeight != null ? { chieu_cao_duong_ghim: point.pinHeight } : {}),
@@ -353,6 +363,7 @@ export function normalizeBuilderPoint(rawPoint = {}, options = {}) {
   // `normalizePoint` reads this legacy field for compatibility; Builder state
   // itself remains canonical so every subsequent save/export writes `audio`.
   delete builderPoint.audio_url;
+  if (!point.badge) delete builderPoint.badge;
   if (point.kind !== 'audio') delete builderPoint.audio;
   if (point.kind === 'area_landmark') {
     builderPoint.vertices = point.vertices;

@@ -7,6 +7,7 @@ import BuilderView from '../vr360builder/pages/Vr360Builder.vue';
 import LocationsView from '../views/LocationsView.vue';
 import ViewerProductionPage from '../vr360-viewer/pages/ViewerProductionPage.vue';
 import Vr360ViewerV2Page from '../views/Vr360ViewerV2Page.vue';
+import ViewerYtDemoPage from '../vr360-viewer-yt/pages/ViewerYtDemoPage.vue';
 import ProjectsView from '../views/ProjectsView.vue';
 import PublishingView from '../views/PublishingView.vue';
 import StatsView from '../views/StatsView.vue';
@@ -66,6 +67,12 @@ const routes = [
     path: '/viewer-v2',
     name: 'TourViewerV2',
     component: Vr360ViewerV2Page,
+    meta: { immersive: true, public: true },
+  },
+  {
+    path: '/viewer-yt',
+    name: 'TourViewerYT',
+    component: ViewerYtDemoPage,
     meta: { immersive: true, public: true },
   },
   {

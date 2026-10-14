@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { createBadgeElement, resolveBadge, updateBadgeElement } from './landmarkBadge.js';
 import { isAreaLandmarkPoint } from './pointRendererRegistry.js';
 import { normalizeLandmarkVertices, calculateLandmarkAnchor } from './pointSchema.js';
 
@@ -107,7 +108,7 @@ export class AreaLandmarkRenderer {
   setAnnotations(annotations = []) {
     this.annotations = annotations.filter((item) => isAreaLandmarkPoint(item) && normalizeLandmarkVertices(item).length >= 3);
     const ids = new Set(this.annotations.map((item, index) => String(item.id || index)));
-    for (const [id, element] of this.elements) if (!ids.has(id)) { element.group.remove(); element.label.remove(); this.elements.delete(id); }
+    for (const [id, element] of this.elements) if (!ids.has(id)) { element.group.remove(); element.label.remove(); element.badge?.remove(); this.elements.delete(id); }
   }
 
   setSelectedAnnotation(annotation) {
@@ -203,6 +204,12 @@ export class AreaLandmarkRenderer {
     anchor.addEventListener('mouseenter', () => setHovered(true, anchor));
     anchor.addEventListener('mouseleave', () => setHovered(false, anchor));
     this.svg.appendChild(group); this.container.appendChild(label);
+    const badge = createBadgeElement(this.container, label, {
+      onHover: () => setHovered(true, badge),
+      onHoverEnd: () => setHovered(false, badge),
+    });
+    bindTouchActivation(badge);
+    element.badge = badge;
     if (this.options.editMode) this._enableLabelDrag(label, annotation);
     this.elements.set(id, element);
     return element;
@@ -235,7 +242,7 @@ export class AreaLandmarkRenderer {
       const points = normalizeLandmarkVertices(annotation);
       const anchorPoint = annotation.anchor || calculateLandmarkAnchor(points);
       const geometry = projectLandmarkGeometry(points, anchorPoint, camera, width, height, this.vector, this.direction, this.cameraDirection);
-      if (!geometry) { element.group.style.display = 'none'; element.label.style.display = 'none'; return; }
+      if (!geometry) { element.group.style.display = 'none'; element.label.style.display = 'none'; updateBadgeElement(element.badge, null); return; }
       const { projectedVertices: projected, anchor } = geometry;
       const style = mergeStyle(annotation.style);
       const positions = projected.filter(Boolean).map((point) => `${point.x.toFixed(1)},${point.y.toFixed(1)}`).join(' ');
@@ -299,6 +306,9 @@ export class AreaLandmarkRenderer {
       element._labelX = labelX;
       element._labelTop = labelTop;
       element._labelBottom = labelBottom;
+      element._badge = resolveBadge(annotation);
+      element._badgeTop = labelBottom - labelHeight * scale;
+      updateBadgeElement(element.badge, element._badge, { x: labelX, labelTop: element._badgeTop, scale });
       element.group.classList.toggle('is-editor', this.options.editMode);
     });
     if (!this.options.editMode) this._resolveCollisions(scale, width, height);
@@ -370,10 +380,11 @@ export class AreaLandmarkRenderer {
       if (nt < containerRect.top) fdy += containerRect.top - nt;
       if (nb > containerRect.bottom) fdy -= nb - containerRect.bottom;
       el.label.style.transform = `translate3d(${el._labelX + fdx}px, ${el._labelTop + fdy}px, 0) translateX(-50%) scale(${scale})`;
+      updateBadgeElement(el.badge, el._badge, { x: el._labelX + fdx, labelTop: el._badgeTop + fdy, scale });
       el.line.setAttribute('x2', String(el._labelX + fdx));
       el.line.setAttribute('y2', String(el._labelBottom + fdy));
     }
   }
 
-  dispose() { this.elements.forEach((element) => { element.group.remove(); element.label.remove(); }); this.elements.clear(); this.svg.remove(); }
+  dispose() { this.elements.forEach((element) => { element.group.remove(); element.label.remove(); element.badge?.remove(); }); this.elements.clear(); this.svg.remove(); }
 }

@@ -45,9 +45,18 @@ function highQualityDownscale(source, targetW, targetH) {
   return canvas;
 }
 
+// Formats that can carry transparency. Re-encoding one of these to JPEG
+// flattens the alpha channel to black, which silently ruins a logo PNG.
+const ALPHA_CAPABLE = /^image\/(png|webp|gif|avif)$/i;
+
+/** Output format that preserves whatever the source file could carry. */
+export function preservingMimeType(file) {
+  return ALPHA_CAPABLE.test(file?.type || '') ? 'image/png' : 'image/jpeg';
+}
+
 export async function resizeImageFile(
   file,
-  { maxWidth = 8192, quality = 0.92, skipBytes = 8 * 1024 * 1024 } = {},
+  { maxWidth = 8192, quality = 0.92, skipBytes = 8 * 1024 * 1024, mimeType = 'image/jpeg' } = {},
 ) {
   const bmp = await createImageBitmap(file);
   const origWidth = bmp.width;
@@ -74,7 +83,7 @@ export async function resizeImageFile(
   const canvas = highQualityDownscale(bmp, targetW, targetH);
   bmp.close();
 
-  const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", quality));
+  const blob = await new Promise((resolve) => canvas.toBlob(resolve, mimeType, quality));
 
   // Never make things worse: nếu re-encode không nhỏ hơn (ảnh đã tối ưu),
   // giữ file gốc.
@@ -82,8 +91,9 @@ export async function resizeImageFile(
     return { file, width: origWidth, height: origHeight, originalSize: file.size, resizedSize: file.size, resized: false };
   }
 
-  const outName = file.name.replace(/\.[^.]+$/, "") + ".jpg";
-  const outFile = new File([blob], outName, { type: "image/jpeg", lastModified: Date.now() });
+  const extension = mimeType === "image/png" ? ".png" : mimeType === "image/webp" ? ".webp" : ".jpg";
+  const outName = file.name.replace(/\.[^.]+$/, "") + extension;
+  const outFile = new File([blob], outName, { type: mimeType, lastModified: Date.now() });
   return { file: outFile, width: targetW, height: targetH, originalSize: file.size, resizedSize: outFile.size, resized: true };
 }
 

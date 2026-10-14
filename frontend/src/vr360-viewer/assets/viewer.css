@@ -1507,17 +1507,81 @@
 .tour-viewer-page .poi-video-stage { aspect-ratio: 16 / 9; background: #020617; border-radius: 16px; margin-top: 18px; overflow: hidden; }
 .tour-viewer-page .poi-video-stage iframe,
 .tour-viewer-page .poi-video-stage video { border: 0; display: block; height: 100%; width: 100%; }
-.tour-viewer-page .poi-image-stage { align-items: center; background: #020617; border-radius: 16px; display: flex; height: min(68vh, 580px); justify-content: center; overflow: hidden; touch-action: none; }
-.tour-viewer-page .poi-image-stage img { max-height: 100%; max-width: 100%; object-fit: contain; transition: transform .16s ease; user-select: none; }
-.tour-viewer-page .poi-image-controls { align-items: center; display: flex; gap: 12px; justify-content: center; margin-top: 12px; }
-.tour-viewer-page .poi-image-controls button,
+/* --- Image POI — Image-First Minimal --- */
+.tour-viewer-page .poi-image-backdrop {
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  padding: 0;
+}
+.tour-viewer-page .poi-image-main {
+  animation: poi-popup-in 180ms ease-out both;
+  border-radius: 4px;
+  box-shadow: 0 2px 16px rgba(0, 0, 0, 0.4);
+  display: block;
+  max-height: calc(100% - 2 * var(--viewer-spacing));
+  max-width: calc(100% - 2 * var(--viewer-spacing));
+  object-fit: contain;
+  transition: transform .16s ease;
+  user-select: none;
+  z-index: 1;
+}
+.tour-viewer-page .poi-image-close {
+  align-items: center;
+  background: rgba(0, 0, 0, 0.45);
+  border: none;
+  border-radius: 50%;
+  color: #fff;
+  cursor: pointer;
+  display: inline-flex;
+  font-size: 20px;
+  height: 36px;
+  justify-content: center;
+  position: absolute;
+  right: 12px;
+  top: 12px;
+  transition: background 150ms ease;
+  width: 36px;
+  z-index: 3;
+}
+.tour-viewer-page .poi-image-close:hover { background: rgba(0, 0, 0, 0.7); }
 .tour-viewer-page .poi-image-prev,
-.tour-viewer-page .poi-image-next { background: rgba(255,255,255,.1); border: 1px solid rgba(255,255,255,.16); border-radius: 999px; color: #fff; cursor: pointer; }
-.tour-viewer-page .poi-image-controls button { height: 32px; width: 32px; }
-.tour-viewer-page .poi-image-prev,
-.tour-viewer-page .poi-image-next { font-size: 30px; height: 44px; position: absolute; top: 50%; transform: translateY(-50%); width: 44px; }
+.tour-viewer-page .poi-image-next {
+  align-items: center;
+  background: rgba(0, 0, 0, 0.35);
+  border: none;
+  border-radius: 50%;
+  color: #fff;
+  cursor: pointer;
+  display: inline-flex;
+  font-size: 28px;
+  height: 44px;
+  justify-content: center;
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  transition: background 150ms ease;
+  width: 44px;
+  z-index: 3;
+}
 .tour-viewer-page .poi-image-prev { left: 12px; }
 .tour-viewer-page .poi-image-next { right: 12px; }
+.tour-viewer-page .poi-image-prev:hover,
+.tour-viewer-page .poi-image-next:hover { background: rgba(0, 0, 0, 0.6); }
+.tour-viewer-page .poi-image-counter {
+  background: rgba(0, 0, 0, 0.5);
+  border-radius: 999px;
+  bottom: 12px;
+  color: #fff;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  left: 50%;
+  padding: 4px 12px;
+  position: absolute;
+  transform: translateX(-50%);
+  z-index: 3;
+}
 @keyframes poi-popup-in { from { opacity: 0; transform: translateY(12px) scale(.97); } to { opacity: 1; transform: translateY(0) scale(1); } }
 
 @media (max-width: 640px) {
@@ -1533,6 +1597,10 @@
   .tour-viewer-page .poi-lightbox-backdrop { padding: 12px; }
   .tour-viewer-page .poi-lightbox-nav { height: 38px; width: 38px; font-size: 24px; }
   .tour-viewer-page .poi-light-glass .poi-popup-close { right: 12px; top: 14px; height: 36px; width: 36px; font-size: 18px; }
+  .tour-viewer-page .poi-image-backdrop { padding: 0; }
+  .tour-viewer-page .poi-image-close { height: 32px; width: 32px; font-size: 18px; right: 8px; top: 8px; }
+  .tour-viewer-page .poi-image-prev,
+  .tour-viewer-page .poi-image-next { height: 36px; width: 36px; font-size: 22px; }
 
   /* Nhãn khu vực (area-landmark-label) trên panorama quá to so với màn
      mobile, dễ chồng đè khi nhiều điểm gần nhau — thu nhỏ còn khoảng
@@ -1989,7 +2057,7 @@
 
   .tour-viewer-page .poi-popup-backdrop { align-items: end; padding: 12px calc(env(safe-area-inset-right)) 0 calc(env(safe-area-inset-left)); }
   .tour-viewer-page .poi-popup { border-bottom-left-radius: 0; border-bottom-right-radius: 0; max-height: 68dvh; padding: 18px 16px calc(20px + env(safe-area-inset-bottom)); width: min(100%, 520px); }
-  .tour-viewer-page .poi-image-popup { height: min(82dvh, 720px); }
+  .tour-viewer-page .poi-image-backdrop { align-items: center; padding: 0; }
   .tour-viewer-page .viewer-video-modal-backdrop { align-items: center; padding: 12px; }
   .tour-viewer-page .viewer-video-modal { border-radius: 16px; max-height: 75dvh; width: 95vw; }
   .tour-viewer-page .viewer-video-modal-header { padding-bottom: 10px; }
@@ -2017,4 +2085,10 @@
   .tour-viewer-page .viewer-thumbs {
     bottom: calc(64px + env(safe-area-inset-bottom));
   }
+
+  .tour-viewer-page .poi-popup-backdrop { align-items: center; padding: 8px; }
+  .tour-viewer-page .poi-popup { max-height: calc(100dvh - 16px); border-radius: 16px; }
+  .tour-viewer-page .poi-image-close { height: 30px; width: 30px; font-size: 16px; right: 6px; top: 6px; }
+  .tour-viewer-page .poi-image-prev,
+  .tour-viewer-page .poi-image-next { height: 34px; width: 34px; font-size: 20px; }
 }

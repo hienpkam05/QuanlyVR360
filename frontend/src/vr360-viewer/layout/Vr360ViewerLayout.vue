@@ -306,7 +306,9 @@ async function goToScene(sceneId, options = {}) {
     const navigationView = options.targetView
       ? viewForViewer(options.targetView)
       : targetView;
-    viewModeManager.setNormalFov(targetView.fov);
+    // A nav POI can carry its own entry view. Its FOV must become the normal
+    // FOV, otherwise getTargetFov() below would replace it with the scene FOV.
+    viewModeManager.setNormalFov(navigationView.fov ?? targetView.fov);
     await nextTick();
     await panorama.value?.animateToView?.(
       {
